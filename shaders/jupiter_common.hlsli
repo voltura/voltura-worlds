@@ -3,7 +3,7 @@ static const float jupiterPolar=66854.0/71492.0;
 static const float jupiterScaleHeight=27.0/71492.0;
 static const float jupiterSolar=1.0/(5.204*5.204);
 float jupiterClock(){return time*movement;}
-float jupiterAngle(){return frac(jupiterClock()/900)*(2*jupiterPi);}
+float jupiterAngle(){return spare1.z>0?0:frac(jupiterClock()/900)*(2*jupiterPi);}
 float3 jupiterRY(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);}
 float3 jupiterRX(float3 p,float a){float s,c;sincos(a,s,c);return float3(p.x,c*p.y-s*p.z,s*p.y+c*p.z);}
 float3 jupiterRZ(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x-s*p.y,s*p.x+c*p.y,p.z);}

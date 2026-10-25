@@ -104,9 +104,44 @@ def main():
         assert difference(baseline,capture(f'palette-{palette}',palette=palette)) > .01
     for quality in ('eco','high'):
         assert difference(baseline,capture('quality-'+quality,quality=quality)) == 0
-    complete = capture('full-turn',start_time=900)
-    results['fullTurnMeanDifference255'] = difference(baseline,complete)
-    assert results['fullTurnMeanDifference255'] < .1,'Jupiter composition did not repeat in 900 seconds'
+    complete = capture('full-turn',start_time=900,turbulence=0)
+    still = capture('static-start',turbulence=0)
+    assert difference(still,complete) < .1,'Globe rotation no longer repeats in 900 seconds'
+    moving = [capture(f'atmosphere-{t}',start_time=t,flow=0,jupiter_fixed_globe=True) for t in (0,10,20)]
+    storm,belts = [],[]
+    for y in range(60,300):
+        for x in range(180,480):
+            point = surface(x,y,0)
+            if not point or point[1][2]<.5:
+                continue
+            u,v=point[2]
+            longitude=(u*360-38+180)%360-180
+            latitude=(.5-v)*180
+            if (longitude/8)**2+((latitude+22)/4)**2 < 1:
+                storm.append((x,y))
+            if abs(latitude)<15 and abs(longitude)>18:
+                belts.append((x,y))
+    def region_change(a,b,points):
+        assert points,'Empty atmospheric motion region'
+        return sum(sum(abs(c-d) for c,d in zip(a.getpixel(p),b.getpixel(p)))/3 for p in points)/len(points)
+    for name,points in (('storm',storm),('belts',belts)):
+        changes=[region_change(moving[0],im,points) for im in moving[1:]]
+        assert min(changes)>.1,f'{name} motion is imperceptible: {changes}'
+        results[name+'Motion10And20Seconds255']=changes
+    for im in moving[1:]:
+        assert difference(moving[0].crop((0,0,100,360)),im.crop((0,0,100,360)))==0
+    zero_later=capture('static-later',start_time=20,flow=0,turbulence=0,jupiter_fixed_globe=True)
+    zero_start=capture('static-fixed-start',flow=0,turbulence=0,jupiter_fixed_globe=True)
+    assert difference(zero_start,zero_later)==0,'Cloud drift zero changes the source deck'
+    masks=[capture(f'fixed-mask-{t}',start_time=t,jupiter_fixed_globe=True,jupiter_probe=3) for t in (0,20)]
+    assert difference(*masks)==0,'Cloud animation changes the silhouette'
+    for t in (40,80):
+        before=capture(f'reset-{t}-before',start_time=t-.02,jupiter_fixed_globe=True)
+        after=capture(f'reset-{t}-after',start_time=t+.02,jupiter_fixed_globe=True)
+        assert difference(before,after)<.1,'Atmospheric phase reset jumps'
+    capture('paused',start_time=20,validate_paused_frame=True)
+    with Image.open(args.output/'paused/jupiter.png') as original_frame, Image.open(args.output/'paused/jupiter-paused.png') as paused_frame:
+        assert difference(original_frame.convert('RGB'),paused_frame.convert('RGB'))==0,'Paused atmosphere advances'
     wind_start = capture('wind-start',start_time=225,flow=0,turbulence=0,jupiter_probe=1)
     wind_end = capture('wind-end',start_time=225,flow=0,turbulence=2,jupiter_probe=1)
     assert difference(wind_start,wind_end) > .01,'Inferred wind map does not advect observed clouds'

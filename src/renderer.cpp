@@ -59,6 +59,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  // Earth and Mars use analytic coverage on fullscreen triangles; duplicate samples
  // add no edge information. Keep the exact same HDR format and shader shading.
  pipeline(L"earth.cso",false,true,earth_);pipeline(L"earth_space.cso",false,false,earthSpace_);
+ pipeline(L"saturn.cso",false,false,saturn_);
  pipeline(L"jupiter.cso",false,true,jupiter_);pipeline(L"jupiter_space.cso",false,false,jupiterSpace_);
  pipeline(L"moon.cso",false,true,moon_);pipeline(L"moon_space.cso",false,false,moonSpace_);
  pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);
@@ -130,6 +131,14 @@ void Renderer::loadStars(bool foreground){
  starForeground_=foreground;
  D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
  device_->CreateShaderResourceView(nullptr,&empty,cpu(83));device_->CreateShaderResourceView(nullptr,&empty,cpu(84));
+}
+void Renderer::loadSaturn(){
+ if(saturnColor_)return;
+ loadStars(true);
+ loadDds(assetDirectory_/L"saturn"/L"runtime"/L"saturn-color.dds",saturnColor_,405);
+ D3D12_SHADER_RESOURCE_VIEW_DESC srv{};auto desc=starTexture_->GetDesc();srv.Format=desc.Format;srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;srv.Texture2D.MipLevels=desc.MipLevels;
+ device_->CreateShaderResourceView(starTexture_.Get(),&srv,cpu(406));
+ srv.Format=DXGI_FORMAT_R8G8B8A8_UNORM;srv.Texture2D.MipLevels=1;device_->CreateShaderResourceView(nullptr,&srv,cpu(407));
 }
 void Renderer::loadJupiter(){
  if(jupiterColor_&&jupiterAtmosphere_)return;
@@ -667,7 +676,7 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
- if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter)){
+ if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn)){
   idle();
   auto releaseTexture=[&](ComPtr<ID3D12Resource>& texture){
    if(!texture)return;
@@ -675,16 +684,18 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   };
   if(lastScene_==Scene::Orbit){releaseTexture(planetTexture_);releaseTexture(cloudTexture_);releaseTexture(nightTexture_);}
   if(lastScene_==Scene::Mars){releaseTexture(marsColor_);releaseTexture(marsNormal_);}
+  if(lastScene_==Scene::Saturn)releaseTexture(saturnColor_);
   if(lastScene_==Scene::Jupiter){releaseTexture(jupiterColor_);releaseTexture(jupiterAtmosphere_);}
   if(lastScene_==Scene::Moon){releaseTexture(moonColor_);releaseTexture(moonNormal_);releaseTexture(moonEarth_);}
   if(lastScene_==Scene::Earth){releaseTexture(earthColor_);releaseTexture(earthClouds_);releaseTexture(earthMaterial_);}
-  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars&&assignment.scene!=Scene::Earth&&assignment.scene!=Scene::Moon&&assignment.scene!=Scene::Jupiter)releaseTexture(starTexture_);
+  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars&&assignment.scene!=Scene::Earth&&assignment.scene!=Scene::Moon&&assignment.scene!=Scene::Jupiter&&assignment.scene!=Scene::Saturn)releaseTexture(starTexture_);
  }
  // Only mesh geometry needs depth. With MSAA its dedicated depth target is
  // sufficient; allocate single-sample depth only for the hardware fallback.
  bool geometry=assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom;
  if(geometry&&orbitSamples_==1)makeDepthTarget();
  else if(depth_){idle();depth_.Reset();depthTargetBytes_=0;}
+ if(assignment.scene==Scene::Saturn)loadSaturn();
  if(assignment.scene==Scene::Jupiter)loadJupiter();
  if(assignment.scene==Scene::Moon)loadMoon();
  if(assignment.scene==Scene::Earth)loadEarth();
@@ -717,6 +728,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
+ else if(assignment.scene==Scene::Saturn){list_->SetGraphicsRootDescriptorTable(2,gpu(405));draw(saturn_.Get(),0,3);}
  else if(assignment.scene==Scene::Jupiter){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(jupiterSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(402));draw(jupiter_.Get(),0,3);}
  else if(assignment.scene==Scene::Moon){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(moonSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(399));draw(moon_.Get(),0,3);}
  else if(assignment.scene==Scene::Earth){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(earthSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(396));draw(earth_.Get(),0,3);}

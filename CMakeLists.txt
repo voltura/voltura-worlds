@@ -38,6 +38,9 @@ function(shader NAME ENTRY PROFILE)
   if(NAME MATCHES "^(earth|mars|moon|jupiter)_space$")
     list(APPEND EXTRA_SHADER_DEPS "shaders/planet_sky.hlsli")
   endif()
+  if(NAME STREQUAL "saturn")
+    list(APPEND EXTRA_SHADER_DEPS "shaders/saturn_common.hlsli" "shaders/orbit_rings.hlsli" "shaders/planet_sky.hlsli")
+  endif()
   if(NAME STREQUAL "jupiter" OR NAME STREQUAL "jupiter_space")
     list(APPEND EXTRA_SHADER_DEPS "shaders/jupiter_common.hlsli")
   endif()
@@ -100,6 +103,7 @@ shader(ripples PS ps_6_0)
 shader(orbit VS vs_6_0)
 shader(planet PS ps_6_0)
 shader(space PS ps_6_0)
+shader(saturn PS ps_6_0)
 shader(jupiter PS ps_6_0)
 shader(jupiter_space PS ps_6_0)
 shader(moon_space PS ps_6_0)
@@ -147,8 +151,8 @@ add_custom_command(TARGET VolturaWorlds POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:VolturaWorlds>/assets"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${SHADER_DIR}" "$<TARGET_FILE_DIR:VolturaWorlds>/shaders"
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12"
-  COMMAND ${CMAKE_COMMAND} -E copy "${DEPS}/agility/build/native/bin/x64/D3D12Core.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/"
-  COMMAND ${CMAKE_COMMAND} -E copy "${DEPS}/agility/build/native/bin/x64/d3d12SDKLayers.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/")
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/D3D12Core.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/d3d12SDKLayers.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/")
 enable_testing()
 add_executable(worlds_smoke_cache_tests tests/smoke_detail_cache_tests.cpp)
 target_include_directories(worlds_smoke_cache_tests PRIVATE src)
@@ -175,6 +179,7 @@ add_test(NAME capture_time_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SO
 add_test(NAME bloom_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-bloom.py" "$<TARGET_FILE:VolturaWorlds>")
 add_test(NAME new_worlds_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-new-worlds.py" "$<TARGET_FILE:VolturaWorlds>")
 add_test(NAME planet_stars_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-planet-stars.py" "$<TARGET_FILE:VolturaWorlds>")
+add_test(NAME saturn_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-saturn.py" "$<TARGET_FILE:VolturaWorlds>")
 add_test(NAME jupiter_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-jupiter.py" "$<TARGET_FILE:VolturaWorlds>")
 add_test(NAME moon_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-moon.py" "$<TARGET_FILE:VolturaWorlds>")
 add_test(NAME earth_render_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/test-earth.py" "$<TARGET_FILE:VolturaWorlds>")

@@ -85,11 +85,19 @@ G byte 128 is zero; angular radians/s = `(G * 255 - 128) * 0.00001 / 127`
 when G is sampled as a normalized channel.
 
 The cloud deck rotates prograde every 900 seconds at Movement 1, starting
-with the observed Great Red Spot facing the viewer. The physical rotation
-period scales wind rates to this cinematic clock. Relative cloud advection
-is deliberately small and sinusoidally bounded, returning to the reference
-map each revolution. This reversible animation avoids indefinitely shearing
-the observed storms; it is not a fluid simulation or a forecast.
+with the observed Great Red Spot facing the viewer. Artistic cloud motion
+uses the inferred zonal wind directions at 300 times their physical rates.
+Two staggered 80-second backtraces blend smoothly, bounding stretching and
+retiring each trace at zero weight rather than reversing the winds.
+
+An elliptical vortex centered on the source landmark (38 degrees east,
+22 degrees south) circulates the photographed storm detail. Its base
+angular rate is 0.025 radians per cinematic second, with a bounded radial
+perturbation that varies local speeds without accumulating shear. A smooth
+sample blend feathers the vortex into surrounding belts, which taper their
+drift around the storm core. Color and methane proxy use identical sample
+coordinates and blend weights. The motion is an artistic animation of an
+observation, not a fluid simulation, measured storm evolution, or forecast.
 
 ## Rendering and controls
 
@@ -110,7 +118,7 @@ aurorae, rings, moons and ephemerides are not modeled in this World.
 
 Brightness controls exposure; Movement controls all clocks; Cloud detail
 adjusts contrast against a lower-resolution observed image; Camera drift
-adjusts framing/attitude; Cloud drift scales bounded zonal advection;
+adjusts framing/attitude; Cloud drift scales zonal advection and storm circulation;
 Atmosphere adjusts approximate aerosol optical depth. Four natural palettes
 apply subtle grades. Optional audio affects exposure gently. Movement zero
 freezes motion and audio; application pause stops rendering/time advancement.

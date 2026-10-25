@@ -31,8 +31,8 @@ The product site shows recordings from the native Direct3D renderer, at their or
 ## What it does
 
 - Animates behind your desktop icons, with a World and settings for each display.
-- Shuffles all fifteen Worlds with **Random**, with a saved interval for each display.
-- Gives Earth, Mars, Moon and Jupiter a shared NASA catalog-star background, with no extra resident sky texture memory.
+- Shuffles all sixteen Worlds with **Random**, with a saved interval for each display.
+- Gives Earth, Mars, Moon, Jupiter and Saturn a shared NASA catalog-star background, with no extra resident sky texture memory.
 - Offers optional Gentle or Expressive audio reaction using local playback analysis. Audio is not recorded or uploaded.
 - Pauses on battery by default, and for fully covered displays, lock, sleep and remote sessions.
 - Imports personal SDR H.264 MP4 videos and data-only `.world` packages.
@@ -45,7 +45,9 @@ Current source builds add **Mars** beside Orbit: an 8K NASA/USGS globe with MOLA
 
 **Moon** adds an 8K NASA LRO globe with LOLA crater relief and a calm 15-minute camera tour of the near and far sides. A naturally scaled Earth briefly appears beside the lunar limb; a fixed Sun produces changing phases. See [Moon sources and rendering](assets/moon/ATTRIBUTION.md).
 
-**Jupiter** uses NASA/ESA Hubble OPAL December 2025 cloud imagery, matched methane-band atmospheric data and estimated zonal winds. Its oblate globe rotates calmly, with bounded cloud drift and a thin neutral haze. Compressed 4K maps preserve the source detail efficiently. See [Jupiter sources and rendering](assets/jupiter/ATTRIBUTION.md).
+**Jupiter** uses NASA/ESA Hubble OPAL December 2025 cloud imagery, matched methane-band atmospheric data and estimated zonal winds. Its oblate globe rotates calmly, with flowing cloud belts, a gently swirling Red Spot and a thin neutral haze. Compressed 4K maps preserve the source detail efficiently. See [Jupiter sources and rendering](assets/jupiter/ATTRIBUTION.md).
+
+**Saturn** combines a flattened gold cloud globe with translucent, finely banded rings, mutual shadows and the shared stationary star background. Its full ring system stays within the frame on landscape and portrait displays. Rotation takes 15 minutes at default Movement. See [Saturn sources and rendering](assets/saturn/ATTRIBUTION.md).
 
 ## Current release
 

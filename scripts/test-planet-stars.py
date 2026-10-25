@@ -1,4 +1,4 @@
-"""Visible NASA stars, stationary sky and Moon camera motion across four Worlds."""
+"""Visible NASA stars, stationary sky and Moon camera motion across five Worlds."""
 import argparse
 import json
 from pathlib import Path
@@ -25,7 +25,7 @@ def main():
     with Image.open(new) as sky:
         alpha = sky.convert('RGBA').getchannel('A')
         assert alpha.getextrema()[1] > 240,'Catalog stars missing from packed alpha'
-    for scene in ('earth','mars','moon','jupiter'):
+    for scene in ('earth','mars','moon','jupiter','saturn'):
         def capture(name,**options):
             folder = args.output/scene/name;folder.mkdir(parents=True,exist_ok=True)
             command = [sys.executable,str(ROOT/'scripts/test_desktop.py'),'--',str(args.executable.resolve()),
@@ -44,18 +44,19 @@ def main():
         frozen = capture('frozen',movement=0)
         frozen_later = capture('frozen-later',movement=0,start_time=450,reaction='expressive',strength=1,energy=1)
         assert difference(frozen,frozen_later) == 0,f'{scene} star/planet composition does not freeze'
-        # Left strip is outside all four globe silhouettes and the Moon's
-        # Earth at these phases; isolate actual small stars from diffuse sky.
-        background = base.crop((0,0,210,720))
+        # Keep the strip outside the globes, Moon's Earth and Saturn's rings;
+        # isolate actual small stars from the diffuse sky.
+        bounds = (0,0,80 if scene == 'saturn' else 210,720)
+        background = base.crop(bounds)
         blurred = background.filter(ImageFilter.MedianFilter(7))
         stars = sum(max(pixel) >= 35 and max(pixel)-max(neighbor) >= 12
                     for pixel,neighbor in zip(background.get_flattened_data(),blurred.get_flattened_data()))
         assert stars >= 15,f'{scene} has no visible small background stars: {stars}'
-        sky_change = difference(background,later.crop((0,0,210,720)))
+        sky_change = difference(background,later.crop(bounds))
         if scene == 'moon':
             assert sky_change > .1,'Moon stars did not follow its camera orbit'
             end = capture('full-tour',start_time=900)
-            assert difference(background,end.crop((0,0,210,720))) < .1,'Moon sky does not close after one tour'
+            assert difference(background,end.crop(bounds)) < .1,'Moon sky does not close after one tour'
         else:
             assert sky_change == 0,f'{scene} star field rotates or twinkles'
         results[scene] = {'visibleStarPixels':stars,'backgroundPhaseDifference255':sky_change}
@@ -63,7 +64,7 @@ def main():
     results['passed'] = True
     args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'results.json').write_text(json.dumps(results,indent=2)+'\n')
-    print('PASS planet stars: visible NASA foreground, stationary Earth/Mars/Jupiter, orbiting Moon sky and unchanged texture size')
+    print('PASS planet stars: visible NASA foreground, stationary Earth/Mars/Jupiter/Saturn, orbiting Moon sky and unchanged texture size')
 
 
 if __name__ == '__main__':

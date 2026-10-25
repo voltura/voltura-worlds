@@ -35,6 +35,7 @@ public:
  double gpuMs()const{return gpuMs_;}
  void setStageProfiling(bool enabled){stageProfiling_=enabled;}
  const std::array<double,14>& gpuStageMs()const{return gpuStageMs_;}
+ uint64_t textureAllocations()const{return assetBytes_;}
  uint64_t allocations()const{return uint64_t(width_)*height_*16+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
  unsigned gridSize()const{return grid_;}
  unsigned densityGridSize()const{return referenceDensityGrid_?referenceDensityGrid_:(grid_>96?192:grid_*2);}
@@ -112,6 +113,8 @@ private:
  ComPtr<ID3D12GraphicsCommandList> list_;ComPtr<ID3D12DescriptorHeap> rtv_,dsv_,views_;
  std::array<Frame,2> frames_;std::array<ComPtr<ID3D12Resource>,2> buffers_;
  ComPtr<ID3D12Resource> depth_,hdr_,planetTexture_,cloudTexture_,nightTexture_,starTexture_,auroraArtwork_;ComPtr<ID3D12RootSignature> root_;
+ ComPtr<ID3D12Resource> saturnColor_;
+ ComPtr<ID3D12PipelineState> saturn_;
  ComPtr<ID3D12Resource> jupiterColor_,jupiterAtmosphere_;
  ComPtr<ID3D12PipelineState> jupiter_,jupiterSpace_;
  ComPtr<ID3D12Resource> moonColor_,moonNormal_,moonEarth_;
@@ -131,7 +134,7 @@ private:
  unsigned v_=0,d_=0,p_=0;bool fluidReady_=false;Scene lastScene_=Scene::Aurora;
  ComPtr<ID3D12QueryHeap> query_;ComPtr<ID3D12Resource> queryReadback_;UINT64 frequency_=0;
  double gpuMs_=0;uint64_t allocationBytes_=0,fluidBytes_=0;
- void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadMoon();void loadMars();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
+ void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
  static constexpr unsigned QueryStride=66;
  bool stageProfiling_=false;
  std::array<unsigned,2> stageCount_{};

@@ -1,0 +1,14 @@
+{
+  "color": {
+    "url": "https://www.solarsystemscope.com/textures/download/8k_saturn.jpg",
+    "sha256": "0d39a4a490c87c3edabe00a3881a29bb3418364178c79c534fe0986e97e09853",
+    "license": "CC BY 4.0",
+    "author": "Solar System Scope / INOVE",
+    "dimensions": [
+      4096,
+      2048
+    ]
+  },
+  "ringRadii": "https://nssdc.gsfc.nasa.gov/planetary/factsheet/satringfact.html",
+  "shape": "https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturnfact.html"
+}

@@ -190,11 +190,15 @@ int wmain(int argc,wchar_t** argv){
   requireUi(selectVisualization(5)&&selected().scene==Scene::Jupiter,"Jupiter follows Moon in the catalog");
   GetDlgItemTextW(library,214,marsLabel,80);requireUi(wcscmp(marsLabel,L"Cloud drift")==0,"Jupiter cloud drift adjustment label");
   SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Natural Jupiter")==0,"Jupiter natural palettes");
-  requireUi(selectVisualization(6)&&selected().scene==Scene::Smoke,"Quick switch updates selected display");
+  requireUi(selectVisualization(6)&&selected().scene==Scene::Saturn,"Saturn follows Jupiter in the catalog");
+  GetDlgItemTextW(library,214,marsLabel,80);requireUi(wcscmp(marsLabel,L"Cloud drift")==0,"Saturn cloud drift label");
+  SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Natural Saturn")==0,"Saturn natural palette");
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Saturn,"Apply to all copies Saturn");
+  requireUi(selectVisualization(7)&&selected().scene==Scene::Smoke,"Quick switch updates selected display");
   GetDlgItemTextW(library,212,marsLabel,80);requireUi(wcscmp(marsLabel,L"Detail")==0,"Leaving Mars restores regular adjustment labels");
-  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==6,"Quick switch synchronizes dropdown");
-  requireUi(selectVisualization(7)&&selected().scene==Scene::Bloom,"Bloom can be selected from the catalog");
-  for(int i=8;i<randomChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
+  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==7,"Quick switch synchronizes dropdown");
+  requireUi(selectVisualization(8)&&selected().scene==Scene::Bloom,"Bloom can be selected from the catalog");
+  for(int i=9;i<randomChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
   requireUi(!selectVisualization(videoChoice)&&!selectVisualization(-1),"Unavailable video and invalid selections leave scene intact");
   // Real native surfaces on the test desktop prove that Off reveals the desktop
   // and affects only the selected display, including Apply to all displays.

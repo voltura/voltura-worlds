@@ -18,7 +18,9 @@ December 2025 Hubble color imagery supplies the cloud deck. Matched FQ889N
 and F631N maps supply a normalized methane/continuum reflectance ratio for
 an aerosol proxy. Successive red-filter mosaics supply a simplified inferred
 zonal-wind profile. The proxy is not cloud height or measured optical depth;
-wind motion is deliberately bounded and reversible, not a forecast.
+wind advection is bounded with staggered texture backtraces. The Red Spot
+circulates independently with a feathered elliptical vortex. This artistic
+animation preserves source detail and is not a forecast.
 
 The 3600×1800 source resolution is represented by 4096×2048 BC7 sRGB color
 and BC5 linear atmospheric data, approximately 21.3 MiB combined. No 8K
@@ -125,3 +127,26 @@ matches measured radii within 23 pixels at 640×360. Native debug captures at
 1080p, 4K, portrait and an opposite rotation phase were inspected; evidence
 is in `artifacts/jupiter/frontal-light/` and the updated regression results.
 The earlier performance and installer records above predate this refinement.
+
+## Atmospheric animation diagnostics
+
+`--jupiter-fixed-globe` fixes rotation and camera at their initial pose while
+atmospheric time advances. Combine with `--start-time` and `--jupiter-probe`
+for isolated color, methane proxy, silhouette and lighting captures.
+`--validate-paused-frame` also supports Jupiter and saves `jupiter-paused.png`.
+Cloud drift zero samples the original maps; Movement zero freezes all clocks.
+The cloud animation no longer repeats after each 900-second globe rotation.
+
+Atmospheric animation verification: the Release target builds successfully.
+Expanded Jupiter render contracts, core contracts, library UI contracts and
+shared planet-star contracts pass. Native fixed-globe captures show storm and
+belt changes at 10 and 20 seconds; phase resets at 40/80 seconds, static-map
+alignment, Movement zero, paused redraw, silhouette and GPU lifecycle pass.
+A 600-frame close-up sequence was inspected for shape/detail preservation.
+The rebuilt app was reopened on Jupiter and live Pause/Resume was verified.
+Evidence: `artifacts/jupiter/alive/` (including regressions and preview GIF).
+
+Short 100-frame offscreen captures on Intel Arc measured median GPU times of
+1.53 -> 1.38 ms at 1080p and 3.86 -> 4.65 ms at 4K. Texture and total GPU
+allocation were unchanged at each resolution. Concurrent work can influence
+these short measurements; they are not physical desktop presentation timings.
