@@ -1,0 +1,13 @@
+/build/
+/dist/
+/.deps/
+/artifacts/
+/site/config.local.php
+*.user
+__pycache__/
+*.pyc
+*.pfx
+*.p12
+.env
+.env.*
+*.local.json
