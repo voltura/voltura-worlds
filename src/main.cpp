@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "updates.h"
 #include "desktop.h"
 #include "audio.h"
 #include "package.h"
@@ -34,7 +35,8 @@ std::mutex stateMutex;std::condition_variable saveCv;std::jthread renderThread,s
 std::wstring lastError;bool previewMode=true,desktopConnectionProblem=false,automated=false;std::atomic<bool> running{true};
 UINT menuDpi=96;HFONT menuFont{};
 UINT taskbarCreated{};AudioCapture audio;HANDLE singleInstance{};
-ULONGLONG nextDesktopRetry{};
+ULONGLONG nextDesktopRetry{},nextUpdateCheck{};
+wu::Updates updates;bool automaticUpdates=false,sessionEnding=false,restartForUpdate=false;
 struct LayoutItem{HWND hwnd;int x,y,w,h;bool advanced,footer;int sx{},sy{},sw{},sh{};};
 std::vector<LayoutItem> layoutItems;bool advancedOpen=false,addingAdvanced=false,addingFooter=false,layingOut=false,sideExpansion=false;
 int scrollOffset=0;UINT uiDpi=96;unsigned promotionAttempts=0;
@@ -346,7 +348,7 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(!path||path[length-1]!=0||wcsnlen_s(path,length)!=length-1)return FALSE;
   importWorld(std::filesystem::path(path));return TRUE;
  }
- case trayMessage:if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){POINT point{};GetCursorPos(&point);menuDpi=GetDpiForWindow(WindowFromPoint(point));if(!menuDpi)menuDpi=GetDpiForSystem();menuFont=CreateFontW(-MulDiv(16,menuDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_POPUP|MF_OWNERDRAW,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,pauseState.manual?L"Resume":L"Pause");AppendMenuW(menu,MF_OWNERDRAW,3,L"Exit Worlds");MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);POINT p;GetCursorPos(&p);SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,p.x,p.y,0,hwnd,nullptr);if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;if(cmd==1)showLibrary();if(cmd==2){std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}if(cmd==3)DestroyWindow(hwnd);if(cmd>=visualizationMenuBase&&cmd<visualizationMenuBase+int(std::size(visualizations)))selectVisualization(cmd-visualizationMenuBase);}return 0;
+ case trayMessage:if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){POINT point{};GetCursorPos(&point);menuDpi=GetDpiForWindow(WindowFromPoint(point));if(!menuDpi)menuDpi=GetDpiForSystem();menuFont=CreateFontW(-MulDiv(16,menuDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_POPUP|MF_OWNERDRAW,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,pauseState.manual?L"Resume":L"Pause");AppendMenuW(menu,MF_OWNERDRAW|(automaticUpdates?MF_CHECKED:0),4,L"Automatic updates");if(updates.ready())AppendMenuW(menu,MF_OWNERDRAW,5,L"Restart to update");AppendMenuW(menu,MF_OWNERDRAW,3,L"Exit Worlds");MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);POINT p;GetCursorPos(&p);SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,p.x,p.y,0,hwnd,nullptr);if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;if(cmd==1)showLibrary();if(cmd==2){std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}if(cmd==3)DestroyWindow(hwnd);if(cmd==4){bool next=!automaticUpdates;wu::setEnabled(next);automaticUpdates=next;if(!next)updates.cancel();else nextUpdateCheck=GetTickCount64()+5000;}if(cmd==5&&updates.ready()){restartForUpdate=true;DestroyWindow(hwnd);}if(cmd>=visualizationMenuBase&&cmd<visualizationMenuBase+int(std::size(visualizations)))selectVisualization(cmd-visualizationMenuBase);}return 0;
  case errorMessage:syncControls();return 0;
  case WM_MEASUREITEM:{auto d=reinterpret_cast<MEASUREITEMSTRUCT*>(l);d->itemWidth=MulDiv(230,menuDpi,96);d->itemHeight=MulDiv(36,menuDpi,96);return TRUE;}
  case WM_DRAWITEM:ui::draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l),menuFont?menuFont:font,false,menuDpi);return TRUE;
@@ -354,15 +356,16 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  case WM_TIMER:{
   if(w==2){bool changed=false;bool promoted=ui::promoteTray(executable().wstring(),changed);if(promoted||++promotionAttempts>=20)KillTimer(hwnd,2);if(changed){NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);addTray(false);}return 0;}
 
+  if(automaticUpdates&&!sessionEnding&&GetTickCount64()>=nextUpdateCheck){nextUpdateCheck=GetTickCount64()+3600000;updates.check();}
   if(!previewMode&&GetTickCount64()>=nextDesktopRetry&&(surfaces.empty()||std::any_of(surfaces.begin(),surfaces.end(),[](const Surface& s){return !wallpaperAttached(s.hwnd);})))createSurfaces();
   SYSTEM_POWER_STATUS power{};GetSystemPowerStatus(&power);std::vector<bool> covered;for(auto& s:surfaces)covered.push_back(!previewMode&&monitorCovered(s.monitor,GetCurrentProcessId()));std::lock_guard lock(stateMutex);pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}return 0;
  case WM_WTSSESSION_CHANGE:{std::lock_guard lock(stateMutex);if(w==WTS_SESSION_LOCK)pauseState.locked=true;if(w==WTS_SESSION_UNLOCK)pauseState.locked=false;}return 0;
  case WM_POWERBROADCAST:{std::lock_guard lock(stateMutex);if(w==PBT_APMSUSPEND)pauseState.suspended=true;if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND)pauseState.suspended=false;if(w==PBT_POWERSETTINGCHANGE){auto p=reinterpret_cast<POWERBROADCAST_SETTING*>(l);if(p->PowerSetting==GUID_CONSOLE_DISPLAY_STATE&&p->DataLength==sizeof(DWORD)){DWORD state;memcpy(&state,p->Data,sizeof(state));pauseState.asleep=state==0;}}}return TRUE;
  case WM_DISPLAYCHANGE:createSurfaces();return 0;
- case WM_QUERYENDSESSION:return TRUE;
- case WM_ENDSESSION:if(w)DestroyWindow(hwnd);return 0;
+ case WM_QUERYENDSESSION:sessionEnding=true;updates.sessionEnd();return TRUE;
+ case WM_ENDSESSION:sessionEnding=true;updates.sessionEnd();if(w)DestroyWindow(hwnd);return 0;
  case WM_CLOSE:DestroyWindow(hwnd);return 0;
- case WM_DESTROY:{NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);running=false;saveCv.notify_all();PostQuitMessage(0);}return 0;
+ case WM_DESTROY:{updates.close(automaticUpdates&&!sessionEnding,restartForUpdate);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);running=false;saveCv.notify_all();PostQuitMessage(0);}return 0;
  }
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
@@ -510,7 +513,7 @@ int captureMode(const std::vector<std::wstring>& args){
 int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
  instance=h;CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);int result=0;
  try{
-  exeDir=executable().parent_path();int argc{};LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);std::vector<std::wstring> args(argv+1,argv+argc);LocalFree(argv);
+  exeDir=executable().parent_path();int argc{};LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);int helperResult=wu::updateHelper(argc,argv);if(helperResult>=0){LocalFree(argv);CoUninitialize();return helperResult;}std::vector<std::wstring> args(argv+1,argv+argc);LocalFree(argv);
   // A single token avoids pixtool's multi-argument command-line parser limitations.
   if(args.size()==1&&args[0].starts_with(L"profile-")){
    auto scene=args[0].substr(8);parseScene(utf8(scene));
@@ -524,6 +527,7 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
    if(importArgument+1==args.end())throw std::runtime_error("Choose a .world file to import.");
    importFile=std::filesystem::absolute(*(importArgument+1));
   }
+  if(!wu::updateReaderMayStart()){CoUninitialize();return 0;}
   singleInstance=CreateMutexW(nullptr,TRUE,L"Local\\Voltura.Worlds");
   if(!singleInstance)throw std::runtime_error("Cannot coordinate Worlds startup.");
   bool anotherInstance=GetLastError()==ERROR_ALREADY_EXISTS;
@@ -550,6 +554,7 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
    }
    if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return 0;
   }
+  automaticUpdates=wu::enabled();nextUpdateCheck=GetTickCount64()+5000;
   profile=profilePath();try{settings=loadSettings(profile);}catch(const std::exception& e){error(e);settings={};}
   INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES|ICC_BAR_CLASSES};InitCommonControlsEx(&controls);uiDpi=GetDpiForSystem();updateUiFonts();
   ui::refresh();WNDCLASSW cls{};cls.hIcon=LoadIconW(h,MAKEINTRESOURCEW(101));cls.hInstance=h;cls.lpfnWndProc=controllerProc;cls.lpszClassName=L"VolturaWorldController";RegisterClassW(&cls);cls.lpfnWndProc=libraryProc;cls.lpszClassName=L"VolturaWorldLibrary";cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&cls);

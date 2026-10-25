@@ -24,9 +24,11 @@ The product site shows recordings from the native Direct3D renderer, at their or
 
 ## Preview status
 
-Worlds is an early **0.1.3 development preview**. Current source includes all four Worlds. The older local 0.1.3 installer predates Bloom; no packaged binary has been published from this repository yet. Published builds, when available, belong under [Releases](https://github.com/voltura/voltura-worlds/releases), not in GitHub's source ZIP.
+Worlds is an early **0.1.4 preview**. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.4/VolturaWorlds-Setup-0.1.4-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.4). Includes all four Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
-The community site, complete adaptive quality, shared multi-monitor rendering device and broader reliability/performance acceptance remain unfinished. Physical desktop, mixed-DPI multi-monitor and current installer lifecycle verification remain open. Historical checkpoints and their limitations are in [docs/STATUS.md](docs/STATUS.md).
+Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
+
+The community site, complete adaptive quality, shared multi-monitor rendering device and broader reliability/performance acceptance remain unfinished. Physical desktop and mixed-DPI multi-monitor verification remain open. Historical checkpoints and their limitations are in [docs/STATUS.md](docs/STATUS.md).
 
 ## Build and run
 

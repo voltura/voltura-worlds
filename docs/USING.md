@@ -1,10 +1,10 @@
-# Voltura Worlds 0.1.3 — Windows preview
+# Voltura Worlds 0.1.4 — Windows preview
 
 A per-user Windows 11 x64 desktop application with four built-in Worlds: **Aurora**, **Orbit**, **Smoke**, and **Bloom**. C++20, Direct3D 12, HLSL. MIT licensed.
 
 ## Install and try it
 
-Run `dist/VolturaWorlds-Setup-0.1.3-win-x64.exe`. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
+Run `dist/VolturaWorlds-Setup-0.1.4-win-x64.exe`. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then Aurora, Orbit, Smoke, or Bloom. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during normal desktop use.
 
@@ -18,7 +18,9 @@ Personal SDR H.264 MP4 videos can be imported, copied to the managed library, an
 
 User settings and imported assets live in `%LOCALAPPDATA%\Voltura\Worlds`. Uninstall from Windows Settings; exit Worlds first. Uninstall asks whether to keep your library and preferences.
 
-Bloom is an original animated folded-sheet World inspired by the blue Windows 11 wallpaper. It uses native 3D geometry with slow breathing, curling, and rocking movement, four palettes, and optional audio reaction. Select **Bloom** in the visualization list or tray menu. The current local build includes Bloom; the existing installer has not been repackaged for this addition.
+Bloom is an original animated folded-sheet World inspired by the blue Windows 11 wallpaper. It uses native 3D geometry with slow breathing, curling, and rocking movement, four palettes, and optional audio reaction. Select **Bloom** in the visualization list or tray menu. The 0.1.4 installer includes Bloom.
+
+Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
 
 ## Preview status
 

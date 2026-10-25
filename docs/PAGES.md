@@ -41,3 +41,7 @@ GitHub Pages builds from `gh-pages:/`. `site/.nojekyll` keeps the static files u
 - GitHub Pages custom domain: `worlds.voltura.se`; enforce HTTPS after certificate provisioning.
 
 Preserve unrelated DNS records. Following publication, verify the canonical domain, valid HTTPS, page content, CSS, posters and clips. A successful Pages build alone does not prove DNS propagation or certificate readiness.
+
+## Downloads
+
+The two Download for Windows buttons point to the matching installer under `voltura/voltura-worlds/releases/download/v<version>/`. Publish the complete release and its checksum before pushing site links. Update both buttons, the preview version label, README and user guide together. Verify a fresh download against the published checksum after Pages finishes.

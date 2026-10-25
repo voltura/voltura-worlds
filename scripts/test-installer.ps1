@@ -1,20 +1,31 @@
-param([string]$Installer = (Join-Path (Split-Path $PSScriptRoot) 'dist/VolturaWorlds-Setup-0.1.3-win-x64.exe'), [string]$UpgradeFrom = '')
+param([string]$Installer = (Join-Path (Split-Path $PSScriptRoot) 'dist/VolturaWorlds-Setup-0.1.4-win-x64.exe'), [string]$UpgradeFrom = '', [string]$UpdateBaseline = '', [ValidatePattern('^VolturaWorlds-Test-[a-f0-9]{32}$')][string]$TestIdentity = '')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $reportDir = Join-Path $repo 'artifacts/installer-lifecycle'
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs/Voltura Worlds Validation'
-$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\VolturaWorlds'
+$productKey = if ($TestIdentity) { $TestIdentity } else { 'VolturaWorlds' }
+$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $productKey
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $shortcut = Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs/Voltura Worlds.lnk'
 $profileDir = Join-Path $env:LOCALAPPDATA 'Voltura/Worlds'
+$worldClass = 'Voltura.World'; $worldExtension = '.world'
+if ($TestIdentity) {
+ $testId = $TestIdentity.Substring('VolturaWorlds-Test-'.Length)
+ $installDir = Join-Path $env:LOCALAPPDATA "Programs/Voltura Worlds Validation-$testId"
+ $shortcut = Join-Path $env:APPDATA "Microsoft/Windows/Start Menu/Programs/Voltura Worlds Test $testId.lnk"
+ $profileDir = Join-Path $env:LOCALAPPDATA "Voltura/Worlds-InstallerTests/$testId"
+ $worldClass = "Voltura.World.Test.$testId"; $worldExtension = ".world-test$testId"
+}
+$extensionKey = 'HKCU:\Software\Classes\' + $worldExtension
+$classKey = 'HKCU:\Software\Classes\' + $worldClass
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
 $initialInstaller = if ($UpgradeFrom) { (Resolve-Path -LiteralPath $UpgradeFrom).Path } else { $installerPath }
 
 # Never replace an existing installation or another application's association.
-foreach ($path in @($installDir, $uninstallKey, $shortcut, 'HKCU:\Software\Classes\.world', 'HKCU:\Software\Classes\Voltura.World')) {
+foreach ($path in @($installDir, $uninstallKey, $shortcut, $extensionKey, $classKey)) {
  if (Test-Path -LiteralPath $path) { throw "Validation requires an unused installation: $path" }
 }
-if ((Get-ItemProperty -LiteralPath $runKey).PSObject.Properties.Name -contains 'VolturaWorlds') { throw 'Existing Worlds startup entry; validation stopped.' }
+if ((Get-ItemProperty -LiteralPath $runKey).PSObject.Properties.Name -contains $productKey) { throw 'Existing Worlds startup entry; validation stopped.' }
 if (Get-Process VolturaWorlds -ErrorAction SilentlyContinue) { throw 'Exit Worlds before installer validation.' }
 $isElevated = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isElevated) { throw 'Run this check from a non-elevated session.' }
@@ -38,16 +49,62 @@ try {
  Run-Setup "/S /D=$installDir" $initialInstaller
  if ((Get-ItemPropertyValue -LiteralPath $uninstallKey -Name InstallLocation) -ne $installDir) { throw 'Install location was not registered.' }
  $expectedStartup = '"' + (Join-Path $installDir 'VolturaWorlds.exe') + '" --wallpaper'
- if ((Get-ItemPropertyValue -LiteralPath $runKey -Name VolturaWorlds) -ne $expectedStartup) { throw 'Default startup registration is incorrect.' }
+ if ((Get-ItemPropertyValue -LiteralPath $runKey -Name $productKey) -ne $expectedStartup) { throw 'Default startup registration is incorrect.' }
  if (!(Test-Path -LiteralPath $shortcut)) { throw 'Start-menu entry is missing.' }
- if ((Get-Item 'HKCU:\Software\Classes\.world').GetValue('') -ne 'Voltura.World') { throw 'World association missing.' }
+ if ((Get-Item -LiteralPath $extensionKey).GetValue('') -ne $worldClass) { throw 'World association missing.' }
  $results.install = 'passed'
+ if ($UpdateBaseline) {
+  $preferences = Join-Path $profileDir 'preferences.ini'
+  $preferencesExisted = Test-Path -LiteralPath $preferences
+  $preferencesBefore = if ($preferencesExisted) { [IO.File]::ReadAllBytes($preferences) } else { $null }
+  $updateTarget = Join-Path $installDir 'VolturaWorlds.exe'
+  $expectedUpdateHash = (Get-FileHash -LiteralPath $updateTarget).Hash
+  $baseline = (Resolve-Path -LiteralPath $UpdateBaseline).Path
+  $oldUpdateProfile = $env:WORLDS_UPDATES_TEST_PROFILE
+  $oldUpdateKey = $env:WORLDS_UPDATES_TEST_PRODUCT_KEY
+  if ($TestIdentity) { $env:WORLDS_UPDATES_TEST_PROFILE = $preferences; $env:WORLDS_UPDATES_TEST_PRODUCT_KEY = $TestIdentity }
+  try {
+   "[worlds]`nautomaticUpdates=1" | Set-Content -LiteralPath $preferences -Encoding unicode
+   Copy-Item -LiteralPath $baseline -Destination $updateTarget -Force
+   $updateHelper = [string](& $updateTarget --prepare-helper $updateTarget $installerPath setup)
+   if ($LASTEXITCODE) { throw 'Cannot stage signed installer update fixture.' }
+   $helperProcess = Start-Process -FilePath $updateHelper -ArgumentList @('--apply-update', ('"' + $updateTarget + '"'), '4294967294') -WindowStyle Hidden -PassThru
+   if (!$helperProcess.WaitForExit(60000)) { $helperProcess.Kill(); throw 'Automatic installer helper timed out.' }
+   if ($helperProcess.ExitCode -ne 0) { Get-Content (Join-Path (Split-Path (Split-Path $updateHelper)) 'updates.log'); throw 'Automatic installer helper failed.' }
+   if ((Get-FileHash -LiteralPath $updateTarget).Hash -ne $expectedUpdateHash) { throw 'Automatic update did not install the exact signed application.' }
+   $results.automaticUpdate = 'passed; signed 0.1.3 baseline to signed 0.1.4 through the real NSIS installer and helper'
+  } finally {
+   if ($updateHelper) {
+    $ownedCache = [IO.Path]::GetFullPath((Split-Path (Split-Path $updateHelper)))
+    $allowedParent = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Voltura/Worlds/Updates'))
+    if ((Split-Path $ownedCache -Parent) -eq $allowedParent -and (Split-Path $ownedCache -Leaf) -match '^\d+$') {
+     foreach ($part in Get-ChildItem -LiteralPath $ownedCache -Directory) {
+      foreach ($name in @('payload.exe','helper.exe','download.part')) {
+       $ownedFile = Join-Path $part.FullName $name
+       if (Test-Path -LiteralPath $ownedFile) { Remove-Item -LiteralPath $ownedFile }
+      }
+      if (!(Get-ChildItem -LiteralPath $part.FullName -Force)) { Remove-Item -LiteralPath $part.FullName }
+     }
+     foreach ($name in @('pending','pending.tmp','updates.log')) {
+      $ownedFile = Join-Path $ownedCache $name
+      if (Test-Path -LiteralPath $ownedFile) { Remove-Item -LiteralPath $ownedFile }
+     }
+     if (!(Get-ChildItem -LiteralPath $ownedCache -Force)) { Remove-Item -LiteralPath $ownedCache }
+    }
+   }
+   $env:WORLDS_UPDATES_TEST_PROFILE = $oldUpdateProfile
+   $env:WORLDS_UPDATES_TEST_PRODUCT_KEY = $oldUpdateKey
+   if ($preferencesExisted) { [IO.File]::WriteAllBytes($preferences, $preferencesBefore) }
+   elseif (Test-Path -LiteralPath $preferences) { Remove-Item -LiteralPath $preferences }
+  }
+ }
+
 
  # An explicit opt-out must survive the next ordinary upgrade. Both upgrades
  # use the registered directory, without another /D argument.
  Run-Setup '/S /NOSTARTUP'
  Run-Setup '/S'
- if ((Get-ItemProperty -LiteralPath $runKey).PSObject.Properties.Name -contains 'VolturaWorlds') { throw 'Upgrade re-enabled startup.' }
+ if ((Get-ItemProperty -LiteralPath $runKey).PSObject.Properties.Name -contains $productKey) { throw 'Upgrade re-enabled startup.' }
  if ((Get-ItemPropertyValue -LiteralPath $uninstallKey -Name InstallLocation) -ne $installDir) { throw 'Upgrade changed the install directory.' }
  $results.upgrades = 'passed; startup opt-out and directory retained'
  foreach ($obsolete in @('earth-january.jpg','earth-clouds-8192.tif','milkyway-2020.png')) {
@@ -81,10 +138,10 @@ try {
  Remove-Item -LiteralPath $sentinel
  if (!$profileExisted -and !(Get-ChildItem -LiteralPath $profileDir -Force)) { Remove-Item -LiteralPath $profileDir }
 }
-foreach ($path in @($installDir, $uninstallKey, $shortcut, 'HKCU:\Software\Classes\.world', 'HKCU:\Software\Classes\Voltura.World')) {
+foreach ($path in @($installDir, $uninstallKey, $shortcut, $extensionKey, $classKey)) {
  if (Test-Path -LiteralPath $path) { throw "Uninstall left a product artifact: $path" }
 }
-if ((Get-ItemProperty -LiteralPath $runKey).PSObject.Properties.Name -contains 'VolturaWorlds') { throw 'Uninstall left startup registration.' }
+if ((Get-ItemProperty -LiteralPath $runKey).PSObject.Properties.Name -contains $productKey) { throw 'Uninstall left startup registration.' }
 $results.uninstall = 'passed; files, shortcut and registration removed; library retained'
 $results.evidence = 'Non-elevated current-user install/upgrade/uninstall and private-desktop runtime. Not physical desktop interaction proof.'
 $results | ConvertTo-Json | Set-Content (Join-Path $reportDir 'results.json')

@@ -10,3 +10,4 @@ Dependency license texts are included under `licenses/` and copied by the build 
 
 Orbit's NASA Blue Marble map is separately credited in `assets/orbit/ATTRIBUTION.md` and is not covered by the application code's MIT license. Aurora's generated texture-layer provenance is in `assets/aurora/PROVENANCE.md`.
 
+- Automatic updater and its policy tests adapted from Voltura Markdown, MIT, Copyright (c) 2026 Voltura AB. Worlds uses installer updates, its own release feed and cache, and its own opt-in preference.
