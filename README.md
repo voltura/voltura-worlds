@@ -11,6 +11,16 @@
 | Flowing ribbons of light | A ringed planet in motion | Evolving coloured fluid | Sculpted, unfolding curves |
 | [Watch](https://worlds.voltura.se/assets/aurora.mp4) | [Watch](https://worlds.voltura.se/assets/orbit.mp4) | [Watch](https://worlds.voltura.se/assets/smoke.mp4) | [Watch](https://worlds.voltura.se/assets/bloom.mp4) |
 
+| Silk | Eclipse | Lattice |
+| --- | --- | --- |
+| Translucent flowing ribbons | A slowly evolving solar corona | A rotating porous sculpture |
+| [Watch](https://worlds.voltura.se/assets/silk.mp4) | [Watch](https://worlds.voltura.se/assets/eclipse.mp4) | [Watch](https://worlds.voltura.se/assets/lattice.mp4) |
+
+| Drift | Contour | Mercury |
+| --- | --- | --- |
+| Bioluminescent currents | Living topographic lines | Merging metallic forms |
+| [Watch](https://worlds.voltura.se/assets/drift.mp4) | [Watch](https://worlds.voltura.se/assets/contour.mp4) | [Watch](https://worlds.voltura.se/assets/mercury.mp4) |
+
 The product site shows recordings from the native Direct3D renderer, at their original animation speed. 
 
 ## What it does
@@ -24,7 +34,7 @@ The product site shows recordings from the native Direct3D renderer, at their or
 
 ## Current release
 
-**Version 0.1.4** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.4/VolturaWorlds-Setup-0.1.4-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.4). Includes all four Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.5** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.5/VolturaWorlds-Setup-0.1.5-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.5). Includes all ten Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
 Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 

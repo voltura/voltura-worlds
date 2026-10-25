@@ -4,7 +4,13 @@
     aurora: ['01', 'Aurora', 'Ribbons of light. A quieter kind of energy.'],
     orbit: ['02', 'Orbit', 'Take the long way around.'],
     smoke: ['03', 'Smoke', 'Colour in motion. Never quite the same.'],
-    bloom: ['04', 'Bloom', 'Soft folds. Slowly unfolding.']
+    bloom: ['04', 'Bloom', 'Soft folds. Slowly unfolding.'],
+    silk: ['05', 'Silk', 'Translucent ribbons. Colour flowing through colour.'],
+    eclipse: ['06', 'Eclipse', 'A quiet sun. A slowly shifting corona.'],
+    lattice: ['07', 'Lattice', 'An open sculpture. A new angle in every turn.'],
+    drift: ['08', 'Drift', 'Small lights. Gentle currents.'],
+    contour: ['09', 'Contour', 'Imaginary landscapes. Lines that keep moving.'],
+    mercury: ['10', 'Mercury', 'Liquid forms. Reflections in motion.']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');
@@ -40,7 +46,7 @@
         item.setAttribute('aria-pressed', String(active));
       });
       cinema.dataset.scene = name;
-      document.querySelector('#scene-number').textContent = `WORLD ${number} / 04`;
+      document.querySelector('#scene-number').textContent = `WORLD ${number} / 10`;
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();

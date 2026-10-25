@@ -116,6 +116,7 @@ private:
  std::array<ComPtr<ID3D12Resource>,2> bloomTargets_,auroraTextures_;
  std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;
  ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
+ std::array<ComPtr<ID3D12PipelineState>,6> proceduralWorlds_;
  std::unique_ptr<VideoPlayer> video_;std::filesystem::path videoPath_;ID3D12Resource* videoView_{};uint64_t videoBytes_{};
  void renderVideo(const Assignment&,FrameData,bool);
  std::array<Volume,2> velocity_,density_,pressure_;Volume divergence_,curl_;

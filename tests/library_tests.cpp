@@ -78,7 +78,7 @@ void mouseSelect(int id,int option){
  PostMessageW(comboWindow,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(info.rcButton.left+3,info.rcButton.top+3));
  PostMessageW(comboWindow,WM_LBUTTONUP,0,MAKELPARAM(info.rcButton.left+3,info.rcButton.top+3));pump();
  requireUi(SendMessageW(comboWindow,CB_GETDROPPEDSTATE,0,0)!=0,"Mouse must open dropdown");
- GetComboBoxInfo(comboWindow,&info);RECT item{};SendMessageW(info.hwndList,LB_GETITEMRECT,option,reinterpret_cast<LPARAM>(&item));
+ GetComboBoxInfo(comboWindow,&info);SendMessageW(info.hwndList,LB_SETTOPINDEX,std::max(0,option-3),0);pump();RECT item{};SendMessageW(info.hwndList,LB_GETITEMRECT,option,reinterpret_cast<LPARAM>(&item));
  auto point=MAKELPARAM(item.left+10,(item.top+item.bottom)/2);
  PostMessageW(info.hwndList,WM_MOUSEMOVE,0,point);PostMessageW(info.hwndList,WM_LBUTTONDOWN,MK_LBUTTON,point);PostMessageW(info.hwndList,WM_LBUTTONUP,0,point);pump();
  if(SendMessageW(comboWindow,CB_GETCURSEL,0,0)!=option){std::cerr<<"Dropdown ID "<<id<<"\n";throw std::runtime_error("Mouse selection did not persist");}
@@ -116,21 +116,23 @@ int wmain(int argc,wchar_t** argv){
   requireDesktopActionStates();
   requireUi(GetClassLongPtrW(library,GCLP_HICON)!=0,"Application icon resource");
   requireUi(!IsWindowVisible(GetDlgItem(library,qualityId)),"Advanced controls start hidden");
-  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0)==5,"Built-in visualizations appear in dropdown");
+  const int offChoice=int(std::size(visualizations))-2,videoChoice=int(std::size(visualizations))-1;
+  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0)==videoChoice,"Built-in visualizations appear in dropdown");
   mouseSelect(visualizationId,1);requireUi(selected().scene==Scene::Orbit,"Visualization dropdown switches scene");
-  auto menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==5,"Visualization submenu contains catalog");
+  auto menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==videoChoice,"Visualization submenu contains catalog");
   requireUi((GetMenuState(menu,visualizationMenuBase+1,MF_BYCOMMAND)&MF_CHECKED)!=0,"Submenu marks active visualization");DestroyMenu(menu);
   requireUi(selectVisualization(2)&&selected().scene==Scene::Smoke,"Quick switch updates selected display");
   requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==2,"Quick switch synchronizes dropdown");
   requireUi(selectVisualization(3)&&selected().scene==Scene::Bloom,"Bloom can be selected from the catalog");
-  requireUi(!selectVisualization(5)&&!selectVisualization(-1),"Unavailable video and invalid selections leave scene intact");
+  for(int i=4;i<offChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
+  requireUi(!selectVisualization(videoChoice)&&!selectVisualization(-1),"Unavailable video and invalid selections leave scene intact");
   // Real native surfaces on the test desktop prove that Off reveals the desktop
   // and affects only the selected display, including Apply to all displays.
   for(auto& surface:surfaces)surface.hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,L"STATIC",L"Off test surface",WS_POPUP|WS_VISIBLE,0,0,32,32,nullptr,nullptr,instance,nullptr);
-  mouseSelect(visualizationId,4);requireUi(selected().scene==Scene::Off&&!IsWindowVisible(surfaces[0].hwnd)&&IsWindowVisible(surfaces[1].hwnd),"Off dropdown hides only the selected display");
-  menu=visualizationMenu();requireUi((GetMenuState(menu,visualizationMenuBase+4,MF_BYCOMMAND)&MF_CHECKED)!=0,"Context menu marks Off checked");DestroyMenu(menu);
+  mouseSelect(visualizationId,offChoice);requireUi(selected().scene==Scene::Off&&!IsWindowVisible(surfaces[0].hwnd)&&IsWindowVisible(surfaces[1].hwnd),"Off dropdown hides only the selected display");
+  menu=visualizationMenu();requireUi((GetMenuState(menu,visualizationMenuBase+offChoice,MF_BYCOMMAND)&MF_CHECKED)!=0,"Context menu marks Off checked");DestroyMenu(menu);
   requireUi(selectVisualization(0)&&IsWindowVisible(surfaces[0].hwnd),"Selecting a World restores its surface");
-  requireUi(selectVisualization(4)&&!IsWindowVisible(surfaces[0].hwnd),"Context menu Off hides the surface");
+  requireUi(selectVisualization(offChoice)&&!IsWindowVisible(surfaces[0].hwnd),"Context menu Off hides the surface");
   SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(!IsWindowVisible(surfaces[1].hwnd)&&assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Off,"Apply to all hides every display");
   selectVisualization(0);SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(IsWindowVisible(surfaces[1].hwnd),"Apply to all restores every display");
   for(auto& surface:surfaces){DestroyWindow(surface.hwnd);surface.hwnd=nullptr;}
@@ -145,11 +147,11 @@ int wmain(int argc,wchar_t** argv){
   if(SendDlgItemMessageW(library,deviceId,CB_GETCOUNT,0,0)<2){audioDevices.emplace_back(L"test-output",L"Test output");SendDlgItemMessageW(library,deviceId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Test output"));}
   mouseSelect(deviceId,1);requireUi(!settings.audioDevice.empty(),"Output model changes");
   selected().scene=Scene::Video;selected().video=L"retained.mp4";syncControls();mouseSelect(visualizationId,0);
-  menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==6,"Submenu remembers imported video after switching away");
+  menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==int(std::size(visualizations)),"Submenu remembers imported video after switching away");
   MENUITEMINFOW videoItem{sizeof(videoItem)};videoItem.fMask=MIIM_DATA;
-  requireUi(GetMenuItemInfoW(menu,visualizationMenuBase+5,FALSE,&videoItem)&&std::wstring(reinterpret_cast<const wchar_t*>(videoItem.dwItemData))==L"Imported video","Remembered video has a submenu entry");DestroyMenu(menu);
-  requireUi(selectVisualization(5)&&selected().scene==Scene::Video&&selected().video==L"retained.mp4","Context-menu switching restores remembered video");
-  mouseSelect(visualizationId,0);mouseSelect(visualizationId,5);requireUi(selected().scene==Scene::Video&&selected().video==L"retained.mp4","Imported video can be reselected");mouseSelect(videoFitId,1);requireUi(selected().fit,"Video positioning changes");
+  requireUi(GetMenuItemInfoW(menu,visualizationMenuBase+videoChoice,FALSE,&videoItem)&&std::wstring(reinterpret_cast<const wchar_t*>(videoItem.dwItemData))==L"Imported video","Remembered video has a submenu entry");DestroyMenu(menu);
+  requireUi(selectVisualization(videoChoice)&&selected().scene==Scene::Video&&selected().video==L"retained.mp4","Context-menu switching restores remembered video");
+  mouseSelect(visualizationId,0);mouseSelect(visualizationId,videoChoice);requireUi(selected().scene==Scene::Video&&selected().video==L"retained.mp4","Imported video can be reselected");mouseSelect(videoFitId,1);requireUi(selected().fit,"Video positioning changes");
   SendMessageW(GetDlgItem(library,resetId),BM_CLICK,0,0);pump();requireUi(selected().video==L"retained.mp4"&&selected().scene==Scene::Video,"Reset preserves content");requireUi(selected().params.palette==0&&selected().reaction==Reaction::Off&&!selected().fit&&settings.fps==60&&settings.quality==Quality::Auto&&settings.audioDevice.empty(),"Reset defaults");
   selected().scene=Scene::Aurora;syncControls();
   auto slider=GetDlgItem(library,200);SetFocus(slider);int before=int(SendMessageW(slider,TBM_GETPOS,0,0));SendMessageW(slider,WM_KEYDOWN,VK_RIGHT,0);SendMessageW(slider,WM_KEYUP,VK_RIGHT,0);pump();requireUi(SendMessageW(slider,TBM_GETPOS,0,0)>before&&selected().params.brightness>1,"Themed slider keyboard input updates model");

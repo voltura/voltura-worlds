@@ -8,7 +8,7 @@
 #include <atomic>
 #include <chrono>
 namespace worlds {
-enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off };
+enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, Mercury };
 enum class Quality { Eco, Auto, High };
 enum class Reaction { Off, Gentle, Expressive };
 struct Parameters {
@@ -43,4 +43,5 @@ std::string utf8(const std::wstring&);
 std::wstring wide(const std::string&);
 std::string sceneName(Scene);
 Scene parseScene(const std::string&);
+bool isProceduralWorld(Scene);
 }

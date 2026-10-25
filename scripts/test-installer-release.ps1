@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $identity = [guid]::NewGuid().ToString('N')
 $productKey = "VolturaWorlds-Test-$identity"
-$setup = Join-Path $repo "artifacts/VolturaWorlds-Setup-0.1.4-test-$identity.exe"
+$setup = Join-Path $repo "artifacts/VolturaWorlds-Setup-0.1.5-test-$identity.exe"
 $signing = Get-Content -LiteralPath $SigningConfig -Raw | ConvertFrom-Json
 & 'C:\Program Files (x86)\NSIS\makensis.exe' /V2 "/DPRODUCT_KEY=$productKey" "/DSHORTCUT_NAME=Voltura Worlds Test $identity" "/DWORLD_CLASS=Voltura.World.Test.$identity" "/DFILE_EXTENSION=.world-test$identity" ('/DPROFILE_DIR=$LOCALAPPDATA\Voltura\Worlds-InstallerTests\' + $identity) "/DOUTPUT=$setup" "$repo/installer/Worlds.nsi"
 if ($LASTEXITCODE) { throw 'Isolated installer compilation failed.' }

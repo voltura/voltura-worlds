@@ -23,12 +23,18 @@ int main(){try{
  require(parseScene("off")==Scene::Off&&sceneName(Scene::Off)=="off","Off scene identity failed");
  {Settings off;Assignment a;a.scene=Scene::Off;a.video=L"retained.mp4";off.displays.emplace_back(L"off-monitor",a);saveSettings(dir,off);auto restored=assignmentFor(loadSettings(dir),L"off-monitor");require(restored.scene==Scene::Off&&restored.video==a.video,"Off settings roundtrip preserves video");}
  require(parseScene("bloom")==Scene::Bloom&&sceneName(Scene::Bloom)=="bloom","Bloom scene identity failed");
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury}){
+  require(parseScene(sceneName(scene))==scene&&isProceduralWorld(scene),"Procedural World scene identity failed");
+  Settings settings;Assignment world;world.scene=scene;world.params.palette=2;world.params.strength=.7f;world.reaction=Reaction::Gentle;settings.displays.emplace_back(L"world-monitor",world);saveSettings(dir,settings);
+  auto restoredWorld=assignmentFor(loadSettings(dir),L"world-monitor");require(restoredWorld.scene==scene&&restoredWorld.params.palette==2&&restoredWorld.params.strength==.7f&&restoredWorld.reaction==Reaction::Gentle,"Procedural World settings roundtrip failed");
+ }
  {Settings bloom;Assignment folded;folded.scene=Scene::Bloom;bloom.displays.emplace_back(L"bloom-monitor",folded);saveSettings(dir,bloom);require(assignmentFor(loadSettings(dir),L"bloom-monitor").scene==Scene::Bloom,"Bloom settings roundtrip failed");}
  require(parseScene("smoke")==Scene::Smoke&&sceneName(Scene::Smoke)=="smoke","Smoke scene identity failed");
  Settings s;Assignment a;a.scene=Scene::Smoke;a.params.flow=.8f;s.displays.emplace_back(L"monitor-1",a);saveSettings(dir,s);auto restored=loadSettings(dir);require(restored.displays.size()==1&&assignmentFor(restored,L"monitor-1").scene==Scene::Smoke,"Settings roundtrip failed");require(assignmentFor(restored,L"new-monitor").reaction==Reaction::Off,"New monitor audio enabled");
  {std::ofstream out(dir/L"settings.json");out<<"{\"version\":999}";}rejects([&]{loadSettings(dir);});
  WorldPackage package;package.title="Test";package.assignment=a;package.preview={137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,2,0,0,0,2,8,6,0,0,0,114,182,13,36,0,0,0,21,73,68,65,84,120,156,99,100,104,248,255,159,129,129,129,129,9,68,128,48,0,37,25,2,130,143,80,141,6,0,0,0,0,73,69,78,68,174,66,96,130};
  {auto folded=package;folded.assignment.scene=Scene::Bloom;auto bloomFile=dir/L"bloom.world";writePackage(bloomFile,folded);require(readPackage(bloomFile).assignment.scene==Scene::Bloom,"Bloom package roundtrip failed");}
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury}){auto world=package;world.assignment.scene=scene;auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");}
  auto file=dir/L"test.world";writePackage(file,package);auto loaded=readPackage(file);require(loaded.title=="Test"&&loaded.assignment.scene==Scene::Smoke,"Package roundtrip failed");
  {std::fstream out(file,std::ios::binary|std::ios::in|std::ios::out);out.seekp(50);out.put('!');}rejects([&]{readPackage(file);});
  writePackage(file,package);
