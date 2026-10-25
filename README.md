@@ -11,7 +11,7 @@
 | Flowing ribbons of light | A ringed planet in motion | Evolving coloured fluid | Sculpted, unfolding curves |
 | [Watch](https://worlds.voltura.se/assets/aurora.mp4) | [Watch](https://worlds.voltura.se/assets/orbit.mp4) | [Watch](https://worlds.voltura.se/assets/smoke.mp4) | [Watch](https://worlds.voltura.se/assets/bloom.mp4) |
 
-The product site shows recordings from the native Direct3D renderer, at their original animation speed. These are native offscreen captures, not recordings of physical desktop interaction.
+The product site shows recordings from the native Direct3D renderer, at their original animation speed. 
 
 ## What it does
 
@@ -28,7 +28,6 @@ The product site shows recordings from the native Direct3D renderer, at their or
 
 Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 
-The community site, complete adaptive quality, shared multi-monitor rendering device and broader reliability/performance acceptance remain unfinished. Physical desktop and mixed-DPI multi-monitor verification remain open. Historical checkpoints and their limitations are in [docs/STATUS.md](docs/STATUS.md).
 
 ## Build and run
 

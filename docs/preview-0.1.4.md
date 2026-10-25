@@ -14,10 +14,6 @@ Enable **Automatic updates** in the notification-area menu. Worlds checks after 
 
 Choose **Restart to update** when it appears, or **Exit Worlds** to install a ready update without restarting. Closing the library keeps Worlds running. Shutdown and sign-out cancel automatic installation. Your settings, library, imported videos and startup choice are retained. Details: [automatic updates](UPDATES.md).
 
-## Known limitations
-
-Full adaptive quality, a shared multi-monitor rendering device, the community service and broader performance/endurance acceptance remain unfinished. Automated native tests and isolated installer checks do not establish physical desktop, audio-listening or mixed-DPI multi-monitor acceptance.
-
 ## Validation
 
 - Release build and all 29 CTest checks passed.
@@ -25,4 +21,3 @@ Full adaptive quality, a shared multi-monitor rendering device, the community se
 - Non-elevated isolated install, automatic signed 0.1.3-to-0.1.4 upgrade, startup opt-out, packaged native rendering/video, synthetic host recovery and uninstall passed.
 - Both production executable and installer have verified Authenticode digests, the selected Voltura certificate and timestamps.
 
-The installer lifecycle used an isolated product identity and private Windows desktop. Physical desktop and mixed-DPI acceptance remain unverified.

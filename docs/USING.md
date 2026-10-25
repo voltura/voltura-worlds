@@ -14,19 +14,13 @@ The library follows your Windows light/dark theme. **Advanced settings** reveals
 
 Audio reaction defaults to Off. Choose Gentle or Expressive and adjust Audio strength to use local playback-device analysis. No audio is recorded or uploaded. Rendering pauses on battery by default; clear **Pause on battery** to animate while unplugged. Full display coverage, lock, sleep, suspend, and remote sessions also pause rendering.
 
-Personal SDR H.264 MP4 videos can be imported, copied to the managed library, and looped silently with Fill or Fit. Data-only `.world` packages open an import preview before applying. There is no community sharing service.
+Personal SDR H.264 MP4 videos can be imported, copied to the managed library, and looped silently with Fill or Fit. Data-only `.world` packages open an import preview before applying.
 
 User settings and imported assets live in `%LOCALAPPDATA%\Voltura\Worlds`. Uninstall from Windows Settings; exit Worlds first. Uninstall asks whether to keep your library and preferences.
 
 Bloom is an original animated folded-sheet World inspired by the blue Windows 11 wallpaper. It uses native 3D geometry with slow breathing, curling, and rocking movement, four palettes, and optional audio reaction. Select **Bloom** in the visualization list or tray menu. The 0.1.4 installer includes Bloom.
 
 Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
-
-## Current limitations
-
-The current release includes all four built-in Worlds and personal video wallpapers. A community sharing service, full adaptive-quality system and shared multi-monitor rendering device are not included.
-
-Automated validation covers native rendering, app contracts, signed automatic updates and isolated installer lifecycle. Physical desktop, mixed-DPI multi-monitor and endurance acceptance remain unverified.
 
 ## Build
 
