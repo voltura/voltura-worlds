@@ -1,0 +1,104 @@
+{
+  "sources": {
+    "hlsp_opal_hst_wfc3-uvis_jupiter-2025_all_v1_readme.txt": {
+      "url": "https://archive.stsci.edu/missions/hlsp/opal/cycle32/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2025_all_v1_readme.txt",
+      "sha256": "344f5c1bcae360edfc7b4f1183b9ed47f887cbbe7fa0518fdf577c915784fdad"
+    },
+    "hlsp_opal_hst_wfc3-uvis_jupiter-2025a_f395n-f502n-f631n_v1_globalmap.tif": {
+      "url": "https://archive.stsci.edu/missions/hlsp/opal/cycle32/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2025a_f395n-f502n-f631n_v1_globalmap.tif",
+      "sha256": "52b6cc32639f699ff5614b169c4c2727fff98e7eb432aff7c718177191716e6c"
+    },
+    "hlsp_opal_hst_wfc3-uvis_jupiter-2025a_f631n_v1_globalmap.fits": {
+      "url": "https://archive.stsci.edu/missions/hlsp/opal/cycle32/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2025a_f631n_v1_globalmap.fits",
+      "sha256": "376ebe3b3e25d1bf7a3968486c8952bd7e1a11e15504b74c4e9f6021e6f0a0bd"
+    },
+    "hlsp_opal_hst_wfc3-uvis_jupiter-2025b_f631n_v1_globalmap.fits": {
+      "url": "https://archive.stsci.edu/missions/hlsp/opal/cycle32/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2025b_f631n_v1_globalmap.fits",
+      "sha256": "d990c53c9000bb413b64597c9ceab3da0f4d75554652e4e46b0a2879e4a6cb55"
+    },
+    "hlsp_opal_hst_wfc3-uvis_jupiter-2025a_fq889n_v1_globalmap.fits": {
+      "url": "https://archive.stsci.edu/missions/hlsp/opal/cycle32/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2025a_fq889n_v1_globalmap.fits",
+      "sha256": "4bdbeb4a4f9fbfe0daa737c4ba29de31b0626fb6e58c54e0142ef6d3aa6ef5ea"
+    }
+  },
+  "derivation": {
+    "conversionVersion": 1,
+    "sourceDimensions": [
+      3600,
+      1800
+    ],
+    "runtimeDimensions": [
+      4096,
+      2048
+    ],
+    "observation": "2025-12-11, OPAL Cycle 32 rotation A; rotation B for inferred zonal winds",
+    "coordinates": "north up; planetographic latitude; left 0 System III west longitude, decreasing right (positive east)",
+    "color": "OPAL F631N red, F502N green, F395N blue visualization composite; arbitrarily scaled, treated as sRGB",
+    "polarFill": "unchanged through 75 deg; smooth transition to 80-deg zonal mean; constant mean beyond 80 deg",
+    "fitsTiffCorrelation": 0.9955559179583369,
+    "aerosolRatioPercentiles": [
+      0.05467253118753433,
+      0.3897175234556197
+    ],
+    "materialChannels": "R: normalized 889nm/631nm I/F ratio proxy; G byte: angular wind / .00001 * 127 + 128 (128 is exact zero)",
+    "wind": "11-row red-strip cross-correlation, >=.65 confidence, max 180 m/s search, 0.7-deg Gaussian; fade 65..70 deg",
+    "numpy": "2.5.4",
+    "pillow": "12.3.0"
+  },
+  "landmarks": {
+    "Great Red Spot vicinity": {
+      "longitudeEast": 38,
+      "latitudeGraphic": -22,
+      "sourceRgb": [
+        169,
+        82,
+        38
+      ]
+    },
+    "equatorial clouds": {
+      "longitudeEast": 160,
+      "latitudeGraphic": 0,
+      "sourceRgb": [
+        179,
+        170,
+        164
+      ]
+    },
+    "northern belt": {
+      "longitudeEast": 240,
+      "latitudeGraphic": 24,
+      "sourceRgb": [
+        177,
+        152,
+        124
+      ]
+    },
+    "southern ovals": {
+      "longitudeEast": 80,
+      "latitudeGraphic": -40,
+      "sourceRgb": [
+        169,
+        150,
+        141
+      ]
+    },
+    "seam east": {
+      "longitudeEast": 0.1,
+      "latitudeGraphic": 10,
+      "sourceRgb": [
+        137,
+        103,
+        90
+      ]
+    },
+    "seam west": {
+      "longitudeEast": 359.9,
+      "latitudeGraphic": 10,
+      "sourceRgb": [
+        138,
+        102,
+        88
+      ]
+    }
+  }
+}

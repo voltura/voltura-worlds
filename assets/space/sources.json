@@ -1,0 +1,30 @@
+{
+  "sources": {
+    "foreground": {
+      "url": "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/hiptyc_2020_4k_gal.exr",
+      "sha256": "7ddcebdd7f29815a32dffc62b57223adc351a0b3ae6badba38748e13a648892e"
+    },
+    "backgroundDerivative": {
+      "path": "assets/orbit/milkyway-2020.png",
+      "sha256": "6dbb55798cf64c0e306ebe21b1e57c9dee4a6207a83cf52fe9a732f1fbaaed38",
+      "originalUrl": "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/milkyway_2020_4k_gal.exr"
+    }
+  },
+  "derivation": {
+    "conversionVersion": 1,
+    "dimensions": [
+      4096,
+      2048
+    ],
+    "channels": "sRGB RGB: original Milky Way; linear alpha: mean positive RGB of NASA Hipparcos/Tycho foreground",
+    "coordinates": "NASA January 2021 corrected galactic mapping; same coordinates for RGB and foreground",
+    "runtimeStarGain": 0.18,
+    "runtimeStarSmoothFade": [
+      0.02,
+      0.08
+    ],
+    "pillow": "12.3.0",
+    "numpy": "2.5.4",
+    "imagecodecs": "2026.10.10"
+  }
+}

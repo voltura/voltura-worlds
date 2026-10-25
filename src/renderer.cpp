@@ -15,7 +15,7 @@ void check(HRESULT hr,const char* op){if(FAILED(hr)){std::ostringstream s;s<<op<
 static std::vector<char> shader(const std::filesystem::path& dir,const wchar_t* name){std::ifstream f(dir/name,std::ios::binary|std::ios::ate);if(!f)throw std::runtime_error("Precompiled shader missing");auto n=f.tellg();std::vector<char>b((size_t)n);f.seekg(0);f.read(b.data(),n);return b;}
 static D3D12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE type){D3D12_HEAP_PROPERTIES h{};h.Type=type;return h;}
 static D3D12_RESOURCE_DESC bufferDesc(uint64_t size){D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;d.Width=size;d.Height=1;d.DepthOrArraySize=1;d.MipLevels=1;d.SampleDesc.Count=1;d.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;return d;}
-Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& dir,bool debug):window_(hwnd),width_(w),height_(h){
+Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& dir,bool debug,bool forceSingleSample):window_(hwnd),width_(w),height_(h){
  assetDirectory_=dir.parent_path()/L"assets";
  if(debug){ComPtr<ID3D12Debug> dbg;if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dbg))))dbg->EnableDebugLayer();}
  check(CreateDXGIFactory2(debug?DXGI_CREATE_FACTORY_DEBUG:0,IID_PPV_ARGS(&factory_)),"Create DXGI factory");
@@ -30,7 +30,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  ComPtr<IDXGISwapChain1> sw;check(factory_->CreateSwapChainForHwnd(queue_.Get(),hwnd,&sd,nullptr,nullptr,&sw),"Create wallpaper swap chain");check(sw.As(&swap_),"Query swap chain");factory_->MakeWindowAssociation(hwnd,DXGI_MWA_NO_ALT_ENTER);
  D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=6;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_DSV;hd.NumDescriptors=2;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&dsv_)),"Create depth views");
- hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=400;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
+ hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=408;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  check(device_->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence_)),"Create fence");event_=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!event_)throw std::runtime_error("Cannot create GPU wait event");
  for(auto& f:frames_)check(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&f.allocator)),"Create frame allocator");
  check(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,frames_[0].allocator.Get(),nullptr,IID_PPV_ARGS(&list_)),"Create command list");list_->Close();
@@ -49,14 +49,19 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS colorSupport{DXGI_FORMAT_R16G16B16A16_FLOAT,2,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS depthSupport{DXGI_FORMAT_D32_FLOAT,2,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
  D3D12_FEATURE_DATA_FORMAT_SUPPORT resolveSupport{DXGI_FORMAT_R16G16B16A16_FLOAT};
- if(SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&resolveSupport,sizeof(resolveSupport)))&&(resolveSupport.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE)&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&colorSupport,sizeof(colorSupport)))&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&depthSupport,sizeof(depthSupport)))&&colorSupport.NumQualityLevels&&depthSupport.NumQualityLevels)orbitSamples_=2;
+ if(!forceSingleSample&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&resolveSupport,sizeof(resolveSupport)))&&(resolveSupport.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE)&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&colorSupport,sizeof(colorSupport)))&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&depthSupport,sizeof(depthSupport)))&&colorSupport.NumQualityLevels&&depthSupport.NumQualityLevels)orbitSamples_=2;
  auto full=shader(dir,L"fullscreen.cso"),ov=shader(dir,L"orbit.cso"),bv=shader(dir,L"bloom_mesh.cso");
  auto pipeline=[&](const wchar_t* file,bool geometry,bool alpha,ComPtr<ID3D12PipelineState>& output,bool display=false,unsigned samples=1,bool folded=false){auto ps=shader(dir,file);D3D12_GRAPHICS_PIPELINE_STATE_DESC pd{};pd.pRootSignature=root_.Get();pd.VS={folded?bv.data():geometry?ov.data():full.data(),folded?bv.size():geometry?ov.size():full.size()};pd.PS={ps.data(),ps.size()};pd.SampleMask=UINT_MAX;pd.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;pd.NumRenderTargets=1;pd.RTVFormats[0]=display?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R16G16B16A16_FLOAT;pd.DSVFormat=DXGI_FORMAT_D32_FLOAT;pd.SampleDesc.Count=samples;pd.RasterizerState.MultisampleEnable=samples>1;
   pd.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;pd.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;pd.RasterizerState.DepthClipEnable=TRUE;
   pd.DepthStencilState.DepthEnable=geometry;pd.DepthStencilState.DepthWriteMask=alpha?D3D12_DEPTH_WRITE_MASK_ZERO:D3D12_DEPTH_WRITE_MASK_ALL;pd.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_LESS_EQUAL;
   auto& b=pd.BlendState.RenderTarget[0];b.RenderTargetWriteMask=alpha?(D3D12_COLOR_WRITE_ENABLE_RED|D3D12_COLOR_WRITE_ENABLE_GREEN|D3D12_COLOR_WRITE_ENABLE_BLUE):D3D12_COLOR_WRITE_ENABLE_ALL;b.BlendEnable=alpha;b.SrcBlend=D3D12_BLEND_SRC_ALPHA;b.DestBlend=D3D12_BLEND_INV_SRC_ALPHA;b.BlendOp=D3D12_BLEND_OP_ADD;b.SrcBlendAlpha=D3D12_BLEND_ONE;b.DestBlendAlpha=D3D12_BLEND_ZERO;b.BlendOpAlpha=D3D12_BLEND_OP_ADD;
   check(device_->CreateGraphicsPipelineState(&pd,IID_PPV_ARGS(&output)),"Create scene pipeline");};
- pipeline(L"mars.cso",false,true,mars_,false,orbitSamples_);pipeline(L"mars_space.cso",false,false,marsSpace_,false,orbitSamples_);
+ // Earth and Mars use analytic coverage on fullscreen triangles; duplicate samples
+ // add no edge information. Keep the exact same HDR format and shader shading.
+ pipeline(L"earth.cso",false,true,earth_);pipeline(L"earth_space.cso",false,false,earthSpace_);
+ pipeline(L"jupiter.cso",false,true,jupiter_);pipeline(L"jupiter_space.cso",false,false,jupiterSpace_);
+ pipeline(L"moon.cso",false,true,moon_);pipeline(L"moon_space.cso",false,false,moonSpace_);
+ pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);
  pipeline(L"video.cso",false,false,videoPipeline_,true);
  pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);
  pipeline(L"aurora.cso",false,false,aurora_);pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);pipeline(L"smoke.cso",false,false,smoke_);pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);
@@ -83,10 +88,8 @@ void Renderer::validateDebugMessages(){
 }
 void Renderer::targets(){
  auto handle=rtv_->GetCPUDescriptorHandleForHeapStart();for(auto& b:buffers_){check(swap_->GetBuffer((UINT)(&b-buffers_.data()),IID_PPV_ARGS(&b)),"Get back buffer");device_->CreateRenderTargetView(b.Get(),nullptr,handle);handle.ptr+=rtvStride_;}
- D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_D32_FLOAT;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
- auto h=heap(D3D12_HEAP_TYPE_DEFAULT);D3D12_CLEAR_VALUE clear{};clear.Format=d.Format;clear.DepthStencil.Depth=1;
- check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_DEPTH_WRITE,&clear,IID_PPV_ARGS(&depth_)),"Create depth target");device_->CreateDepthStencilView(depth_.Get(),nullptr,dsv_->GetCPUDescriptorHandleForHeapStart());
- d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+ D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+ auto h=heap(D3D12_HEAP_TYPE_DEFAULT);
  check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,nullptr,IID_PPV_ARGS(&hdr_)),"Create HDR scene target");hdr_->SetName(L"Linear HDR artwork");
  auto hdrView=rtv_->GetCPUDescriptorHandleForHeapStart();hdrView.ptr+=2*rtvStride_;device_->CreateRenderTargetView(hdr_.Get(),nullptr,hdrView);
  D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=d.Format;srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;srv.Texture2D.MipLevels=1;device_->CreateShaderResourceView(hdr_.Get(),&srv,cpu(66));
@@ -98,7 +101,14 @@ void Renderer::targets(){
  }
  allocationBytes_=uint64_t(width_)*height_*20;
 }
-void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();for(auto& b:buffers_)b.Reset();depth_.Reset();hdr_.Reset();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;for(auto& b:bloomTargets_)b.Reset();check(swap_->ResizeBuffers(2,w,h,DXGI_FORMAT_R8G8B8A8_UNORM,0),"Resize wallpaper");width_=w;height_=h;targets();}
+void Renderer::makeDepthTarget(){
+ if(depth_)return;
+ D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_D32_FLOAT;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+ auto h=heap(D3D12_HEAP_TYPE_DEFAULT);D3D12_CLEAR_VALUE clear{};clear.Format=d.Format;clear.DepthStencil.Depth=1;
+ check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_DEPTH_WRITE,&clear,IID_PPV_ARGS(&depth_)),"Create depth target");device_->CreateDepthStencilView(depth_.Get(),nullptr,dsv_->GetCPUDescriptorHandleForHeapStart());
+ depthTargetBytes_=device_->GetResourceAllocationInfo(0,1,&d).SizeInBytes;
+}
+void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();for(auto& b:buffers_)b.Reset();depth_.Reset();depthTargetBytes_=0;hdr_.Reset();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;for(auto& b:bloomTargets_)b.Reset();check(swap_->ResizeBuffers(2,w,h,DXGI_FORMAT_R8G8B8A8_UNORM,0),"Resize wallpaper");width_=w;height_=h;targets();}
 void Renderer::makeOrbitTargets(){
  if(orbitSamples_==1||orbitColor_)return;
  D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;d.SampleDesc.Count=orbitSamples_;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
@@ -113,20 +123,47 @@ void Renderer::makeOrbitTargets(){
  auto dsv=dsv_->GetCPUDescriptorHandleForHeapStart();dsv.ptr+=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);device_->CreateDepthStencilView(depth.Get(),nullptr,dsv);
  orbitColor_=std::move(color);orbitDepth_=std::move(depth);orbitTargetBytes_=bytes;
 }
-void Renderer::loadStars(){
- if(starTexture_)return;
- loadDds(assetDirectory_/L"orbit"/L"runtime"/L"milkyway-2020.dds",starTexture_,82);
+void Renderer::loadStars(bool foreground){
+ if(starTexture_&&starForeground_==foreground)return;
+ if(starTexture_){idle();auto desc=starTexture_->GetDesc();assetBytes_-=device_->GetResourceAllocationInfo(0,1,&desc).SizeInBytes;starTexture_.Reset();}
+ loadDds(foreground?assetDirectory_/L"space"/L"runtime"/L"planet-sky.dds":assetDirectory_/L"orbit"/L"runtime"/L"milkyway-2020.dds",starTexture_,82);
+ starForeground_=foreground;
  D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
  device_->CreateShaderResourceView(nullptr,&empty,cpu(83));device_->CreateShaderResourceView(nullptr,&empty,cpu(84));
+}
+void Renderer::loadJupiter(){
+ if(jupiterColor_&&jupiterAtmosphere_)return;
+ loadStars(true);
+ // 402..404 follow Moon; no overlap with other scene tables.
+ loadDds(assetDirectory_/L"jupiter"/L"runtime"/L"jupiter-color.dds",jupiterColor_,402);
+ loadDds(assetDirectory_/L"jupiter"/L"runtime"/L"jupiter-atmosphere.dds",jupiterAtmosphere_,403);
+ D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&empty,cpu(404));
+}
+void Renderer::loadMoon(){
+ if(moonColor_&&moonNormal_&&moonEarth_)return;
+ loadStars(true);
+ // 399..401 follow Earth, without overlapping any Smoke tables.
+ loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-color.dds",moonColor_,399);
+ loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-normal.dds",moonNormal_,400);
+ loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-earth.dds",moonEarth_,401);
 }
 void Renderer::loadMars(){
  if(marsColor_&&marsNormal_)return;
  // 393..395 are outside Smoke transport and tracer descriptor ranges.
- loadStars();
+ loadStars(true);
  loadDds(assetDirectory_/L"mars"/L"runtime"/L"mars-color.dds",marsColor_,393);
  loadDds(assetDirectory_/L"mars"/L"runtime"/L"mars-normal.dds",marsNormal_,394);
  D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
  device_->CreateShaderResourceView(nullptr,&empty,cpu(395));
+}
+void Renderer::loadEarth(){
+ if(earthColor_&&earthClouds_&&earthMaterial_)return;
+ loadStars(true);
+ // Dedicated three-SRV table beyond Mars and all Smoke descriptor ranges.
+ loadDds(assetDirectory_/L"earth"/L"runtime"/L"earth-color.dds",earthColor_,396);
+ loadDds(assetDirectory_/L"orbit"/L"runtime"/L"earth-clouds-8192.dds",earthClouds_,397);
+ loadDds(assetDirectory_/L"earth"/L"runtime"/L"earth-material.dds",earthMaterial_,398);
 }
 void Renderer::loadPlanet(){
  loadStars();
@@ -148,23 +185,45 @@ void Renderer::loadAurora(){
 }
 void Renderer::loadDds(const std::filesystem::path& file,ComPtr<ID3D12Resource>& texture,unsigned slot){
  if(texture)return;
- std::ifstream input(file,std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Bundled DDS texture missing");
- auto length=input.tellg();if(length<148||length>128*1024*1024)throw std::runtime_error("Invalid DDS file size");
- std::vector<uint8_t> bytes(static_cast<size_t>(length));input.seekg(0);if(!input.read(reinterpret_cast<char*>(bytes.data()),length))throw std::runtime_error("Cannot read DDS texture");
- auto image=parseDds(bytes);
+ // File-backed source pages do not duplicate the entire DDS in private memory.
+ // Keep the mapping alive until every bounded upload has completed.
+ struct SourceMapping {
+  HANDLE file=INVALID_HANDLE_VALUE,mapping=nullptr;const uint8_t* data=nullptr;
+  ~SourceMapping(){if(data)UnmapViewOfFile(data);if(mapping)CloseHandle(mapping);if(file!=INVALID_HANDLE_VALUE)CloseHandle(file);}
+ } sourceFile;
+ sourceFile.file=CreateFileW(file.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+ if(sourceFile.file==INVALID_HANDLE_VALUE)throw std::runtime_error("Bundled DDS texture missing");
+ LARGE_INTEGER length{};if(!GetFileSizeEx(sourceFile.file,&length)||length.QuadPart<148||length.QuadPart>128*1024*1024)throw std::runtime_error("Invalid DDS file size");
+ sourceFile.mapping=CreateFileMappingW(sourceFile.file,nullptr,PAGE_READONLY,0,0,nullptr);
+ if(!sourceFile.mapping)throw std::runtime_error("Cannot map DDS texture");
+ sourceFile.data=static_cast<const uint8_t*>(MapViewOfFile(sourceFile.mapping,FILE_MAP_READ,0,0,0));
+ if(!sourceFile.data)throw std::runtime_error("Cannot read DDS texture");
+ auto image=parseDds(std::span<const uint8_t>(sourceFile.data,static_cast<size_t>(length.QuadPart)));
  D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=image.width;desc.Height=image.height;desc.DepthOrArraySize=1;desc.MipLevels=static_cast<UINT16>(image.mips.size());desc.Format=image.format;desc.SampleDesc.Count=1;
  ComPtr<ID3D12Resource> ready;auto hp=heap(D3D12_HEAP_TYPE_DEFAULT);check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&ready)),"Allocate compressed texture");ready->SetName(file.filename().c_str());
  std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(image.mips.size());std::vector<UINT> rows(image.mips.size());UINT64 uploadBytes{};
  device_->GetCopyableFootprints(&desc,0,desc.MipLevels,0,footprints.data(),rows.data(),nullptr,&uploadBytes);
+ // Preserve every compressed block and mip. Only staging capacity is reduced.
+ uploadBytes=std::min<UINT64>(uploadBytes,4*1024*1024);
  auto uploadHeap=heap(D3D12_HEAP_TYPE_UPLOAD);auto buffer=bufferDesc(uploadBytes);ComPtr<ID3D12Resource> upload;
- check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate compressed upload");
- for(size_t i=0;i<image.mips.size();i++)if(rows[i]!=image.mips[i].rows||image.mips[i].rowBytes>footprints[i].Footprint.RowPitch)throw std::runtime_error("Invalid compressed footprint");
+ check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate bounded compressed upload");
+ for(size_t i=0;i<image.mips.size();i++)if(rows[i]!=image.mips[i].rows||image.mips[i].rowBytes>footprints[i].Footprint.RowPitch||footprints[i].Footprint.RowPitch>uploadBytes)throw std::runtime_error("Invalid compressed footprint");
  BYTE* mapped{};D3D12_RANGE none{};check(upload->Map(0,&none,reinterpret_cast<void**>(&mapped)),"Map compressed upload");
- for(size_t i=0;i<image.mips.size();i++)for(unsigned row=0;row<rows[i];row++)
-  std::memcpy(mapped+footprints[i].Offset+size_t(row)*footprints[i].Footprint.RowPitch,bytes.data()+image.mips[i].offset+size_t(row)*image.mips[i].rowBytes,image.mips[i].rowBytes);
- upload->Unmap(0,nullptr);begin();D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;dest.pResource=ready.Get();dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
- for(UINT i=0;i<desc.MipLevels;i++){source.PlacedFootprint=footprints[i];dest.SubresourceIndex=i;list_->CopyTextureRegion(&dest,0,0,0,&source,nullptr);}
- transition(ready.Get(),D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);submit();idle();
+ for(UINT i=0;i<desc.MipLevels;i++){
+  const auto& footprint=footprints[i].Footprint;
+  unsigned capacity=static_cast<unsigned>(uploadBytes/footprint.RowPitch);
+  for(unsigned row=0;row<rows[i];){
+   unsigned count=std::min(capacity,rows[i]-row);
+   for(unsigned chunkRow=0;chunkRow<count;chunkRow++)
+    std::memcpy(mapped+size_t(chunkRow)*footprint.RowPitch,sourceFile.data+image.mips[i].offset+size_t(row+chunkRow)*image.mips[i].rowBytes,image.mips[i].rowBytes);
+   D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;source.PlacedFootprint.Footprint=footprint;source.PlacedFootprint.Footprint.Height=std::min(count*4,footprint.Height-row*4);
+   dest.pResource=ready.Get();dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dest.SubresourceIndex=i;
+   begin();list_->CopyTextureRegion(&dest,0,row*4,0,&source,nullptr);submit();idle();
+   // The fence must complete before this mapped staging region is overwritten.
+   row+=count;
+  }
+ }
+ upload->Unmap(0,nullptr);begin();transition(ready.Get(),D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);submit();idle();
  D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=desc.Format;srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;srv.Texture2D.MipLevels=desc.MipLevels;device_->CreateShaderResourceView(ready.Get(),&srv,cpu(slot));
  assetBytes_+=device_->GetResourceAllocationInfo(0,1,&desc).SizeInBytes;texture=std::move(ready);
 }
@@ -608,7 +667,7 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
- if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars)){
+ if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter)){
   idle();
   auto releaseTexture=[&](ComPtr<ID3D12Resource>& texture){
    if(!texture)return;
@@ -616,12 +675,23 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   };
   if(lastScene_==Scene::Orbit){releaseTexture(planetTexture_);releaseTexture(cloudTexture_);releaseTexture(nightTexture_);}
   if(lastScene_==Scene::Mars){releaseTexture(marsColor_);releaseTexture(marsNormal_);}
-  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars)releaseTexture(starTexture_);
+  if(lastScene_==Scene::Jupiter){releaseTexture(jupiterColor_);releaseTexture(jupiterAtmosphere_);}
+  if(lastScene_==Scene::Moon){releaseTexture(moonColor_);releaseTexture(moonNormal_);releaseTexture(moonEarth_);}
+  if(lastScene_==Scene::Earth){releaseTexture(earthColor_);releaseTexture(earthClouds_);releaseTexture(earthMaterial_);}
+  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars&&assignment.scene!=Scene::Earth&&assignment.scene!=Scene::Moon&&assignment.scene!=Scene::Jupiter)releaseTexture(starTexture_);
  }
+ // Only mesh geometry needs depth. With MSAA its dedicated depth target is
+ // sufficient; allocate single-sample depth only for the hardware fallback.
+ bool geometry=assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom;
+ if(geometry&&orbitSamples_==1)makeDepthTarget();
+ else if(depth_){idle();depth_.Reset();depthTargetBytes_=0;}
+ if(assignment.scene==Scene::Jupiter)loadJupiter();
+ if(assignment.scene==Scene::Moon)loadMoon();
+ if(assignment.scene==Scene::Earth)loadEarth();
  if(assignment.scene==Scene::Mars)loadMars();
  if(assignment.scene==Scene::Aurora)loadAurora();
  if(assignment.scene==Scene::Orbit&&(!planetTexture_||!cloudTexture_||!nightTexture_||!starTexture_))loadPlanet();
- if(assignment.scene==Scene::Orbit||assignment.scene==Scene::Mars||assignment.scene==Scene::Bloom)makeOrbitTargets();
+ if(geometry)makeOrbitTargets();
  else if(orbitColor_){idle();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;}
  if(assignment.scene==Scene::Smoke&&!velocity_[0].resource)makeFluid();
  if(assignment.scene==Scene::Smoke&&smokeFilamentsEnabled_)makeSmokeFilaments();
@@ -637,15 +707,19 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   if(fineAtlasEnabled_&&(data.dt>0||!fineAtlasReady_))stepFineAtlas(data);
  }
  unsigned renderTiming=beginGpuStage(11);
- bool multisample=(assignment.scene==Scene::Orbit||assignment.scene==Scene::Mars||assignment.scene==Scene::Bloom)&&orbitSamples_>1;
+ bool multisample=geometry&&orbitSamples_>1;
+ bool usesDepth=geometry;
  auto target=buffers_[frameIndex_].Get();if(!multisample)transition(hdr_.Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
- auto rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=(multisample?5:2)*rtvStride_;auto dsv=dsv_->GetCPUDescriptorHandleForHeapStart();if(multisample)dsv.ptr+=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);list_->OMSetRenderTargets(1,&rtv,FALSE,&dsv);
- const float clear[]={.002f,.003f,.006f,1};list_->ClearRenderTargetView(rtv,clear,0,nullptr);list_->ClearDepthStencilView(dsv,D3D12_CLEAR_FLAG_DEPTH,1,0,0,nullptr);
+ auto rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=(multisample?5:2)*rtvStride_;auto dsv=dsv_->GetCPUDescriptorHandleForHeapStart();if(multisample)dsv.ptr+=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);list_->OMSetRenderTargets(1,&rtv,FALSE,usesDepth?&dsv:nullptr);
+ const float clear[]={.002f,.003f,.006f,1};list_->ClearRenderTargetView(rtv,clear,0,nullptr);if(usesDepth)list_->ClearDepthStencilView(dsv,D3D12_CLEAR_FLAG_DEPTH,1,0,0,nullptr);
  D3D12_VIEWPORT vp{0,0,float(width_),float(height_),0,1};D3D12_RECT sc{0,0,(LONG)width_,(LONG)height_};list_->RSSetViewports(1,&vp);list_->RSSetScissorRects(1,&sc);list_->SetGraphicsRootSignature(root_.Get());list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  auto draw=[&](ID3D12PipelineState* state,float pass,unsigned count,unsigned instances=1){data.pass=pass;list_->SetPipelineState(state);list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->DrawInstanced(count,instances,0,0);};
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
+ else if(assignment.scene==Scene::Jupiter){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(jupiterSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(402));draw(jupiter_.Get(),0,3);}
+ else if(assignment.scene==Scene::Moon){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(moonSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(399));draw(moon_.Get(),0,3);}
+ else if(assignment.scene==Scene::Earth){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(earthSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(396));draw(earth_.Get(),0,3);}
  else if(assignment.scene==Scene::Mars){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(marsSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(393));draw(mars_.Get(),0,3);}
  else if(assignment.scene==Scene::Orbit){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(space_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(72));draw(planet_.Get(),0,256*128*6);draw(planet_.Get(),3,24*12*6,400);draw(planet_.Get(),5,8*4*6,1800);draw(planet_.Get(),6,48*24*6,18);draw(planet_.Get(),4,96*48*6,3);draw(atmosphere_.Get(),7,128*64*6);draw(atmosphere_.Get(),2,256*128*6);draw(atmosphere_.Get(),1,256*128*6);}
  else if(assignment.scene==Scene::Smoke){auto visible=flowmapLive_?flowmapTotal_.resource.Get():density_[d_].resource.Get();transition(visible,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);transition(curl_.resource.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);list_->SetGraphicsRootDescriptorTable(2,gpu(flowmapLive_?335:76+d_*3));list_->SetGraphicsRootDescriptorTable(4,gpu(fineAtlasEnabled_?376+fineAtlasIndex_*2:380));if(fineAtlasEnabled_){transition(fineAtlases_[fineAtlasIndex_].Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);data.spare[8]=256;data.spare[9]=fineAtlasFront_?16.f:8.f;}
@@ -661,19 +735,18 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   list_->ResolveSubresource(hdr_.Get(),0,orbitColor_.Get(),0,DXGI_FORMAT_R16G16B16A16_FLOAT);
   transition(orbitColor_.Get(),D3D12_RESOURCE_STATE_RESOLVE_SOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
   transition(hdr_.Get(),D3D12_RESOURCE_STATE_RESOLVE_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-  dsv=dsv_->GetCPUDescriptorHandleForHeapStart();
  }else transition(hdr_.Get(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
  D3D12_VIEWPORT bloomViewport{0,0,float((width_+3)/4),float((height_+3)/4),0,1};list_->RSSetViewports(1,&bloomViewport);
  for(unsigned pass=0;pass<3;pass++){
   unsigned destination=pass==1?1:0;unsigned source=pass==0?66:pass==1?67:68;
   transition(bloomTargets_[destination].Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
-  auto view=rtv_->GetCPUDescriptorHandleForHeapStart();view.ptr+=(3+destination)*rtvStride_;list_->OMSetRenderTargets(1,&view,FALSE,&dsv);
+  auto view=rtv_->GetCPUDescriptorHandleForHeapStart();view.ptr+=(3+destination)*rtvStride_;list_->OMSetRenderTargets(1,&view,FALSE,nullptr);
   list_->SetGraphicsRootDescriptorTable(2,gpu(source));draw(bloom_.Get(),float(pass),3);
   transition(bloomTargets_[destination].Get(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
  }
  list_->RSSetViewports(1,&vp);
  transition(target,D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
- rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=size_t(frameIndex_)*rtvStride_;list_->OMSetRenderTargets(1,&rtv,FALSE,&dsv);
+ rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=size_t(frameIndex_)*rtvStride_;list_->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
  list_->SetGraphicsRootDescriptorTable(2,gpu(66));draw(post_.Get(),assignment.scene==Scene::Orbit?1.f:0.f,3);
  endGpuStage(postTiming);
  transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit();if(present)check(swap_->Present(1,0),"Present wallpaper");

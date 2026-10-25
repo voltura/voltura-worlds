@@ -39,3 +39,7 @@ Settings: Brightness controls exposure; Movement controls the scene clock; Terra
 NASA media guidelines: https://www.nasa.gov/nasa-brand-center/images-and-media/
 
 NASA, USGS and the contributing teams are credited as sources; no endorsement is implied. These data and derivatives are separate from the application's MIT-licensed code.
+
+## Shared catalog-star update
+
+The planet sky now includes the NASA Hipparcos/Tycho foreground in the existing BC7 sky texture’s unused alpha. It replaces the earlier faint procedural stars (Earth/Mars) or Milky-Way-only sky (Moon/Jupiter), with no extra GPU texture allocation. See [shared sky sources and conversion](../space/ATTRIBUTION.md).

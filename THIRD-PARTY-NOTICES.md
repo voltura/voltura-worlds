@@ -13,3 +13,11 @@ Mars uses NASA Ames/Viking/USGS colorized imagery, NASA MOLA topography and the 
 Orbit's NASA Blue Marble map is separately credited in `assets/orbit/ATTRIBUTION.md` and is not covered by the application code's MIT license. Aurora's generated texture-layer provenance is in `assets/aurora/PROVENANCE.md`.
 
 - Automatic updater and its policy tests adapted from Voltura Markdown, MIT, Copyright (c) 2026 Voltura AB. Worlds uses installer updates, its own release feed and cache, and its own opt-in preference.
+
+Earth uses NASA Blue Marble January 2004 surface imagery, the shared NASA cloud/sky maps, NASA Black Marble 2016 night lights, and public-domain Natural Earth v5.1.2 ocean/lake geometry. Exact credits, source hashes, reproduction and rendering approximations are documented in `assets/earth/ATTRIBUTION.md` and `assets/earth/sources.json`.
+
+Moon uses NASA SVS December 2025 LROC imagery, LOLA elevation and compact derivatives of the existing NASA Earth/cloud/night imagery, plus the shared NASA sky. Exact sources, hashes, credits, reproduction and rendering limits are in `assets/moon/ATTRIBUTION.md` and `assets/moon/sources.json`.
+
+Jupiter uses NASA/ESA Hubble OPAL Cycle 32 (December 2025) color, F631N and FQ889N maps, credited to NASA, ESA, A. A. Simon and M. H. Wong, under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Color resampling, polar fill, methane/continuum proxy derivation and estimated wind processing are documented in `assets/jupiter/ATTRIBUTION.md`; exact source and output hashes accompany it. OPAL dataset DOI: https://doi.org/10.17909/T9G593.
+
+Earth, Mars, Moon and Jupiter share a NASA SVS Deep Star Maps 2020 derivative with Hipparcos/Tycho foreground emission packed into alpha. Source catalogs, credits, conversion and hashes are in `assets/space/ATTRIBUTION.md` and its adjacent manifests.

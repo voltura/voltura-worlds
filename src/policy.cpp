@@ -16,11 +16,11 @@ Assignment assignmentFor(const Settings& s,const std::wstring& id) {
  return {};
 }
 std::string sceneName(Scene s) {
- switch(s) {case Scene::Off:return "off";case Scene::Aurora:return "aurora";case Scene::Orbit:return "orbit";case Scene::Smoke:return "smoke";case Scene::Video:return "video";case Scene::Bloom:return "bloom";case Scene::Silk:return "silk";case Scene::Eclipse:return "eclipse";case Scene::Lattice:return "lattice";case Scene::Drift:return "drift";case Scene::Contour:return "contour";case Scene::Mercury:return "mercury";case Scene::Ripples:return "ripples";case Scene::Mars:return "mars";}
+ switch(s) {case Scene::Off:return "off";case Scene::Aurora:return "aurora";case Scene::Orbit:return "orbit";case Scene::Smoke:return "smoke";case Scene::Video:return "video";case Scene::Bloom:return "bloom";case Scene::Silk:return "silk";case Scene::Eclipse:return "eclipse";case Scene::Lattice:return "lattice";case Scene::Drift:return "drift";case Scene::Contour:return "contour";case Scene::Mercury:return "mercury";case Scene::Ripples:return "ripples";case Scene::Mars:return "mars";case Scene::Earth:return "earth";case Scene::Moon:return "moon";case Scene::Jupiter:return "jupiter";}
  throw std::runtime_error("Unknown scene");
 }
 Scene parseScene(const std::string& s) {
- if(s=="mars")return Scene::Mars;if(s=="off")return Scene::Off;if(s=="bloom")return Scene::Bloom;if(s=="aurora")return Scene::Aurora;if(s=="orbit")return Scene::Orbit;if(s=="smoke")return Scene::Smoke;if(s=="video")return Scene::Video;
+ if(s=="jupiter")return Scene::Jupiter;if(s=="moon")return Scene::Moon;if(s=="earth")return Scene::Earth;if(s=="mars")return Scene::Mars;if(s=="off")return Scene::Off;if(s=="bloom")return Scene::Bloom;if(s=="aurora")return Scene::Aurora;if(s=="orbit")return Scene::Orbit;if(s=="smoke")return Scene::Smoke;if(s=="video")return Scene::Video;
  for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples})if(s==sceneName(scene))return scene;
  throw std::runtime_error("Unsupported World scene");
 }

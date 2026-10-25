@@ -19,7 +19,7 @@ struct FrameData {
 };
 class Renderer {
 public:
- Renderer(HWND,unsigned,unsigned,const std::filesystem::path&,bool debug=false);
+ Renderer(HWND,unsigned,unsigned,const std::filesystem::path&,bool debug=false,bool forceSingleSample=false);
  ~Renderer();
  void render(const Assignment&,FrameData,bool present=true);
  void resize(unsigned,unsigned);
@@ -35,12 +35,12 @@ public:
  double gpuMs()const{return gpuMs_;}
  void setStageProfiling(bool enabled){stageProfiling_=enabled;}
  const std::array<double,14>& gpuStageMs()const{return gpuStageMs_;}
- uint64_t allocations()const{return uint64_t(width_)*height_*20+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
+ uint64_t allocations()const{return uint64_t(width_)*height_*16+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
  unsigned gridSize()const{return grid_;}
  unsigned densityGridSize()const{return referenceDensityGrid_?referenceDensityGrid_:(grid_>96?192:grid_*2);}
  std::array<unsigned,3> densityDimensions()const{return wideDensity_?std::array<unsigned,3>{grid_*6,((grid_*27/8+3)/4)*4,grid_}:std::array<unsigned,3>{densityGridSize(),densityGridSize(),densityGridSize()};}
  void setWideDensity(bool value){if(velocity_[0].resource)throw std::runtime_error("Set density layout before scene initialization");if(value&&grid_>96)throw std::runtime_error("Wide density experiments support grids up to 96");wideDensity_=value;}
- unsigned sceneSamples()const{return (lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Bloom)?orbitSamples_:1;}
+ unsigned sceneSamples()const{return (lastScene_==Scene::Orbit||lastScene_==Scene::Bloom)?orbitSamples_:1;}
  void setGrid(unsigned);
  void setDetailCoordinates(bool value){if(velocity_[0].resource)throw std::runtime_error("Set detail coordinates before initialization");detailCoordinates_=value;}
  void setFineAtlas(bool value){if(velocity_[0].resource)throw std::runtime_error("Set fine atlas before initialization");fineAtlasEnabled_=value;}
@@ -112,11 +112,17 @@ private:
  ComPtr<ID3D12GraphicsCommandList> list_;ComPtr<ID3D12DescriptorHeap> rtv_,dsv_,views_;
  std::array<Frame,2> frames_;std::array<ComPtr<ID3D12Resource>,2> buffers_;
  ComPtr<ID3D12Resource> depth_,hdr_,planetTexture_,cloudTexture_,nightTexture_,starTexture_,auroraArtwork_;ComPtr<ID3D12RootSignature> root_;
+ ComPtr<ID3D12Resource> jupiterColor_,jupiterAtmosphere_;
+ ComPtr<ID3D12PipelineState> jupiter_,jupiterSpace_;
+ ComPtr<ID3D12Resource> moonColor_,moonNormal_,moonEarth_;
+ ComPtr<ID3D12PipelineState> moon_,moonSpace_;
  ComPtr<ID3D12Resource> marsColor_,marsNormal_;
+ ComPtr<ID3D12Resource> earthColor_,earthClouds_,earthMaterial_;
+ ComPtr<ID3D12PipelineState> earth_,earthSpace_;
  ComPtr<ID3D12PipelineState> mars_,marsSpace_;
- ComPtr<ID3D12Resource> orbitColor_,orbitDepth_;unsigned orbitSamples_=1;uint64_t orbitTargetBytes_=0;
+ ComPtr<ID3D12Resource> orbitColor_,orbitDepth_;unsigned orbitSamples_=1;uint64_t orbitTargetBytes_=0,depthTargetBytes_=0;
  std::array<ComPtr<ID3D12Resource>,2> bloomTargets_,auroraTextures_;
- std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;
+ std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;bool starForeground_=false;
  ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
  std::array<ComPtr<ID3D12PipelineState>,7> proceduralWorlds_;
  std::unique_ptr<VideoPlayer> video_;std::filesystem::path videoPath_;ID3D12Resource* videoView_{};uint64_t videoBytes_{};
@@ -125,7 +131,7 @@ private:
  unsigned v_=0,d_=0,p_=0;bool fluidReady_=false;Scene lastScene_=Scene::Aurora;
  ComPtr<ID3D12QueryHeap> query_;ComPtr<ID3D12Resource> queryReadback_;UINT64 frequency_=0;
  double gpuMs_=0;uint64_t allocationBytes_=0,fluidBytes_=0;
- void targets();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadMars();void loadStars();void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
+ void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadMoon();void loadMars();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
  static constexpr unsigned QueryStride=66;
  bool stageProfiling_=false;
  std::array<unsigned,2> stageCount_{};

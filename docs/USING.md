@@ -1,8 +1,8 @@
 # Voltura Worlds 0.1.7 for Windows
 
-The current source build is a per-user Windows 11 x64 desktop application with twelve built-in Worlds: **Aurora**, **Orbit**, **Mars**, **Smoke**, **Bloom**, **Silk**, **Eclipse**, **Lattice**, **Drift**, **Contour**, **Mercury**, and **Ripples**. C++20, Direct3D 12, HLSL. MIT licensed.
+The current source build is a per-user Windows 11 x64 desktop application with fifteen built-in Worlds: **Aurora**, **Orbit**, **Mars**, **Earth**, **Moon**, **Jupiter**, **Smoke**, **Bloom**, **Silk**, **Eclipse**, **Lattice**, **Drift**, **Contour**, **Mercury**, and **Ripples**. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Mars is a local development addition. The published 0.1.7 installer contains the preceding eleven Worlds.
+Mars, Earth, Moon and Jupiter are local development additions. The published 0.1.7 installer contains the preceding eleven Worlds.
 
 ## Install and try it
 
@@ -47,3 +47,9 @@ python -m pip install -r requirements-dev.txt
 Normal launch attaches to the desktop and opens the library. `--wallpaper` starts quietly; `--preview` opens a separate development preview surface.
 
 Native rendering diagnostics and historical visual experiments are documented in `docs/STATUS.md`. Capture-only experimental flags are not product quality settings.
+
+**Moon** uses NASA LROC 2025 color and LOLA terrain for an 8K lunar globe. Its camera circles the tidally locked Moon in 15 minutes, revealing the far side and changing phases under a fixed Sun. Earth appears briefly at its natural scale and distance. Advanced controls adjust Terrain relief, Camera drift, Sun angle and Earth brightness. Audio gently affects exposure; Movement zero freezes the scene and audio. See [Moon sources and rendering limits](../assets/moon/ATTRIBUTION.md).
+
+**Jupiter** shows the observed December 2025 Hubble OPAL cloud deck on its measured oblate shape. The Great Red Spot starts facing the viewer; a complete turn takes 15 minutes at Movement 1. Cloud detail, Camera drift, Cloud drift and Atmosphere adjust image contrast, framing, bounded wind-derived cloud motion and neutral haze. Methane-band observations guide a high-cloud proxy, rather than fabricated terrain. Movement zero freezes motion/audio. See [Jupiter sources and limitations](../assets/jupiter/ATTRIBUTION.md).
+
+Earth, Mars, Moon and Jupiter include a restrained NASA catalog-star foreground. Stars stay fixed while Earth, Mars and Jupiter rotate; the Moon’s stars follow its orbiting camera. The shared layer adds no extra runtime sky texture allocation.

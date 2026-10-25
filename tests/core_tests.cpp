@@ -18,6 +18,7 @@ int main(){try{
  auto goodDds=dds;dds.pop_back();rejects([&]{parseDds(dds);});dds=goodDds;dds.push_back(0);rejects([&]{parseDds(dds);});dds=goodDds;
  for(auto change:std::vector<std::pair<unsigned,uint32_t>>{{4,0},{4,8193},{6,2},{7,32},{7,1},{28,0x200},{32,DXGI_FORMAT_R8G8B8A8_UNORM},{33,4},{34,4},{35,2}}){put(change.first,change.second);rejects([&]{parseDds(dds);});dds=goodDds;}
  put(32,DXGI_FORMAT_BC7_UNORM);require(parseDds(dds).format==DXGI_FORMAT_BC7_UNORM,"Linear BC7 terrain map");
+ put(32,DXGI_FORMAT_BC5_UNORM);require(parseDds(dds).format==DXGI_FORMAT_BC5_UNORM&&parseDds(dds).mips.back().rowBytes==16,"Linear two-channel Earth material map");
  put(32,DXGI_FORMAT_BC4_UNORM);dds.resize(148+3*8);require(parseDds(dds).mips.back().rowBytes==8,"BC4 mip tail layout");
  PauseState p;require(!shouldPause(p,true),"Active desktop paused");p.battery=true;require(shouldPause(p,true),"Battery policy ignored");require(!shouldPause(p,false),"Battery override ignored");p.locked=true;require(shouldPause(p,false),"Lock policy ignored");
  require(boundedDelta(100)==.05f,"Resume timestep unbounded");require(boundedDelta(std::numeric_limits<float>::quiet_NaN())==0,"Nonfinite timestep");
@@ -43,8 +44,8 @@ int main(){try{
  require(parseScene("off")==Scene::Off&&sceneName(Scene::Off)=="off","Off scene identity failed");
  {Settings off;Assignment a;a.scene=Scene::Off;a.video=L"retained.mp4";off.displays.emplace_back(L"off-monitor",a);saveSettings(dir,off);auto restored=assignmentFor(loadSettings(dir),L"off-monitor");require(restored.scene==Scene::Off&&restored.video==a.video,"Off settings roundtrip preserves video");}
  require(parseScene("bloom")==Scene::Bloom&&sceneName(Scene::Bloom)=="bloom","Bloom scene identity failed");
- for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples,Scene::Mars}){
-  require(parseScene(sceneName(scene))==scene&&(isProceduralWorld(scene)||scene==Scene::Mars),"Procedural World scene identity failed");
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter}){
+  require(parseScene(sceneName(scene))==scene&&(isProceduralWorld(scene)||scene==Scene::Mars||scene==Scene::Earth||scene==Scene::Moon||scene==Scene::Jupiter),"Procedural World scene identity failed");
   Settings settings;Assignment world;world.scene=scene;world.params.palette=2;world.params.strength=.7f;world.reaction=Reaction::Gentle;settings.displays.emplace_back(L"world-monitor",world);saveSettings(dir,settings);
   auto restoredWorld=assignmentFor(loadSettings(dir),L"world-monitor");require(restoredWorld.scene==scene&&restoredWorld.params.palette==2&&restoredWorld.params.strength==.7f&&restoredWorld.reaction==Reaction::Gentle,"Procedural World settings roundtrip failed");
  }
@@ -54,7 +55,7 @@ int main(){try{
  {std::ofstream out(dir/L"settings.json");out<<"{\"version\":999}";}rejects([&]{loadSettings(dir);});
  WorldPackage package;package.title="Test";package.assignment=a;package.preview={137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,2,0,0,0,2,8,6,0,0,0,114,182,13,36,0,0,0,21,73,68,65,84,120,156,99,100,104,248,255,159,129,129,129,129,9,68,128,48,0,37,25,2,130,143,80,141,6,0,0,0,0,73,69,78,68,174,66,96,130};
  {auto folded=package;folded.assignment.scene=Scene::Bloom;auto bloomFile=dir/L"bloom.world";writePackage(bloomFile,folded);require(readPackage(bloomFile).assignment.scene==Scene::Bloom,"Bloom package roundtrip failed");}
- for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples,Scene::Mars}){auto world=package;world.assignment.scene=scene;auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");}
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter}){auto world=package;world.assignment.scene=scene;auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");}
  auto file=dir/L"test.world";writePackage(file,package);auto loaded=readPackage(file);require(loaded.title=="Test"&&loaded.assignment.scene==Scene::Smoke,"Package roundtrip failed");
  {std::fstream out(file,std::ios::binary|std::ios::in|std::ios::out);out.seekp(50);out.put('!');}rejects([&]{readPackage(file);});
  writePackage(file,package);

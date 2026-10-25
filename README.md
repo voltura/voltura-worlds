@@ -31,7 +31,8 @@ The product site shows recordings from the native Direct3D renderer, at their or
 ## What it does
 
 - Animates behind your desktop icons, with a World and settings for each display.
-- Shuffles all eleven Worlds with **Random**, with a saved interval for each display.
+- Shuffles all fifteen Worlds with **Random**, with a saved interval for each display.
+- Gives Earth, Mars, Moon and Jupiter a shared NASA catalog-star background, with no extra resident sky texture memory.
 - Offers optional Gentle or Expressive audio reaction using local playback analysis. Audio is not recorded or uploaded.
 - Pauses on battery by default, and for fully covered displays, lock, sleep and remote sessions.
 - Imports personal SDR H.264 MP4 videos and data-only `.world` packages.
@@ -39,6 +40,12 @@ The product site shows recordings from the native Direct3D renderer, at their or
 - Leaves your ordinary Windows wallpaper intact. Choose **Off** to reveal it, or **Exit Worlds** to stop the app.
 
 Current source builds add **Mars** beside Orbit: an 8K NASA/USGS globe with MOLA terrain relief, thin atmospheric scattering, distance-based sunlight and calm rotation. Its advanced controls adjust terrain relief, camera drift, dust and atmosphere, with natural color grades and subtle audio response. See [Mars imagery and controls](assets/mars/ATTRIBUTION.md).
+
+**Earth** adds a separate realistic 8K globe with NASA Blue Marble geography, independent cloud motion and shadows, ocean glints, Black Marble night lights and blue atmospheric scattering. It shares Mars's calm 15-minute rotation and adds Earth-specific cloud, camera and atmosphere controls. See [Earth sources and rendering](assets/earth/ATTRIBUTION.md).
+
+**Moon** adds an 8K NASA LRO globe with LOLA crater relief and a calm 15-minute camera tour of the near and far sides. A naturally scaled Earth briefly appears beside the lunar limb; a fixed Sun produces changing phases. See [Moon sources and rendering](assets/moon/ATTRIBUTION.md).
+
+**Jupiter** uses NASA/ESA Hubble OPAL December 2025 cloud imagery, matched methane-band atmospheric data and estimated zonal winds. Its oblate globe rotates calmly, with bounded cloud drift and a thin neutral haze. Compressed 4K maps preserve the source detail efficiently. See [Jupiter sources and rendering](assets/jupiter/ATTRIBUTION.md).
 
 ## Current release
 

@@ -25,7 +25,7 @@ namespace {
 constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3,renderStatusMessage=WM_APP+4;
 constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133,randomIntervalId=134;
 struct Visualization { Scene scene; const wchar_t* name; };
-constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Mars,L"Mars"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
+constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Mars,L"Mars"},{Scene::Earth,L"Earth"},{Scene::Moon,L"Moon"},{Scene::Jupiter,L"Jupiter"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
 constexpr int visualizationMenuBase=1000;
 constexpr int randomChoice=int(std::size(visualizations))-3;
 struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;};
@@ -134,13 +134,19 @@ void syncControls(){
  }
  if(surfaces.empty()){setControlText(statusLabel,lastError.empty()?L"No display is available.":lastError);return;}
  auto& a=selected();
- // Mars uses the same saved parameters with scene-specific, meaningful labels.
+ // Planet Worlds reuse saved parameters with scene-specific, meaningful labels.
  const wchar_t* regularNames[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Density",L"Audio strength"};
  const wchar_t* marsNames[]={L"Brightness",L"Movement",L"Terrain relief",L"Camera drift",L"Dust variation",L"Atmosphere",L"Audio strength"};
- for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::Mars?marsNames:regularNames)[i]);
+ const wchar_t* jupiterNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Camera drift",L"Cloud drift",L"Atmosphere",L"Audio strength"};
+ const wchar_t* moonNames[]={L"Brightness",L"Movement",L"Terrain relief",L"Camera drift",L"Sun angle",L"Earth brightness",L"Audio strength"};
+ const wchar_t* earthNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Camera drift",L"Cloud drift",L"Atmosphere",L"Audio strength"};
+ for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::Jupiter?jupiterNames:a.scene==Scene::Moon?moonNames:a.scene==Scene::Earth?earthNames:a.scene==Scene::Mars?marsNames:regularNames)[i]);
  const wchar_t* regularPalettes[]={L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"};
  const wchar_t* marsPalettes[]={L"Natural Mars",L"Warm dust",L"Cool dusk",L"Survey neutral"};
- auto palettes=a.scene==Scene::Mars?marsPalettes:regularPalettes;
+ const wchar_t* jupiterPalettes[]={L"Natural Jupiter",L"Warm belts",L"Cool haze",L"Neutral survey"};
+ const wchar_t* moonPalettes[]={L"Natural Moon",L"Warm sunlight",L"Cool silver",L"Neutral survey"};
+ const wchar_t* earthPalettes[]={L"Natural Earth",L"Warm daylight",L"Cool daylight",L"Neutral survey"};
+ auto palettes=a.scene==Scene::Jupiter?jupiterPalettes:a.scene==Scene::Moon?moonPalettes:a.scene==Scene::Earth?earthPalettes:a.scene==Scene::Mars?marsPalettes:regularPalettes;
  wchar_t firstPalette[80]{};SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(firstPalette));
  if(wcscmp(firstPalette,palettes[0])!=0){
   SendDlgItemMessageW(library,paletteId,CB_RESETCONTENT,0,0);
@@ -208,6 +214,9 @@ void startRendering(){
  renderingProblem=false;auto generation=++renderGeneration;
  renderThread=std::jthread([generation](std::stop_token stop){CoInitializeEx(nullptr,COINIT_MULTITHREADED);try{
   std::vector<std::unique_ptr<Renderer>> renderers(surfaces.size());std::vector<float> clocks(surfaces.size(),0);std::vector<unsigned> overBudget(surfaces.size(),0);std::vector<bool> paused(surfaces.size(),true);
+  // Start Moon on its near side and Jupiter on its Great Red Spot, regardless
+  // of how long a preceding World ran on this display.
+  std::vector<float> tourClocks(surfaces.size(),0);std::vector<Scene> tourScenes(surfaces.size(),Scene::Off);
   std::vector<ULONGLONG> retryAt(surfaces.size(),0);std::vector<Scene> failedScene(surfaces.size());std::vector<std::wstring> failedVideo(surfaces.size());bool reportedFailure=false;
   auto previous=std::chrono::steady_clock::now();
   while(!stop.stop_requested()){
@@ -217,6 +226,8 @@ void startRendering(){
    audio.configure(listen,config.audioDevice);auto features=audio.features();float delta=boundedDelta(std::chrono::duration<float>(tick-previous).count());previous=tick;
    for(size_t i=0;i<surfaces.size();i++){
     auto a=assignmentFor(config,surfaces[i].monitor.id);
+    if(a.scene!=tourScenes[i])tourClocks[i]=0;
+    tourScenes[i]=a.scene;
     if(retryAt[i]&&(a.scene!=failedScene[i]||a.video!=failedVideo[i]))retryAt[i]=0;
     if(retryAt[i]&&GetTickCount64()<retryAt[i])continue;
     try{
@@ -230,7 +241,7 @@ void startRendering(){
      if(overBudget[i]>120)desired=64;
     }else overBudget[i]=0;
     r.setGrid(desired);
-    FrameData data;clocks[i]+=delta;data.time=clocks[i];data.dt=delta;data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene))data.spare[0]=float(config.quality);r.render(a,data);
+    FrameData data;clocks[i]+=delta;bool localClock=a.scene==Scene::Moon||a.scene==Scene::Jupiter;if(localClock)tourClocks[i]+=delta;data.time=localClock?tourClocks[i]:clocks[i];data.dt=delta;data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene))data.spare[0]=float(config.quality);r.render(a,data);
     retryAt[i]=0;
     }catch(const std::exception& e){
      renderers[i].reset();retryAt[i]=GetTickCount64()+5000;failedScene[i]=a.scene;failedVideo[i]=a.video;
@@ -373,19 +384,33 @@ HICON createTrayIcon(){
  {
   const UINT dpi=GetDpiForSystem();
   const int width=GetSystemMetricsForDpi(SM_CXSMICON,dpi),height=GetSystemMetricsForDpi(SM_CYSMICON,dpi);
-  Gdiplus::Bitmap bitmap(width,height,PixelFormat32bppARGB);
+  Gdiplus::Bitmap artwork(256,256,PixelFormat32bppARGB);
   {
-   Gdiplus::Graphics graphics(&bitmap);
+   Gdiplus::Graphics graphics(&artwork);
    graphics.Clear(Gdiplus::Color(0,0,0,0));
    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-   graphics.ScaleTransform(width/256.0f,height/256.0f);
    Gdiplus::SolidBrush cyan(Gdiplus::Color(255,47,191,208)),blue(Gdiplus::Color(255,85,110,218));
-   graphics.FillEllipse(&cyan,48,48,160,160);
-   graphics.FillEllipse(&blue,82,58,122,138);
+   Gdiplus::Pen orbit(Gdiplus::Color(255,190,132,255),18.0f);
+   // Paint the far semicircle behind the opaque planet, then the near semicircle.
+   // Keep this geometry in sync with scripts/build-icons.ps1.
    graphics.TranslateTransform(128.0f,128.0f);
-   graphics.RotateTransform(-29.0f);
-   Gdiplus::Pen orbit(Gdiplus::Color(255,190,132,255),16.0f);
-   graphics.DrawEllipse(&orbit,-120.0f,-43.0f,240.0f,86.0f);
+   graphics.RotateTransform(-40.0f);
+   graphics.DrawEllipse(&orbit,-124.0f,-64.0f,248.0f,128.0f);
+   graphics.ResetTransform();
+   graphics.FillEllipse(&cyan,30,30,196,196);
+   graphics.FillEllipse(&blue,64,40,158,174);
+   graphics.TranslateTransform(128.0f,128.0f);
+   graphics.RotateTransform(-40.0f);
+   graphics.DrawArc(&orbit,-124.0f,-64.0f,248.0f,128.0f,0.0f,180.0f);
+  }
+  Gdiplus::Bitmap bitmap(width,height,PixelFormat32bppARGB);
+  {
+   Gdiplus::Graphics scaled(&bitmap);
+   scaled.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+   scaled.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+   // Use the tray's remaining padding while preserving the complete ring.
+   constexpr float scale=1.09f;
+   scaled.DrawImage(&artwork,width*(1.0f-scale)*0.5f,height*(1.0f-scale)*0.5f,width*scale,height*scale);
   }
   bitmap.GetHICON(&icon);
  }
@@ -443,7 +468,7 @@ int captureMode(const std::vector<std::wstring>& args){
  auto out=std::filesystem::absolute(option(L"--capture-dir",L"artifacts/native"));std::filesystem::create_directories(out);Scene scene=parseScene(utf8(option(L"--scene",L"aurora")));unsigned width=std::stoul(option(L"--width",L"1280")),height=std::stoul(option(L"--height",L"720"));int frames=std::stoi(option(L"--frames",L"180")),record=std::stoi(option(L"--record",L"0"));if(width<64||height<64||width>7680||height>4320||frames<1||frames>36000||record<0||record>900)throw std::runtime_error("Invalid capture limits");
  HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,L"VolturaWorldSurface",L"Voltura Worlds native validation",WS_POPUP,0,0,width,height,nullptr,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create validation surface");
  if(presentFrames)ShowWindow(hwnd,SW_SHOWNOACTIVATE);
- {Renderer renderer(hwnd,width,height,exeDir/L"shaders",std::find(args.begin(),args.end(),L"--debug-gpu")!=args.end());renderer.setGrid(std::stoul(option(L"--grid",L"64")));Assignment a;a.scene=scene;if(scene==Scene::Video){a.video=option(L"--video-file",L"");if(a.video.empty())throw std::runtime_error("Video capture requires --video-file");a.fit=std::find(args.begin(),args.end(),L"--fit")!=args.end();}FrameData data;data.dt=1.f/60;std::vector<double> timings;auto started=std::chrono::steady_clock::now();
+ {Renderer renderer(hwnd,width,height,exeDir/L"shaders",std::find(args.begin(),args.end(),L"--debug-gpu")!=args.end(),std::find(args.begin(),args.end(),L"--single-sample")!=args.end());renderer.setGrid(std::stoul(option(L"--grid",L"64")));Assignment a;a.scene=scene;if(scene==Scene::Video){a.video=option(L"--video-file",L"");if(a.video.empty())throw std::runtime_error("Video capture requires --video-file");a.fit=std::find(args.begin(),args.end(),L"--fit")!=args.end();}FrameData data;data.dt=1.f/60;std::vector<double> timings;auto started=std::chrono::steady_clock::now();
   if(validateStars){if(scene!=Scene::Aurora)throw std::runtime_error("Star-layer validation requires Aurora");data.spare[0]=1;}
   bool multigrid=std::find(args.begin(),args.end(),L"--smoke-multigrid")!=args.end();
   if(multigrid){
@@ -527,25 +552,25 @@ int captureMode(const std::vector<std::wstring>& args){
   }
   if(std::find(args.begin(),args.end(),L"--aurora-procedural")!=args.end())data.spare[1]=1;
   if(std::find(args.begin(),args.end(),L"--validate-lifecycle")!=args.end()){
-   const Scene lifecycleScenes[]={Scene::Aurora,Scene::Orbit,Scene::Mars,Scene::Orbit,Scene::Mars,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples};
+   const Scene lifecycleScenes[]={Scene::Aurora,Scene::Orbit,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Orbit,Scene::Earth,Scene::Mars,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples};
    for(size_t cycle=0;cycle<std::size(lifecycleScenes)*2;cycle++){
     a.scene=lifecycleScenes[cycle%std::size(lifecycleScenes)];renderer.resize(cycle%2?width:640,cycle%2?height:360);
     for(int frame=0;frame<8;frame++){data.time+=data.dt;renderer.render(a,data,false);}
     renderer.validateDebugMessages();
    }
    renderer.resize(width,height);a.scene=scene;
-   if(scene==Scene::Mars){
+   if(scene==Scene::Mars||scene==Scene::Earth||scene==Scene::Moon||scene==Scene::Jupiter){
     renderer.render(a,data,false);renderer.idle();auto marsBytes=renderer.allocations();
     for(int cycle=0;cycle<3;cycle++){
-     a.scene=Scene::Orbit;renderer.render(a,data,false);a.scene=Scene::Mars;renderer.render(a,data,false);
+     a.scene=Scene::Orbit;renderer.render(a,data,false);a.scene=scene==Scene::Earth?Scene::Mars:Scene::Earth;renderer.render(a,data,false);a.scene=scene;renderer.render(a,data,false);
      renderer.resize(720,1280);renderer.render(a,data,false);renderer.resize(width,height);renderer.render(a,data,false);renderer.idle();
-     if(renderer.allocations()!=marsBytes)throw std::runtime_error("Mars resources changed after Orbit/resize roundtrip");
+     if(renderer.allocations()!=marsBytes)throw std::runtime_error("Planet resources changed after space-scene/resize roundtrip");
      renderer.validateDebugMessages();
     }
    }
   }
   auto startTimeOption=option(L"--start-time",L"0");size_t startConsumed{};float startTime=std::stof(startTimeOption,&startConsumed);
-  if(startConsumed!=startTimeOption.size()||!std::isfinite(startTime)||startTime<0||startTime>86400||(startTime!=0&&scene!=Scene::Orbit&&scene!=Scene::Mars&&scene!=Scene::Aurora&&scene!=Scene::Bloom&&!isProceduralWorld(scene)))throw std::runtime_error("Capture start time requires a procedural World and a finite value from 0 to 86400 seconds");
+  if(startConsumed!=startTimeOption.size()||!std::isfinite(startTime)||startTime<0||startTime>86400||(startTime!=0&&scene!=Scene::Orbit&&scene!=Scene::Mars&&scene!=Scene::Earth&&scene!=Scene::Moon&&scene!=Scene::Jupiter&&scene!=Scene::Aurora&&scene!=Scene::Bloom&&!isProceduralWorld(scene)))throw std::runtime_error("Capture start time requires a procedural World and a finite value from 0 to 86400 seconds");
   // Exercise the actual shader controls in native capture regressions.
   auto captureParameter=[&](const wchar_t* key){auto value=option(key,L"1");size_t consumed{};float number=std::stof(value,&consumed);if(consumed!=value.size()||!std::isfinite(number)||number<0||number>2)throw std::runtime_error("Capture parameter must be finite and between 0 and 2");return number;};
   data.density=captureParameter(L"--density");data.movement=captureParameter(L"--movement");data.brightness=captureParameter(L"--brightness");data.detail=captureParameter(L"--detail");data.flow=captureParameter(L"--flow");data.turbulence=captureParameter(L"--turbulence");
@@ -554,6 +579,15 @@ int captureMode(const std::vector<std::wstring>& args){
   auto rippleProbe=option(L"--ripples-probe",L"0");size_t rippleConsumed{};int rippleMode=std::stoi(rippleProbe,&rippleConsumed);
   if(rippleConsumed!=rippleProbe.size()||rippleMode<0||rippleMode>6||(rippleMode&&scene!=Scene::Ripples))throw std::runtime_error("Ripples probe requires the ripples scene and a mode from 0 to 6");
   if(scene==Scene::Ripples)data.spare[1]=float(rippleMode);
+  auto jupiterProbe=option(L"--jupiter-probe",L"0");size_t jupiterConsumed{};int jupiterMode=std::stoi(jupiterProbe,&jupiterConsumed);
+  if(jupiterConsumed!=jupiterProbe.size()||jupiterMode<0||jupiterMode>4||(jupiterMode&&scene!=Scene::Jupiter))throw std::runtime_error("Jupiter probe requires Jupiter and a mode from 0 to 4");
+  if(scene==Scene::Jupiter)data.spare[4]=float(jupiterMode);
+  auto moonProbe=option(L"--moon-probe",L"0");size_t moonConsumed{};int moonMode=std::stoi(moonProbe,&moonConsumed);
+  if(moonConsumed!=moonProbe.size()||moonMode<0||moonMode>3||(moonMode&&scene!=Scene::Moon))throw std::runtime_error("Moon probe requires Moon and a mode from 0 to 3");
+  if(scene==Scene::Moon)data.spare[4]=float(moonMode);
+  auto earthProbe=option(L"--earth-probe",L"0");size_t earthConsumed{};int earthMode=std::stoi(earthProbe,&earthConsumed);
+  if(earthConsumed!=earthProbe.size()||earthMode<0||earthMode>8||(earthMode&&scene!=Scene::Earth))throw std::runtime_error("Earth probe requires Earth and a mode from 0 to 8");
+  if(scene==Scene::Earth)data.spare[4]=float(earthMode);
   auto reactionOption=option(L"--reaction",L"off");a.reaction=reactionOption==L"off"?Reaction::Off:reactionOption==L"gentle"?Reaction::Gentle:reactionOption==L"expressive"?Reaction::Expressive:Reaction(-1);if(int(a.reaction)<0)throw std::runtime_error("Capture reaction must be off, gentle or expressive");
   float strength=std::find(args.begin(),args.end(),L"--strength")==args.end()?.5f:captureParameter(L"--strength");if(strength>1)throw std::runtime_error("Capture strength must be 0 to 1");data.reaction=(a.reaction==Reaction::Off?0.f:a.reaction==Reaction::Gentle?.35f:1.f)*strength;
   auto audioParameter=[&](const wchar_t* key){return std::find(args.begin(),args.end(),key)==args.end()?0.f:captureParameter(key);};data.bass=audioParameter(L"--bass");data.mid=audioParameter(L"--mid");data.treble=audioParameter(L"--treble");data.energy=audioParameter(L"--energy");data.impulse=audioParameter(L"--impulse");
@@ -584,7 +618,7 @@ int captureMode(const std::vector<std::wstring>& args){
   report["startTimeOffsetSeconds"]=startTime;
   report["timingWarmupFrames"]=timingWarmup;
   report["timingSampleCount"]=timings.size();
-  if(isProceduralWorld(scene)||scene==Scene::Mars)report["quality"]=utf8(qualityOption);
+  if(isProceduralWorld(scene)||scene==Scene::Mars||scene==Scene::Earth||scene==Scene::Moon||scene==Scene::Jupiter)report["quality"]=utf8(qualityOption);
   if(flowmapReference||flowmapLive){report["flowmapLive"]=flowmapLive;report["flowmapAdaptive"]=flowmapAdaptive;report["flowmapAdaptiveRenewals"]=renderer.flowmapAdaptiveRenewals();report["flowmapReconstruction"]=flowmapCubic||flowmapLive?"Bounded Catmull-Rom":"Trilinear";report["flowmapRenewalSeconds"]=renewalSeconds;report["flowmapRenewals"]=renderer.flowmapRenewals();}
   if(!transportTest.empty())report["transportField"]=transportDeform?"Reversible nonlinear deformation":"Rigid rotation";
   if(!referenceVolume.empty()){report["densitySource"]=transportTest.empty()?"Imported frozen RGBA16F reference volume":"Imported RGBA16F analytic-transport seed";report["simulationSteps"]=transportTest.empty()?0:frames;report["flowmapReference"]=flowmapReference;report["evidence"]="Native D3D12 imported-volume diagnostic; simulationSteps identifies analytic transport; not live smoke or physical display";}

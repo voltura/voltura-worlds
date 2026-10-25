@@ -35,6 +35,8 @@ def main():
             return image.convert('RGB')
 
     baseline = capture('baseline')
+    metrics = json.loads((args.output/'baseline/metrics.json').read_text())
+    assert metrics['sceneSamples'] == 1, 'Mars allocated redundant multisample targets'
     # Deep night must not receive a uniform ambient fill or a broad haze mask.
     # Classify surface pixels by solar incidence, away from the antialiased limb.
     dark_checks = {}

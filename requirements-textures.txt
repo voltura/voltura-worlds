@@ -1,0 +1,6 @@
+# Optional development tools for reproducing the NASA texture derivatives.
+# Requires Python 3.12 or newer; the normal app build does not need these tools.
+Pillow==12.3.0
+numpy==2.5.4
+tifffile==2026.10.15
+imagecodecs==2026.10.10

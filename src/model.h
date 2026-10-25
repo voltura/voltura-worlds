@@ -8,7 +8,7 @@
 #include <atomic>
 #include <chrono>
 namespace worlds {
-enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, Mercury, Ripples, Mars };
+enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, Mercury, Ripples, Mars, Earth, Moon, Jupiter };
 enum class Quality { Eco, Auto, High };
 enum class Reaction { Off, Gentle, Expressive };
 struct Parameters {
