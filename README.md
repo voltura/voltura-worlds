@@ -34,18 +34,21 @@ The product site shows recordings from the native Direct3D renderer, at their or
 
 ## Current release
 
-**Version 0.1.5** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.5/VolturaWorlds-Setup-0.1.5-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.5). Includes all ten Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.6** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.6/VolturaWorlds-Setup-0.1.6-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.6). Includes all ten Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+
+This release refines lighting, materials and motion across the collection, fixes frozen Movement and Orbit brightness controls, and improves tray-menu scaling. Advanced settings now lets the World show through the library. Rendering recovers per display after an error, and cancelling an import keeps the UI responsive. The product site's recordings and social preview show the updated native renderer.
 
 Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 
 
 ## Build and run
 
-Requires Windows 11 x64, Visual Studio 2026 C++ desktop tools, the Windows SDK and PowerShell. NSIS is needed for packaging. Dependencies are downloaded and checked by the bootstrap script.
+Requires Windows 11 x64, Visual Studio 2026 C++ desktop tools, the Windows SDK, PowerShell and Python 3.10 or newer with pip. NSIS is needed for packaging. The bootstrap script downloads and checks the native dependencies; install the Python test and media tools before building.
 
 ```powershell
 git clone https://github.com/voltura/voltura-worlds.git
 cd voltura-worlds
+python -m pip install -r requirements-dev.txt
 ./scripts/build.ps1
 ./build/Release/VolturaWorlds.exe
 ```

@@ -21,7 +21,7 @@
 #include <numeric>
 using namespace worlds;
 namespace {
-constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3;
+constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3,renderStatusMessage=WM_APP+4;
 constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133;
 struct Visualization { Scene scene; const wchar_t* name; };
 constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
@@ -32,8 +32,9 @@ HICON trayIcon{};
 std::vector<Surface> surfaces;std::vector<std::pair<std::wstring,std::wstring>> audioDevices;
 std::filesystem::path profile,exeDir;Settings settings;PauseState pauseState;
 std::mutex stateMutex;std::condition_variable saveCv;std::jthread renderThread,saveThread;bool savePending=false;
-std::wstring lastError;bool previewMode=true,desktopConnectionProblem=false,automated=false;std::atomic<bool> running{true};
+std::wstring lastError;bool previewMode=true,desktopConnectionProblem=false,renderingProblem=false,automated=false;std::atomic<bool> running{true};
 UINT menuDpi=96;HFONT menuFont{};
+unsigned renderGeneration=0;
 UINT taskbarCreated{};AudioCapture audio;HANDLE singleInstance{};
 ULONGLONG nextDesktopRetry{},nextUpdateCheck{};
 wu::Updates updates;bool automaticUpdates=false,sessionEnding=false,restartForUpdate=false;
@@ -49,7 +50,7 @@ void layoutLibrary(){
  SCROLLINFO si{sizeof(si),SIF_RANGE|SIF_PAGE|SIF_POS,0,total-1,UINT(std::max(0,visible)),scrollOffset,0};SetScrollInfo(library,SB_VERT,&si,TRUE);
  HDWP batch=BeginDeferWindowPos(int(layoutItems.size()));
  for(auto& item:layoutItems){bool show=!item.advanced||advancedOpen;bool side=item.advanced&&sideExpansion;int x=side?item.sx:item.x,y=side?item.sy:item.y,width=side?item.sw:item.w,height=side?item.sh:item.h;
-  if(GetDlgCtrlID(item.hwnd)==retryId)show=previewMode||desktopConnectionProblem;
+  if(GetDlgCtrlID(item.hwnd)==retryId)show=previewMode||desktopConnectionProblem||renderingProblem;
   if(item.footer&&advancedOpen&&!sideExpansion)y+=366;
   if(item.hwnd==statusLabel)y=contentHeight-72;
   UINT flags=SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|(show?SWP_SHOWWINDOW:SWP_HIDEWINDOW);
@@ -123,7 +124,7 @@ void syncControls(){
  std::lock_guard lock(stateMutex);syncSurfaceVisibility();if(!library)return;
  auto retry=GetDlgItem(library,retryId);
  setControlText(retry,previewMode?L"Use on desktop":L"Retry now");
- bool showRetry=previewMode||desktopConnectionProblem;
+ bool showRetry=previewMode||desktopConnectionProblem||renderingProblem;
  if(bool(GetWindowLongPtrW(retry,GWL_STYLE)&WS_VISIBLE)!=showRetry){
   if(!showRetry&&GetFocus()==retry)SetFocus(GetDlgItem(library,pauseId));
   ShowWindow(retry,showRetry?SW_SHOWNA:SW_HIDE);
@@ -171,9 +172,10 @@ HMENU visualizationMenu(){
 
 }
 void startRendering(){
- renderThread=std::jthread([](std::stop_token stop){CoInitializeEx(nullptr,COINIT_MULTITHREADED);try{
-  std::vector<std::unique_ptr<Renderer>> renderers;std::vector<float> clocks(surfaces.size(),0);std::vector<unsigned> overBudget(surfaces.size(),0);std::vector<bool> paused(surfaces.size(),true);
-  for(auto& s:surfaces){RECT r{};GetClientRect(s.hwnd,&r);renderers.push_back(std::make_unique<Renderer>(s.hwnd,std::max(1L,r.right),std::max(1L,r.bottom),exeDir/L"shaders"));}
+ renderingProblem=false;auto generation=++renderGeneration;
+ renderThread=std::jthread([generation](std::stop_token stop){CoInitializeEx(nullptr,COINIT_MULTITHREADED);try{
+  std::vector<std::unique_ptr<Renderer>> renderers(surfaces.size());std::vector<float> clocks(surfaces.size(),0);std::vector<unsigned> overBudget(surfaces.size(),0);std::vector<bool> paused(surfaces.size(),true);
+  std::vector<ULONGLONG> retryAt(surfaces.size(),0);std::vector<Scene> failedScene(surfaces.size());std::vector<std::wstring> failedVideo(surfaces.size());bool reportedFailure=false;
   auto previous=std::chrono::steady_clock::now();
   while(!stop.stop_requested()){
    auto tick=std::chrono::steady_clock::now();Settings config;PauseState pause;std::vector<bool> covered;
@@ -181,7 +183,14 @@ void startRendering(){
    bool active=false,listen=false;for(size_t i=0;i<surfaces.size();i++){pause.covered=covered[i];auto a=assignmentFor(config,surfaces[i].monitor.id);bool nowPaused=a.scene==Scene::Off||!IsWindow(surfaces[i].hwnd)||shouldPause(pause,config.pauseBattery);paused[i]=nowPaused;active|=!nowPaused;listen|=!nowPaused&&a.scene!=Scene::Video&&a.reaction!=Reaction::Off;}
    audio.configure(listen,config.audioDevice);auto features=audio.features();float delta=boundedDelta(std::chrono::duration<float>(tick-previous).count());previous=tick;
    for(size_t i=0;i<surfaces.size();i++){
-    auto a=assignmentFor(config,surfaces[i].monitor.id);auto& r=*renderers[i];r.setPaused(paused[i]||a.scene!=Scene::Video);if(paused[i])continue;RECT rect{};GetClientRect(surfaces[i].hwnd,&rect);r.resize(std::max(1L,rect.right),std::max(1L,rect.bottom));
+    auto a=assignmentFor(config,surfaces[i].monitor.id);
+    if(retryAt[i]&&(a.scene!=failedScene[i]||a.video!=failedVideo[i]))retryAt[i]=0;
+    if(retryAt[i]&&GetTickCount64()<retryAt[i])continue;
+    try{
+    if(paused[i]){if(renderers[i])renderers[i]->setPaused(true);continue;}
+    RECT rect{};GetClientRect(surfaces[i].hwnd,&rect);
+    if(!renderers[i])renderers[i]=std::make_unique<Renderer>(surfaces[i].hwnd,std::max(1L,rect.right),std::max(1L,rect.bottom),exeDir/L"shaders");
+    auto& r=*renderers[i];r.setPaused(a.scene!=Scene::Video);r.resize(std::max(1L,rect.right),std::max(1L,rect.bottom));
     unsigned desired=config.quality==Quality::Eco?64:config.quality==Quality::High?96:80;
     if(config.quality==Quality::Auto&&a.scene==Scene::Smoke){
      if(overBudget[i]<=120){if(r.gpuMs()>8)++overBudget[i];else overBudget[i]=0;}
@@ -189,11 +198,18 @@ void startRendering(){
     }else overBudget[i]=0;
     r.setGrid(desired);
     FrameData data;clocks[i]+=delta;data.time=clocks[i];data.dt=delta;data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene))data.spare[0]=float(config.quality);r.render(a,data);
+    retryAt[i]=0;
+    }catch(const std::exception& e){
+     renderers[i].reset();retryAt[i]=GetTickCount64()+5000;failedScene[i]=a.scene;failedVideo[i]=a.video;
+     {std::lock_guard lock(stateMutex);lastError=wide(e.what());}
+    }
    }
+   bool failed=std::any_of(retryAt.begin(),retryAt.end(),[](ULONGLONG value){return value!=0;});
+   if(failed!=reportedFailure){reportedFailure=failed;if(!failed){std::lock_guard lock(stateMutex);lastError.clear();}PostMessageW(controller,renderStatusMessage,failed,generation);}
    std::this_thread::sleep_until(tick+(active?std::chrono::milliseconds(1000/config.fps):std::chrono::milliseconds(200)));
   }
   audio.configure(false,{});
- }catch(const std::exception& e){{std::lock_guard lock(stateMutex);lastError=wide(e.what());}audio.configure(false,{});PostMessageW(controller,errorMessage,0,0);}CoUninitialize();});
+ }catch(const std::exception& e){{std::lock_guard lock(stateMutex);lastError=wide(e.what());}audio.configure(false,{});PostMessageW(controller,renderStatusMessage,TRUE,generation);}CoUninitialize();});
 }
 LRESULT CALLBACK wallpaperProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){if(msg==WM_MOUSEACTIVATE)return MA_NOACTIVATE;if(msg==WM_NCHITTEST&&!previewMode)return HTTRANSPARENT;if(msg==WM_CLOSE){ShowWindow(hwnd,SW_HIDE);return 0;}return DefWindowProcW(hwnd,msg,w,l);}
 void createSurfaces(){
@@ -261,7 +277,14 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   bool dropdown=id==visualizationId||id==monitorId||id==reactionId||id==qualityId||id==fpsId||id==paletteId||id==deviceId||id==videoFitId;
   if(dropdown&&event!=CBN_SELCHANGE)return 0;
   if(!dropdown&&event!=BN_CLICKED)return 0;
-  if(id==advancedId){SendMessageW(hwnd,WM_SETREDRAW,FALSE,0);advancedOpen=!advancedOpen;SetWindowTextW(GetDlgItem(hwnd,advancedId),advancedOpen?L"−  Advanced settings":L"+  Advanced settings");scrollOffset=0;SendMessageW(hwnd,WM_SETREDRAW,TRUE,0);resizeLibrary();return 0;}
+  if(id==advancedId){
+   SendMessageW(hwnd,WM_SETREDRAW,FALSE,0);advancedOpen=!advancedOpen;
+   // Reveal the live World while tuning, and restore the ordinary opaque library on collapse.
+   auto style=GetWindowLongPtrW(hwnd,GWL_EXSTYLE);
+   SetWindowLongPtrW(hwnd,GWL_EXSTYLE,advancedOpen?style|WS_EX_LAYERED:style&~LONG_PTR(WS_EX_LAYERED));
+   if(advancedOpen)SetLayeredWindowAttributes(hwnd,0,179,LWA_ALPHA);
+   SetWindowTextW(GetDlgItem(hwnd,advancedId),advancedOpen?L"−  Advanced settings":L"+  Advanced settings");scrollOffset=0;SendMessageW(hwnd,WM_SETREDRAW,TRUE,0);resizeLibrary();return 0;
+  }
   if(id==resetId){
    {std::lock_guard lock(stateMutex);if(!surfaces.empty()){auto& a=selected();a.params=Parameters{};a.reaction=Reaction::Off;a.fit=false;}Settings defaults;settings.quality=defaults.quality;settings.fps=defaults.fps;settings.pauseBattery=defaults.pauseBattery;settings.audioDevice.clear();requestSave();}
    syncControls();return 0;
@@ -336,6 +359,14 @@ HICON createTrayIcon(){
  return icon;
 }
 void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,L"Voltura Worlds");Shell_NotifyIconW(NIM_ADD,&n);n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
+void prepareTrayMenu(HWND owner,POINT point){
+ // Windows scales native menus using their owner. Keep the hidden controller
+ // on the invocation monitor, including after HDMI reconnects or scale changes.
+ // An unrelated window under the pointer may use a different DPI awareness.
+ SetWindowPos(owner,nullptr,point.x,point.y,1,1,SWP_NOZORDER|SWP_NOACTIVATE);
+ menuDpi=GetDpiForWindow(owner);if(!menuDpi)menuDpi=GetDpiForSystem();
+ menuFont=CreateFontW(-MulDiv(16,menuDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
+}
 LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  try{
  if(taskbarCreated&&msg==taskbarCreated){addTray();if(!previewMode)createSurfaces();return 0;}
@@ -348,8 +379,9 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(!path||path[length-1]!=0||wcsnlen_s(path,length)!=length-1)return FALSE;
   importWorld(std::filesystem::path(path));return TRUE;
  }
- case trayMessage:if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){POINT point{};GetCursorPos(&point);menuDpi=GetDpiForWindow(WindowFromPoint(point));if(!menuDpi)menuDpi=GetDpiForSystem();menuFont=CreateFontW(-MulDiv(16,menuDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_POPUP|MF_OWNERDRAW,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,pauseState.manual?L"Resume":L"Pause");AppendMenuW(menu,MF_OWNERDRAW|(automaticUpdates?MF_CHECKED:0),4,L"Automatic updates");if(updates.ready())AppendMenuW(menu,MF_OWNERDRAW,5,L"Restart to update");AppendMenuW(menu,MF_OWNERDRAW,3,L"Exit Worlds");MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);POINT p;GetCursorPos(&p);SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,p.x,p.y,0,hwnd,nullptr);if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;if(cmd==1)showLibrary();if(cmd==2){std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}if(cmd==3)DestroyWindow(hwnd);if(cmd==4){bool next=!automaticUpdates;wu::setEnabled(next);automaticUpdates=next;if(!next)updates.cancel();else nextUpdateCheck=GetTickCount64()+5000;}if(cmd==5&&updates.ready()){restartForUpdate=true;DestroyWindow(hwnd);}if(cmd>=visualizationMenuBase&&cmd<visualizationMenuBase+int(std::size(visualizations)))selectVisualization(cmd-visualizationMenuBase);}return 0;
+ case trayMessage:if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){POINT point{};GetCursorPos(&point);prepareTrayMenu(hwnd,point);HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_POPUP|MF_OWNERDRAW,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,pauseState.manual?L"Resume":L"Pause");AppendMenuW(menu,MF_OWNERDRAW|(automaticUpdates?MF_CHECKED:0),4,L"Automatic updates");if(updates.ready())AppendMenuW(menu,MF_OWNERDRAW,5,L"Restart to update");AppendMenuW(menu,MF_OWNERDRAW,3,L"Exit Worlds");MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,point.x,point.y,0,hwnd,nullptr);if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;if(cmd==1)showLibrary();if(cmd==2){std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}if(cmd==3)DestroyWindow(hwnd);if(cmd==4){bool next=!automaticUpdates;wu::setEnabled(next);automaticUpdates=next;if(!next)updates.cancel();else nextUpdateCheck=GetTickCount64()+5000;}if(cmd==5&&updates.ready()){restartForUpdate=true;DestroyWindow(hwnd);}if(cmd>=visualizationMenuBase&&cmd<visualizationMenuBase+int(std::size(visualizations)))selectVisualization(cmd-visualizationMenuBase);}return 0;
  case errorMessage:syncControls();return 0;
+ case renderStatusMessage:if(unsigned(l)==renderGeneration){renderingProblem=w!=0;syncControls();}return 0;
  case WM_MEASUREITEM:{auto d=reinterpret_cast<MEASUREITEMSTRUCT*>(l);d->itemWidth=MulDiv(230,menuDpi,96);d->itemHeight=MulDiv(36,menuDpi,96);return TRUE;}
  case WM_DRAWITEM:ui::draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l),menuFont?menuFont:font,false,menuDpi);return TRUE;
  case WM_SETTINGCHANGE:ui::refresh(library);return 0;
@@ -479,7 +511,9 @@ int captureMode(const std::vector<std::wstring>& args){
   float strength=std::find(args.begin(),args.end(),L"--strength")==args.end()?.5f:captureParameter(L"--strength");if(strength>1)throw std::runtime_error("Capture strength must be 0 to 1");data.reaction=(a.reaction==Reaction::Off?0.f:a.reaction==Reaction::Gentle?.35f:1.f)*strength;
   auto audioParameter=[&](const wchar_t* key){return std::find(args.begin(),args.end(),key)==args.end()?0.f:captureParameter(key);};data.bass=audioParameter(L"--bass");data.mid=audioParameter(L"--mid");data.treble=audioParameter(L"--treble");data.energy=audioParameter(L"--energy");data.impulse=audioParameter(L"--impulse");
   data.time+=startTime;
-  for(int i=0;i<frames;i++){data.time+=data.dt;renderer.render(a,data,presentFrames);if(presentFrames||scene==Scene::Video)std::this_thread::sleep_for(std::chrono::milliseconds(16));if(i>10){timings.push_back(renderer.gpuMs());if(profileStages)for(unsigned stage=0;stage<14;stage++)stageTimings[stage].push_back(renderer.gpuStageMs()[stage]);}}
+  auto timingWarmupOption=option(L"--timing-warmup",L"11");size_t timingConsumed{};int timingWarmup=std::stoi(timingWarmupOption,&timingConsumed);
+  if(timingConsumed!=timingWarmupOption.size()||timingWarmup<0||timingWarmup>36000)throw std::runtime_error("Timing warmup must be an integer from 0 to 36000 frames");
+  for(int i=0;i<frames;i++){data.time+=data.dt;renderer.render(a,data,presentFrames);if(presentFrames||scene==Scene::Video)std::this_thread::sleep_for(std::chrono::milliseconds(16));if(i>=timingWarmup){timings.push_back(renderer.gpuMs());if(profileStages)for(unsigned stage=0;stage<14;stage++)stageTimings[stage].push_back(renderer.gpuStageMs()[stage]);}}
   renderer.capture(out/(wide(sceneName(scene))+L".png"));
   if(std::find(args.begin(),args.end(),L"--validate-paused-frame")!=args.end()){
    if(scene!=Scene::Smoke)throw std::runtime_error("Paused-frame diagnostic requires Smoke");
@@ -501,6 +535,8 @@ int captureMode(const std::vector<std::wstring>& args){
    renderer.render(a,data,false);wchar_t name[64];swprintf_s(name,L"frame-%05d.png",i);renderer.capture(out/name);}
   renderer.validateDebugMessages();PROCESS_MEMORY_COUNTERS_EX memory{};GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory));std::sort(timings.begin(),timings.end());double p95=timings.empty()?0:timings[size_t((timings.size()-1)*.95)];nlohmann::json report={{"scene",sceneName(scene)},{"width",width},{"height",height},{"warmupFrames",frames},{"adapter",utf8(renderer.adapterName())},{"gpuP95Ms",p95},{"privateBytes",memory.PrivateUsage},{"estimatedGpuBytes",renderer.allocations()},{"grid",renderer.gridSize()},{"densityGrid",renderer.densityGridSize()},{"densityDimensions",renderer.densityDimensions()},{"sceneSamples",renderer.sceneSamples()},{"pressureMultigrid",multigrid},{"elapsedSeconds",std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()},{"evidence","Native D3D12 offscreen readback; not physical desktop or presentation performance"}};
   report["startTimeOffsetSeconds"]=startTime;
+  report["timingWarmupFrames"]=timingWarmup;
+  report["timingSampleCount"]=timings.size();
   if(isProceduralWorld(scene))report["quality"]=utf8(qualityOption);
   if(flowmapReference||flowmapLive){report["flowmapLive"]=flowmapLive;report["flowmapAdaptive"]=flowmapAdaptive;report["flowmapAdaptiveRenewals"]=renderer.flowmapAdaptiveRenewals();report["flowmapReconstruction"]=flowmapCubic||flowmapLive?"Bounded Catmull-Rom":"Trilinear";report["flowmapRenewalSeconds"]=renewalSeconds;report["flowmapRenewals"]=renderer.flowmapRenewals();}
   if(!transportTest.empty())report["transportField"]=transportDeform?"Reversible nonlinear deformation":"Rigid rotation";

@@ -1,16 +1,16 @@
-# Voltura Worlds 0.1.5 for Windows
+# Voltura Worlds 0.1.6 for Windows
 
 A per-user Windows 11 x64 desktop application with ten built-in Worlds: **Aurora**, **Orbit**, **Smoke**, **Bloom**, **Silk**, **Eclipse**, **Lattice**, **Drift**, **Contour**, and **Mercury**. C++20, Direct3D 12, HLSL. MIT licensed.
 
 ## Install and try it
 
-Run `dist/VolturaWorlds-Setup-0.1.5-win-x64.exe`. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
+Run `dist/VolturaWorlds-Setup-0.1.6-win-x64.exe`. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
 
-Choose a display, then a World. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during normal desktop use.
+Choose a display, then a World. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 
 Closing the library leaves the background running. Reopen it through the notification-area icon or the Start-menu shortcut. Use **Pause**, **Resume**, or **Exit Worlds** to control playback. Exit reveals your ordinary Windows wallpaper; Worlds does not overwrite it.
 
-The library follows your Windows light/dark theme. **Advanced settings** reveals detailed artwork and playback controls. **Reset settings** restores the selected World’s adjustments and global playback preferences without deleting imports or changing assigned scenes.
+The library follows your Windows light/dark theme. **Advanced settings** reveals detailed artwork and playback controls and makes the library translucent so you can see the World while adjusting it. **Reset settings** restores the selected World’s adjustments and global playback preferences without deleting imports or changing assigned scenes.
 
 Audio reaction defaults to Off. Choose Gentle or Expressive and adjust Audio strength to use local playback-device analysis. No audio is recorded or uploaded. Rendering pauses on battery by default; clear **Pause on battery** to animate while unplugged. Full display coverage, lock, sleep, suspend, and remote sessions also pause rendering.
 
@@ -26,9 +26,10 @@ Enable **Automatic updates** in the notification-area menu for background update
 
 ## Build
 
-Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK, PowerShell, and NSIS are required for development. Application dependencies are packaged locally; Python and build tools are not needed by users.
+Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK, PowerShell, Python 3.10 or newer with pip, and NSIS are required for development. Install the Python test and capture tools before building. Application dependencies are packaged locally; Python and build tools are not needed by users.
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 ./scripts/build.ps1
 ./scripts/package.ps1 -SkipBuild
 ```

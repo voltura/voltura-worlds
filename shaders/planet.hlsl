@@ -64,8 +64,10 @@ float4 PS(float4 pixel:SV_POSITION,float3 world:TEXCOORD0,float3 normal:TEXCOORD
    fillOcclusion+=max(0,neighbor-coverage-.045*fillIndex);
   }
   float fill=saturate(dot(cloudNormal,fillDirection))*exp(-fillOcclusion*5);
-  float3 cloudColor=float3(.003,.006,.010)+float3(.025,.042,.058)*fill;
-  cloudColor+=float3(1,.75,.46)*direct*1.5;
+  float grazing=pow(1-saturate(dot(n,view)),3)*horizonLight;
+  float3 cloudColor=float3(.002,.004,.008)+float3(.024,.046,.072)*fill;
+  cloudColor+=lerp(float3(1,.67,.36),float3(1,.86,.68),lit)*direct*1.5;
+  cloudColor+=float3(.075,.13,.20)*grazing*exp(-occlusion*3.5);
   return float4(tone(cloudColor),coverage*.96);
  }
  if(pass>1.5&&pass<2.5){
@@ -138,7 +140,7 @@ float4 PS(float4 pixel:SV_POSITION,float3 world:TEXCOORD0,float3 normal:TEXCOORD
   float3 grainPosition=world*210;
   float grainFootprint=max(length(ddx(grainPosition)),length(ddy(grainPosition)));
   float dust=lerp(.5,noise(grainPosition),1-smoothstep(.35,1.2,grainFootprint));
-  float3 radiance=albedo*(float3(1,.86,.65)*scattering*phase*1.1*shadow+float3(.025,.042,.065)*alpha);
+  float3 radiance=albedo*(float3(1,.86,.65)*scattering*phase*1.15*shadow+float3(.018,.032,.052)*alpha);
   float sunward=smoothstep(-.4,.85,dot(normalize(rel),light));
   radiance*=(.85+.3*dust)*lerp(.35,1,sunward*sunward);
   // RGB is unpremultiplied for the shared alpha-blend pipeline.
@@ -159,12 +161,12 @@ float4 PS(float4 pixel:SV_POSITION,float3 world:TEXCOORD0,float3 normal:TEXCOORD
  float shadowCloud=smoothstep(.04,.7,cloudMap.SampleGrad(planetSampler,shadowUV,cloudGradient(ddx(shadowUV)),cloudGradient(ddy(shadowUV))).r);
  float3 base=surface*lerp(float3(.65,1.12,.65),float3(1,1,1),land);
  float ndl=dot(n,light);float day=smoothstep(-.06,.12,ndl);
- float spec=pow(saturate(dot(reflect(-light,n),view)),180)*(1-land)*.18;
+ float spec=pow(saturate(dot(reflect(-light,n),view)),180)*(1-land)*(.12+.22*rim);
  float city=pow(nightMap.Sample(planetSampler,float2(uv.x+.16,uv.y)).r,1.65)*pow(1-day,3)*.8;
  float ringLight=ringVisibility(world,light);
  float3 sunColor=float3(1,.78,.50);
  float fill=saturate(dot(n,normalize(float3(-.6,.4,.8))));
- float3 ambient=float3(.003,.007,.012)+float3(.020,.045,.070)*fill;
+ float3 ambient=float3(.002,.005,.010)+float3(.018,.042,.068)*fill;
  float3 c=base*(max(ndl,0)*3.7*sunColor*ringLight*(1-shadowCloud*.65)+ambient)+spec*day*ringLight+float3(1,.42,.08)*city;
  float3 rimColor=lerp(float3(.006,.065,.11),float3(.7,.35,.09),pow(saturate(ndl),5));
  c+=rimColor*rim*(max(ndl,0)+.015)*1.5;

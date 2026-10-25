@@ -3,11 +3,12 @@
 #include <filesystem>
 #include <memory>
 #include <vector>
+#include <stop_token>
 namespace worlds {
 struct VideoInfo {unsigned width{},height{};double duration{};};
 VideoInfo inspectVideo(const std::filesystem::path&);
 std::vector<unsigned char> videoPreview(const std::filesystem::path&);
-std::filesystem::path copyVideoToLibrary(const std::filesystem::path&,const std::filesystem::path&);
+std::filesystem::path copyVideoToLibrary(const std::filesystem::path&,const std::filesystem::path&,std::stop_token = {});
 class VideoPlayer {
 public:
  VideoPlayer(ID3D12Device*,ID3D12CommandQueue*,const std::filesystem::path&);

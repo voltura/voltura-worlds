@@ -16,7 +16,7 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  [loop]for(int layer=0;layer<layers;layer++) {
   float z=(float)layer;
   float2 q=p*(13.+z*8.);
-  q+=float2(t*(.19+z*.055),t*.035);
+  q+=float2(t*(.34-z*.055),t*(.048-z*.008));
   // Global warp is smooth across every cell; no independently wrapped sprites.
   q.y+=(.35+.6*turbulence)*sin(q.x*.13+t*.12+z*1.7);
   q.x+=(.12+.25*turbulence)*sin(q.y*.17-t*.10+z);
@@ -28,13 +28,14 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
    float2 center=id+.18+.64*float2(hash(float3(id,41.+z)),hash(float3(id,79.+z)));
    float2 delta=q-center;
    delta.x*=.78;
-   float radius=lerp(.11,.047,saturate((detail+z*.18)*.5));
+   // Near organisms are larger and softer; the distant population stays fine.
+   float radius=lerp(.15,.055,saturate((detail+z*.45)*.4));
    float footprint=(13.+z*8.)/resolution.y;
    float width2=max(radius*radius,footprint*footprint*.3);
    float profile=exp(-dot(delta,delta)/width2);
    float presence=1-smoothstep(concentration-.035,concentration+.035,h);
-   float pulse=.76+.24*sin(t*.55+h*19.);
-   float intensity=(.55+.6*hash(float3(id,119.+z)))*(1+audio*(.5+z*.1));
+   float pulse=.78+.22*sin(t*(.29+h*.32)+h*19.);
+   float intensity=(.7+.7*h)*(1-z*.16)*(1+audio*(.5+z*.1));
    c+=driftTint(hash(float3(id,131.+z)))*profile*presence*pulse*intensity;
   }
  }

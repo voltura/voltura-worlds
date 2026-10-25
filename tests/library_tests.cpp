@@ -1,11 +1,34 @@
-// Exercise the real library window and notification handlers, without a renderer,
-// tray registration, installer, user's settings, or changes to the real desktop.
+// Exercise the real library window, renderer recovery and notification handlers
+// without tray registration, installer, user's settings, or changes to the real desktop.
 #define wWinMain unusedApplicationEntry
 #include "../src/main.cpp"
 #undef wWinMain
 #include <iostream>
 void requireUi(bool value,const char* text){if(!value)throw std::runtime_error(text);}
 void pump(){for(int i=0;i<10;i++){MSG msg;while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}Sleep(5);}}
+void requireRenderRecovery(){
+ WNDCLASSW cls{};cls.hInstance=instance;cls.lpszClassName=L"VolturaRenderRecoveryTest";
+ cls.lpfnWndProc=[](HWND hwnd,UINT msg,WPARAM w,LPARAM l)->LRESULT{return msg==renderStatusMessage?controllerProc(hwnd,msg,w,l):DefWindowProcW(hwnd,msg,w,l);};
+ RegisterClassW(&cls);controller=CreateWindowW(cls.lpszClassName,L"",WS_POPUP,0,0,1,1,nullptr,nullptr,instance,nullptr);
+ for(auto& surface:surfaces)surface.hwnd=CreateWindowW(L"STATIC",L"",WS_POPUP,0,0,160,90,nullptr,nullptr,instance,nullptr);
+ exeDir=executable().parent_path();pauseState={};settings.audioDevice.clear();
+ {std::lock_guard lock(stateMutex);
+  Assignment bad;bad.scene=Scene::Video;bad.video=(exeDir/L"missing-recovery-test.mp4").wstring();
+  Assignment good;good.scene=Scene::Silk;settings.displays={{surfaces[0].monitor.id,bad},{surfaces[1].monitor.id,good}};}
+ auto await=[&](auto condition){auto deadline=GetTickCount64()+15000;while(GetTickCount64()<deadline){pump();if(condition())return true;}return false;};
+ startRendering();
+ bool failed=await([]{return renderingProblem;});
+ {std::lock_guard lock(stateMutex);settings.displays[0].second.scene=Scene::Silk;}
+ bool recovered=await([]{return !renderingProblem;});
+ renderThread.request_stop();if(renderThread.joinable())renderThread.join();
+ // Notifications queued by an older renderer must not corrupt the current UI.
+ SendMessageW(controller,renderStatusMessage,TRUE,renderGeneration-1);
+ bool staleIgnored=!renderingProblem;
+ for(auto& surface:surfaces){DestroyWindow(surface.hwnd);surface.hwnd=nullptr;}
+ DestroyWindow(controller);controller=nullptr;
+ requireUi(failed&&recovered,"Missing video is reported and switching scenes recovers rendering on both displays");
+ requireUi(staleIgnored,"Old renderer failure notifications are ignored");
+}
 int syncPaints=0;
 LRESULT CALLBACK countSyncPaint(HWND hwnd,UINT msg,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR){
  if(msg==WM_PAINT||msg==WM_ERASEBKGND)++syncPaints;
@@ -92,8 +115,26 @@ void screenshot(const std::filesystem::path& path,HWND target=library){
  SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(nullptr,screen);
 }
 std::filesystem::path menuShot;
+HMENU measuredMenu{};bool nativeMenuScaleCorrect=false;
 void CALLBACK captureMenu(HWND,UINT,UINT_PTR timer,DWORD){
- HWND popup=FindWindowW(L"#32768",nullptr);if(popup)screenshot(menuShot,popup);
+ HWND popup=FindWindowW(L"#32768",nullptr);if(popup){
+  screenshot(menuShot,popup);
+  RECT row{};GetMenuItemRect(nullptr,measuredMenu,0,&row);
+  // Inspect actual rendered ink as well as row height: a native menu can have
+  // correctly sized rows while Windows rescales owner-drawn text incorrectly.
+  RECT window{};GetWindowRect(popup,&window);int width=window.right-window.left,height=window.bottom-window.top;
+  HDC screen=GetDC(nullptr),dc=CreateCompatibleDC(screen);BITMAPINFO bmi{};
+  bmi.bmiHeader={sizeof(BITMAPINFOHEADER),width,-height,1,32,BI_RGB};void* bits{};
+  auto bitmap=CreateDIBSection(screen,&bmi,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(dc,bitmap);PrintWindow(popup,dc,2);
+  int top=height,bottom=-1;
+  for(int y=std::max(0,int(row.top-window.top));y<std::min(height,int(row.bottom-window.top));y++)
+   for(int x=MulDiv(40,menuDpi,96);x<std::min(width,MulDiv(190,menuDpi,96));x++){
+    auto pixel=static_cast<DWORD*>(bits)[y*width+x];
+    if((pixel&0xffffff)==(DWORD(GetRValue(ui::foreground))<<16|DWORD(GetGValue(ui::foreground))<<8|GetBValue(ui::foreground))){top=std::min(top,y);bottom=std::max(bottom,y);}
+   }
+  nativeMenuScaleCorrect=std::abs((row.bottom-row.top)-MulDiv(36,menuDpi,96))<=2&&bottom-top+1>=MulDiv(9,menuDpi,96)&&bottom-top+1<=MulDiv(18,menuDpi,96);
+  SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(nullptr,screen);
+ }
  EndMenu();KillTimer(nullptr,timer);
 }
 void captureThemedMenu(const std::filesystem::path& path,bool submenu){
@@ -102,10 +143,17 @@ void captureThemedMenu(const std::filesystem::path& path,bool submenu){
  HMENU menu=submenu?visualizationMenu():CreatePopupMenu();
  if(!submenu){AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_OWNERDRAW|MF_POPUP,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,L"Pause");}
  MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);
- menuDpi=GetDpiForWindow(library);menuFont=font;menuShot=path;
+ // Reopen after stale state, as happens when a display disappears and returns.
+ menuDpi=72;prepareTrayMenu(owner,{100,100});menuShot=path;measuredMenu=menu;nativeMenuScaleCorrect=false;
+ RECT ownerRect{};GetWindowRect(owner,&ownerRect);
+ requireUi(ownerRect.left==100&&ownerRect.top==100&&!IsWindowVisible(owner),"Menu owner follows invocation without becoming visible");
+ requireUi(menuDpi==GetDpiForWindow(owner),"Menu font and native owner use the same current DPI");
+ LOGFONTW actual{};GetObjectW(menuFont,sizeof(actual),&actual);
+ requireUi(actual.lfHeight==-MulDiv(16,menuDpi,96),"Menu font is recreated at the current owner DPI");
  auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());
  SetTimer(nullptr,0,250,captureMenu);TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,100,100,0,owner,nullptr);
- if(hook)UnhookWindowsHookEx(hook);menuFont=nullptr;DestroyMenu(menu);DestroyWindow(owner);
+ if(hook)UnhookWindowsHookEx(hook);DeleteObject(menuFont);menuFont=nullptr;DestroyMenu(menu);DestroyWindow(owner);
+ requireUi(nativeMenuScaleCorrect,"Native popup row height and rendered text must scale together");
 }
 int wmain(int argc,wchar_t** argv){
  try{
@@ -116,6 +164,7 @@ int wmain(int argc,wchar_t** argv){
   requireDesktopActionStates();
   requireUi(GetClassLongPtrW(library,GCLP_HICON)!=0,"Application icon resource");
   requireUi(!IsWindowVisible(GetDlgItem(library,qualityId)),"Advanced controls start hidden");
+  requireUi(!(GetWindowLongPtrW(library,GWL_EXSTYLE)&WS_EX_LAYERED),"Library starts fully opaque");
   const int offChoice=int(std::size(visualizations))-2,videoChoice=int(std::size(visualizations))-1;
   requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0)==videoChoice,"Built-in visualizations appear in dropdown");
   mouseSelect(visualizationId,1);requireUi(selected().scene==Scene::Orbit,"Visualization dropdown switches scene");
@@ -163,6 +212,12 @@ int wmain(int argc,wchar_t** argv){
   for(int i=0;i<6;i++){
    SetWindowPos(library,nullptr,monitor.rcWork.right-80,monitor.rcWork.bottom-80,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
    SendMessageW(GetDlgItem(library,advancedId),BM_CLICK,0,0);pump();RECT window{};GetWindowRect(library,&window);
+   if(advancedOpen){
+    BYTE alpha{};DWORD flags{};
+    requireUi(GetLayeredWindowAttributes(library,nullptr,&alpha,&flags)&&alpha==179&&flags==LWA_ALPHA,"Advanced settings reveal the live World at 70 percent opacity");
+    SendMessageW(library,WM_CLOSE,0,0);showLibrary();pump();
+    requireUi(GetLayeredWindowAttributes(library,nullptr,&alpha,&flags)&&alpha==179,"Reopening expanded settings preserves transparency");
+   }else requireUi(!(GetWindowLongPtrW(library,GWL_EXSTYLE)&WS_EX_LAYERED),"Collapsing advanced settings restores full opacity");
    requireUi(window.left>=monitor.rcWork.left&&window.top>=monitor.rcWork.top&&window.right<=monitor.rcWork.right&&window.bottom<=monitor.rcWork.bottom,"Expansion and collapse remain inside monitor work area");
    if(sideExpansion)requireUi(window.bottom-window.top<px(640),"Side expansion keeps window compact");
   }
@@ -195,6 +250,7 @@ int wmain(int argc,wchar_t** argv){
    }
   }
   if(argc>1){for(int dark=0;dark<2;dark++){ui::refresh(library,dark);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"menu-dark.bmp":L"menu-light.bmp"),false);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"submenu-dark.bmp":L"submenu-light.bmp"),true);}}
-  DestroyWindow(library);library=nullptr;surfaces.clear();DeleteObject(font);font=nullptr;DeleteObject(headingFont);headingFont=nullptr;CoUninitialize();std::cout<<"All dropdowns selected with mouse messages; model updates, reset, expansion and icon passed. Private desktop, no installer or user settings touched.\n";return 0;
+  requireRenderRecovery();
+  DestroyWindow(library);library=nullptr;surfaces.clear();DeleteObject(font);font=nullptr;DeleteObject(headingFont);headingFont=nullptr;CoUninitialize();std::cout<<"All dropdowns selected with mouse messages; model updates, reset, expansion, icon and renderer recovery passed. Private desktop, no installer or user settings touched.\n";return 0;
  }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}
 }

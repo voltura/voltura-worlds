@@ -124,9 +124,11 @@ float3 bodyForce(float3 uv){
  [unroll]for(int roll=0;roll<2;roll++){
   float3 center=float3(.55+(roll==0?-.045:.045),.40+roll*.23,.5);
   float3 offset=uv-center;
-  float strength=exp(-dot(offset,offset)/.036);
+  // Unequal roll radii avoid two matching lobes and carry existing density
+  // into broad folds. The solver, transport stencil and iteration budget stay fixed.
+  float strength=exp(-dot(offset,offset)/(roll==0?.032:.050));
   float3 axis=normalize(float3(.2,roll==0?.12:-.12,1));
-  force+=cross(axis,offset)*strength*(roll==0?1:-1)*dt*.45*turbulence;
+  force+=cross(axis,offset)*strength*(roll==0?1:-1)*dt*.60*turbulence;
  }
  force.y+=dt*smoke*.12*flow;
  float3 swirl=float3(sin(uv.y*19+time*.31)*cos(uv.z*17),sin(uv.z*15-time*.27)*cos(uv.x*18),sin(uv.x*17+time*.23)*cos(uv.y*16));

@@ -32,8 +32,16 @@ float sculptureField(float3 p){
 }
 
 float3 sculptureNormal(float3 p,float epsilon){
+#if SCULPTURE_LATTICE
  float2 e=float2(epsilon,0);
  return normalize(float3(sculptureField(p+e.xyy)-sculptureField(p-e.xyy),sculptureField(p+e.yxy)-sculptureField(p-e.yxy),sculptureField(p+e.yyx)-sculptureField(p-e.yyx)));
+#else
+ // Tetrahedral differences need four field evaluations instead of six.
+ // Keep the normal budget bounded as lighting becomes more expressive.
+ float2 e=float2(1,-1)*epsilon;
+ return normalize(e.xyy*sculptureField(p+e.xyy)+e.yyx*sculptureField(p+e.yyx)
+                 +e.yxy*sculptureField(p+e.yxy)+e.xxx*sculptureField(p+e.xxx));
+#endif
 }
 float3 sculptureBackground(float2 p){
  float glow=exp(-dot(p,p)*5);
@@ -41,10 +49,17 @@ float3 sculptureBackground(float2 p){
 }
 float3 sculptureEnvironment(float3 r){
  float3 a=colorA(),b=colorB();
- float3 c=lerp(float3(.008,.013,.025),float3(.16,.21,.28),smoothstep(-.55,.85,r.y));
- c+=float3(.9,.97,1.05)*pow(saturate(dot(r,normalize(float3(-.6,.8,1.)))),18+detail*9);
- c+=lerp(float3(.8,.38,.12),b,.65)*pow(saturate(dot(r,normalize(float3(1,.15,-.5)))),26);
- c+=lerp(float3(.15,.38,.8),a,.65)*exp(-pow((r.x+.52)/(.12-.02*min(detail,2)),2))*smoothstep(-.65,.3,r.y);
+ float3 c=lerp(float3(.005,.009,.018),float3(.12,.17,.24),smoothstep(-.55,.85,r.y));
+ // Broad rectangular studio cards create readable reflections through the
+ // entire merge, rather than isolated pin highlights that look like plastic.
+ float2 keyAxis=float2((r.x+.42)/(.24-.035*min(detail,2)),(r.y-.38)/.72);
+ float2 keySquared=keyAxis*keyAxis;
+ float key=exp(-dot(keySquared,keySquared));
+ float strip=exp(-pow((r.x-.58)/.075,2))*smoothstep(-.7,-.35,r.y)*(1-smoothstep(.65,.9,r.y));
+ float warm=pow(saturate(dot(r,normalize(float3(.75,-.2,-.6)))),18);
+ c+=float3(1.1,1.18,1.3)*key*1.8;
+ c+=lerp(float3(.28,.65,.95),a,.35)*strip*1.35;
+ c+=lerp(float3(.95,.46,.19),b,.45)*warm*.8;
  return c;
 }
 
@@ -71,16 +86,18 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  if(hit){
   float3 pos=ro+rd*distance,n=sculptureNormal(pos,max(.001,tolerance));
   float3 light=normalize(float3(-.6,.8,1));
-  float diffuse=saturate(dot(n,light)),fresnel=pow(1-saturate(dot(n,-rd)),3);
+  float diffuse=saturate(dot(n,light)),fresnel=pow(1-saturate(dot(n,-rd)),SCULPTURE_LATTICE?3:5);
   float audio=sculptureAudio();
 #if SCULPTURE_LATTICE
   float3 base=lerp(colorA(),colorB(),.13+.12*pos.y);
-  result=base*(.07+.45*diffuse)+lerp(float3(.18,.27,.3),colorA(),.65)*pow(saturate(dot(reflect(-light,n),-rd)),24+detail*12)*.7;
-  result+=colorA()*(.07+.12*audio)*fresnel;
+  // A stronger key and restrained fill distinguish inner walls without
+  // spending extra distance-field evaluations on ambient occlusion.
+  result=base*(.035+.65*diffuse)+lerp(float3(.32,.44,.50),colorA(),.55)*pow(saturate(dot(reflect(-light,n),-rd)),24+detail*12)*.8;
+  result+=colorA()*(.10+.12*audio)*fresnel;
   // A second, broad fill reveals the inside walls without expensive shadows.
-  result+=base*.08*saturate(dot(n,normalize(float3(.7,-.3,.2))));
+  result+=base*.065*saturate(dot(n,normalize(float3(.7,-.3,.2))));
 #else
-  result=sculptureEnvironment(reflect(rd,n))*(.7+.3*fresnel);
+  result=sculptureEnvironment(reflect(rd,n))*(.82+.18*fresnel);
   result*=lerp(float3(.8,.88,.97),.4+colorA()*.65,.2);
   result+=colorB()*audio*.10*(.2+fresnel);
 #endif

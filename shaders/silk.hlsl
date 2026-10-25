@@ -1,7 +1,7 @@
 #include "common.hlsli"
 
-// Layered translucent bands, following Liquid Waves' low-opacity fills and
-// illuminated upper contours. All compositing happens in linear scene colour.
+// Continuous translucent ribbons with changing face orientation. A folded
+// face has an asymmetric sheen; a cylindrical profile reads as glowing tubing.
 float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  float aspect=resolution.x/resolution.y;
  float2 p=(uv-.5)*float2(aspect,1);
@@ -23,20 +23,22 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
   float roll=sin(x*4.3+phase*.72+f)*.36;
   float fine=sin(x*9.5+phase*.41+f*1.7)*(.008+.012*quality)*detail*turbulence;
   float center=(id-.5)*.45+(.10+.055*turbulence+audio*.045)*(broad+roll)+fine;
-  float halfWidth=(.030+.013*density+audio*.018)*(.8+.2*sin(x*2.5-phase+f));
+  float twist=sin(x*1.7-phase*.63+f*1.31);
+  float halfWidth=(.040+.018*density+audio*.018)*(.36+.64*abs(twist));
   float v=(p.y-center)/halfWidth;
   float aa=max(fwidth(v),.008);
   float coverage=1-smoothstep(1-aa,1+aa,abs(v));
-  float roundness=sqrt(saturate(1-v*v));
-  float longitudinal=.27+.73*pow(.5+.5*sin(x*.8+f*.67),.7);
-  float opacity=coverage*(.20+.24*roundness)*longitudinal;
+  float face=saturate(.5+.5*twist);
+  float longitudinal=.48+.52*(.5+.5*sin(x*.8+f*.67));
+  float opacity=coverage*(.24+.36*face)*longitudinal;
   float3 base=lerp(colorA(),colorB(),id);
-  float3 satin=base*(.52+1.25*roundness+.26*v);
-  satin+=lerp(base,float3(.65,.78,1),.35)*pow(saturate(roundness*.8-v*.45),18)*.75;
+  float fold=saturate(1-abs(v-(twist*.52)));
+  float3 satin=base*(.30+.72*face+.28*v*twist);
+  satin+=lerp(base,float3(.65,.78,1),.22)*pow(fold,14)*(.45+.7*face);
   c=lerp(c,satin,opacity);
   // A pixel-filtered crest remains fine at all resolutions and detail levels.
-  float crest=1-smoothstep(aa*.45,aa*1.6,abs(v+.92));
-  c+=lerp(base,float3(.6,.72,.9),.35)*crest*(.055+.045*detail)*longitudinal;
+  float crest=1-smoothstep(aa*.45,aa*1.6,abs(v+.92*twist));
+  c+=lerp(base,float3(.6,.72,.9),.25)*crest*(.035+.035*detail)*longitudinal;
  }
  return float4(tone(c),1);
 }

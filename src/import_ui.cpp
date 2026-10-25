@@ -10,7 +10,9 @@ namespace worlds {
 namespace {
 constexpr UINT ready=WM_APP+20;
 HWND activeImport{};
+UINT_PTR nextImportIdentity=0;
 struct Import {
+ UINT_PTR identity=++nextImportIdentity;
  HWND window{},image{},title{},description{},status{},button{},cancel{};HFONT font{};HBITMAP bitmap{},displayBitmap{};
  std::filesystem::path file,library,temporaryVideo;std::wstring destination,error;bool personalVideo=false;
  std::function<void(const Assignment&)> apply;
@@ -64,7 +66,7 @@ void work(Import& state){
   try{
    if(FAILED(initialized))throw std::runtime_error("Cannot initialize import worker");
    if(state.installing){
-    if(state.personalVideo){state.installed=state.package.assignment;state.installed.video=copyVideoToLibrary(state.library,state.file).wstring();}
+    if(state.personalVideo){state.installed=state.package.assignment;state.installed.video=copyVideoToLibrary(state.library,state.file,stop).wstring();}
     else state.installed=installPackage(state.library,state.package);
    }else{
     if(state.personalVideo){
@@ -82,7 +84,7 @@ void work(Import& state){
     state.bitmap=preview(state.package.preview);
    }
   }catch(const std::exception& error){try{state.error=wide(error.what());}catch(...){state.error=L"Cannot read this World.";}}
-  if(SUCCEEDED(initialized))CoUninitialize();if(!stop.stop_requested())PostMessageW(state.window,ready,0,0);
+  if(SUCCEEDED(initialized))CoUninitialize();if(!stop.stop_requested())PostMessageW(state.window,ready,state.identity,0);
  });
 }
 LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
@@ -95,6 +97,7 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
  if(message==WM_CTLCOLORSTATIC||message==WM_CTLCOLOREDIT||message==WM_CTLCOLORBTN){bool description=reinterpret_cast<HWND>(l)==state->description;SetTextColor(reinterpret_cast<HDC>(w),ui::foreground);SetBkColor(reinterpret_cast<HDC>(w),description?ui::surface:ui::background);return reinterpret_cast<LRESULT>(description?ui::surfaceBrush:ui::backgroundBrush);}
  if(message==WM_DRAWITEM){ui::draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l),state->font);return TRUE;}
  if(message==ready){
+  if(w!=state->identity)return 0;
   if(state->worker.joinable())state->worker.join();
   if(!state->error.empty()){SetWindowTextW(state->status,state->error.c_str());return 0;}
   if(state->installing){try{state->apply(state->installed);}catch(const std::exception& e){MessageBoxW(hwnd,wide(e.what()).c_str(),L"World imported",MB_OK|MB_ICONWARNING);}DestroyWindow(hwnd);return 0;}
@@ -114,7 +117,13 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
   if(LOWORD(w)==IDCANCEL){DestroyWindow(hwnd);return 0;}
  }
  if(message==WM_CLOSE){DestroyWindow(hwnd);return 0;}
- if(message==WM_NCDESTROY){SetWindowLongPtrW(hwnd,GWLP_USERDATA,0);activeImport=nullptr;delete state;}
+ if(message==WM_NCDESTROY){
+  SetWindowLongPtrW(hwnd,GWLP_USERDATA,0);activeImport=nullptr;
+  state->worker.request_stop();
+  // A media decoder or filesystem operation may still be returning. Reap the
+  // worker off the UI thread, retaining its state until that work has stopped.
+  std::thread([state]{delete state;}).detach();
+ }
  return DefWindowProcW(hwnd,message,w,l);
 }
 }

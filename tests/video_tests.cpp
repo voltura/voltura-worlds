@@ -27,6 +27,10 @@ static uint64_t pixels(ID3D12Device* device,ID3D12CommandQueue* queue,VideoPlaye
 int wmain(int argc,wchar_t** argv){try{
  require(argc==3,"Provide H.264 and unsupported-codec MP4 fixtures");checked(CoInitializeEx(nullptr,COINIT_MULTITHREADED));
  auto info=inspectVideo(argv[1]);require(info.width==320&&info.height==180,"Video dimensions incorrect");bool rejected=false;try{inspectVideo(argv[2]);}catch(...){rejected=true;}require(rejected,"Unsupported codec accepted");
+ std::stop_source cancelled;cancelled.request_stop();bool copyCancelled=false;
+ auto cancelledLibrary=std::filesystem::temp_directory_path()/(L"Voltura-cancelled-video-"+std::to_wstring(GetCurrentProcessId()));
+ try{copyVideoToLibrary(cancelledLibrary,argv[1],cancelled.get_token());}catch(...){copyCancelled=true;}
+ require(copyCancelled&&!std::filesystem::exists(cancelledLibrary),"Cancelled video copy must not create a library");
  ComPtr<ID3D12Debug> debug;if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))debug->EnableDebugLayer();
  ComPtr<IDXGIFactory6> factory;checked(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));ComPtr<IDXGIAdapter1> adapter;checked(factory->EnumAdapterByGpuPreference(0,DXGI_GPU_PREFERENCE_UNSPECIFIED,IID_PPV_ARGS(&adapter)));ComPtr<ID3D12Device> device;checked(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&device)));
  D3D12_COMMAND_QUEUE_DESC desc{};desc.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;ComPtr<ID3D12CommandQueue> queue;checked(device->CreateCommandQueue(&desc,IID_PPV_ARGS(&queue)));

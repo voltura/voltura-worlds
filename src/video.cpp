@@ -69,12 +69,14 @@ std::vector<unsigned char> videoPreview(const std::filesystem::path& file){
  ComPtr<IStream> stream;checked(CreateStreamOnHGlobal(nullptr,TRUE,&stream),"Create thumbnail stream");ComPtr<IWICBitmapEncoder> encoder;checked(factory->CreateEncoder(GUID_ContainerFormatPng,nullptr,&encoder),"Create PNG thumbnail");checked(encoder->Initialize(stream.Get(),WICBitmapEncoderNoCache),"Initialize thumbnail encoder");ComPtr<IWICBitmapFrameEncode> frame;checked(encoder->CreateNewFrame(&frame,nullptr),"Create thumbnail frame");checked(frame->Initialize(nullptr),"Initialize thumbnail frame");checked(frame->SetSize(width,height),"Size thumbnail");WICPixelFormatGUID format=GUID_WICPixelFormat32bppBGRA;checked(frame->SetPixelFormat(&format),"Set thumbnail pixel format");checked(frame->WriteSource(scaler.Get(),nullptr),"Encode thumbnail");checked(frame->Commit(),"Finish thumbnail frame");checked(encoder->Commit(),"Finish thumbnail");
  STATSTG stat{};checked(stream->Stat(&stat,STATFLAG_NONAME),"Read thumbnail length");HGLOBAL memory{};checked(GetHGlobalFromStream(stream.Get(),&memory),"Read thumbnail data");auto bytes=static_cast<BYTE*>(GlobalLock(memory));if(!bytes)throw std::runtime_error("Cannot read thumbnail memory");std::vector<BYTE> encoded(bytes,bytes+size_t(stat.cbSize.QuadPart));GlobalUnlock(memory);return encoded;
 }
-std::filesystem::path copyVideoToLibrary(const std::filesystem::path& library,const std::filesystem::path& source){
+std::filesystem::path copyVideoToLibrary(const std::filesystem::path& library,const std::filesystem::path& source,std::stop_token stop){
+ if(stop.stop_requested())throw std::runtime_error("Video import cancelled");
  inspectVideo(source);std::filesystem::create_directories(library);GUID guid{};checked(CoCreateGuid(&guid),"Create video library identifier");wchar_t name[40]{};StringFromGUID2(guid,name,40);
  auto stage=library/(std::wstring(name)+L".pending"),destination=library/name;std::filesystem::create_directory(stage);
  try{
-  if(!CopyFileW(source.c_str(),(stage/L"video.mp4").c_str(),TRUE))throw std::runtime_error("Cannot copy video into your library. Check available disk space.");
-  inspectVideo(stage/L"video.mp4");std::filesystem::rename(stage,destination);
+  auto progress=[](LARGE_INTEGER,LARGE_INTEGER,LARGE_INTEGER,LARGE_INTEGER,DWORD,DWORD,HANDLE,HANDLE,LPVOID context)->DWORD{return static_cast<std::stop_token*>(context)->stop_requested()?PROGRESS_CANCEL:PROGRESS_CONTINUE;};
+  if(!CopyFileExW(source.c_str(),(stage/L"video.mp4").c_str(),progress,&stop,nullptr,COPY_FILE_FAIL_IF_EXISTS))throw std::runtime_error("Video import cancelled or could not be copied. Check available disk space.");
+  inspectVideo(stage/L"video.mp4");if(stop.stop_requested())throw std::runtime_error("Video import cancelled");std::filesystem::rename(stage,destination);
  }catch(...){std::error_code error;std::filesystem::remove(stage/L"video.mp4",error);std::filesystem::remove(stage,error);throw;}
  return destination/L"video.mp4";
 }

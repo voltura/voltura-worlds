@@ -611,6 +611,10 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(lastScene_==Scene::Smoke&&assignment.scene!=Scene::Smoke){idle();smokeTracersReady_=false;releasePressureHierarchy();releaseFineAtlas();detailVelocity_.resource.Reset();releaseFlowmapAudit();flowmapBase_.resource.Reset();flowmapTotal_.resource.Reset();for(auto& r:coordinates_)r.resource.Reset();for(auto& r:velocity_)r.resource.Reset();for(auto& r:density_)r.resource.Reset();for(auto& r:pressure_)r.resource.Reset();divergence_.resource.Reset();curl_.resource.Reset();fluidReady_=false;allocationBytes_=uint64_t(width_)*height_*20;}
  lastScene_=assignment.scene;if(assignment.scene==Scene::Video){renderVideo(assignment,data,present);return;}data.width=float(width_);data.height=float(height_);begin();ID3D12DescriptorHeap* heaps[]={views_.Get()};list_->SetDescriptorHeaps(1,heaps);
  if(assignment.scene==Scene::Smoke){
+  // Smoke advances a simulation rather than sampling time in its scene shader.
+  // Apply the same Movement contract as the analytic Worlds, including zero.
+  data.dt*=data.movement;data.time*=data.movement;
+  if(data.movement<=0)data.reaction=0;
   data.grid=float(grid_);data.spare[2]=float(densityGridSize());for(unsigned axis=0;axis<3;axis++)data.spare[5+axis]=float(densityDimensions()[axis]);
   if(data.dt>0||!fluidReady_)simulate(data);
   if(fineAtlasEnabled_&&(data.dt>0||!fineAtlasReady_))stepFineAtlas(data);

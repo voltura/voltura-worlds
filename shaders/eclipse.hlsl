@@ -26,13 +26,16 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  float edge=r-radius;
  float aa=max(fwidth(r),1/resolution.y);
  // Integer angular harmonics meet exactly at atan2's -pi/+pi seam.
- float rays=1+.13*turbulence*sin(a*13+t*.16)+.075*turbulence*sin(a*29-t*.23);
- rays+=(.02+.03*quality)*detail*turbulence*sin(a*53+t*.31);
- float plume=.8+.2*sin(a*7-t*.09);
+ float broad=.5+.5*sin(a*3-t*.045+.7);
+ float rays=.5+.5*sin(a*13+t*.09+.65*broad);
+ rays+=.22*sin(a*29-t*.13);
+ rays+=(.04+.06*quality)*detail*sin(a*53+t*.17);
+ float plume=.45+.55*broad*broad;
  float outside=max(0,edge);
- float envelope=exp(-outside/(fit*(.034+.013*density)));
- float corona=envelope*max(.1,rays)*(.52+.16*plume+audio*.35);
- float rim=exp(-outside/max(.001,fit*.007));
+ float reach=fit*(.028+.017*density)*(.85+plume*turbulence*.60);
+ float envelope=exp(-outside/reach);
+ float corona=envelope*(.55+.45*saturate(rays))*(.65+.35*plume+audio*.25);
+ float rim=exp(-outside/max(.001,fit*.0035));
  float3 warm=float3(1,.39,.075),hot=float3(1,.72,.34);
  if(palette>.5&&palette<1.5){warm=float3(.035,.58,.45);hot=float3(.44,1,.85);}
  else if(palette>=1.5&&palette<2.5){warm=float3(.75,.12,.025);hot=float3(1,.55,.13);}

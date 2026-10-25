@@ -14,7 +14,7 @@ float3 bloomSurface(float2 uv){
  float3 p=float3(radius*cos(a),roll*sin(curl),radius*sin(a));
  p.y+=sin(a*7+sin(t*.6)*.5)*.20;
  p.y+=sin(a*3+t)*.045;
- p*=.90*(1+sin(t*.8)*.025+energy*reaction*.045);
+ p*=.90*(1+sin(t*.8)*.025+energy*reaction*step(.0001,movement)*.045);
  float tilt=.82+sin(t*.47)*.065;
  p.yz=float2(p.y*cos(tilt)-p.z*sin(tilt),p.y*sin(tilt)+p.z*cos(tilt));
  float turn=.20+sin(t*.34)*.15;

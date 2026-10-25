@@ -31,11 +31,16 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  float thickness=lerp(.026,.055,saturate(detail*.5));
  float ink=1-smoothstep(thickness,thickness+aa,distanceToLine);
  float3 tint=contourTint(height);
- float3 c=lerp(float3(.003,.008,.014),tint*.035,saturate(height));
- c+=tint*ink*(.45+audio*.28);
+ // Screen derivatives reuse the terrain evaluation, adding relief without
+ // additional fractal samples. The slope is normalized to scene coordinates.
+ float2 slope=float2(ddx(height),ddy(height))*resolution.y/3;
+ float3 normal=normalize(float3(-slope*.65,1));
+ float relief=saturate(dot(normal,normalize(float3(-.55,-.65,1))));
+ float3 c=lerp(float3(.003,.008,.014),tint*(.018+.065*relief),saturate(height));
+ c+=tint*ink*(.30+.20*relief+audio*.28);
  // Wider major contours give a quiet hierarchy instead of a uniform wire field.
  float majorDistance=abs(frac(bands*.2+.5)-.5)*5;
  float major=1-smoothstep(thickness*1.7,thickness*1.7+aa,majorDistance);
- c+=tint*major*.12;
+ c+=lerp(tint,float3(.72,.68,.48),.15)*major*.19;
  return float4(tone(c),1);
 }

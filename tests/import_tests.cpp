@@ -23,6 +23,9 @@ int wmain(int argc,wchar_t** argv){try{
  bool applied=false;auto callback=[&](const Assignment& assignment){require(assignment.scene==Scene::Orbit,"Wrong preset applied");applied=true;};
  showWorldImport(owner,file,root/L"library",L"Test display",callback);
  HWND dialog=FindWindowW(L"VolturaWorldImport",nullptr);require(dialog!=nullptr,"Missing import window");
+ // A completion from a previously closed dialog must never join this worker.
+ auto staleStart=GetTickCount64();SendMessageW(dialog,WM_APP+20,0,0);
+ require(GetTickCount64()-staleStart<250&&!IsWindowEnabled(GetDlgItem(dialog,IDOK)),"Stale import completion was accepted");
  require(await([&]{return IsWindowEnabled(GetDlgItem(dialog,IDOK))!=FALSE;}),"Validated package did not enable confirmation");
  require(!applied&&!std::filesystem::exists(root/L"library"),"Package installed before confirmation");
  require(FindWindowExW(dialog,nullptr,L"STATIC",L"Import preview test")!=nullptr,"Preview title missing");

@@ -15,6 +15,17 @@ with tempfile.TemporaryDirectory(prefix='Voltura-capture-time-') as directory:
     assert (root/'default/orbit.png').read_bytes() == (root/'zero/orbit.png').read_bytes()
     assert (root/'later/orbit.png').read_bytes() != (root/'zero/orbit.png').read_bytes()
     assert json.loads((root/'later/metrics.json').read_text())['startTimeOffsetSeconds'] == 500
+    timing_base = base.copy()
+    timing_base[timing_base.index('--frames')+1] = '16'
+    for name, options in [('timing-default', []), ('timing-warm', ['--timing-warmup', '12'])]:
+        subprocess.run(timing_base+['--scene','orbit','--capture-dir',str(root/name)]+options,check=True)
+    assert (root/'timing-default/orbit.png').read_bytes() == (root/'timing-warm/orbit.png').read_bytes()
+    timing = json.loads((root/'timing-warm/metrics.json').read_text())
+    assert timing['timingWarmupFrames'] == 12 and timing['timingSampleCount'] == 4
+    for index, value in enumerate(['-1', '36001', '1junk']):
+        result = subprocess.run(base+['--scene','orbit','--capture-dir',str(root/f'invalid-warmup-{index}'),
+                                     '--timing-warmup',value])
+        assert result.returncode != 0, value
     for i, (scene, value) in enumerate([('orbit','nan'),('orbit','inf'),('orbit','-1'),
                                         ('orbit','86401'),('orbit','1junk'),('smoke','1')]):
         result = subprocess.run(base+['--scene',scene,'--capture-dir',str(root/f'invalid{i}'),

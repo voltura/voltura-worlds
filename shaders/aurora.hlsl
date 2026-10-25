@@ -61,12 +61,15 @@ float3 fixedStars(float2 screenUV) {
 // The artwork contains no sky particles. All deformation is confined to it.
 float3 authoredAurora(float2 uv){
  float t=time*movement;
+ float audio=energy*reaction*step(.0001,movement);
  float aspect=resolution.x/resolution.y;
  float2 fit=float2(min(1,aspect/(1672.0/941.0)),min(1,(1672.0/941.0)/aspect));
  float2 p=(uv-.5)*fit+.5;
  float edge=saturate(16*p.x*(1-p.x)*p.y*(1-p.y));
- float2 displacement=float2(sin(p.y*5.3+t*.24)+.38*sin(p.y*11.1-t*.17),cos(p.x*5.7-t*.19)+.3*sin(p.y*7.3+t*.31));
- p+=displacement*float2(.018,.024)*edge*(1+energy*reaction*.2);
+ // Broad advection and a smaller counterflow evolve at different rates. Keep
+ // displacement subtle enough that the authored wisps retain their structure.
+ float2 displacement=float2(sin(p.y*4.3+t*.18)+.30*sin(p.y*9.1-t*.13),cos(p.x*4.7-t*.15)+.24*sin(p.y*6.3+t*.23));
+ p+=displacement*float2(.015,.020)*edge*(1+audio*.2);
  float3 sampleColor=sampleArtwork(p);
  // Invert the existing display curve to preserve authored contrast and color.
  float3 encoded=lerp(12.92*sampleColor,1.055*pow(max(sampleColor,0),1/2.4)-.055,step(.0031308,sampleColor));
@@ -74,7 +77,11 @@ float3 authoredAurora(float2 uv){
  if(palette>.5 && palette<1.5)radiance=radiance.gbr;
  else if(palette>=1.5 && palette<2.5)radiance=radiance.brg;
  else if(palette>=2.5)radiance=dot(radiance,float3(.2126,.7152,.0722));
- return radiance*(1+energy*reaction*.12);
+ // Dense crossings carry more light; the thin veils keep their dark-space
+ // separation. This reuses the authored signal instead of adding stripe noise.
+ float luminance=dot(radiance,float3(.2126,.7152,.0722));
+ radiance*=.90+.24*luminance/(.35+luminance);
+ return radiance*(1+audio*.12);
 }
 float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  float3 sky=fixedStars(uv);
