@@ -1,4 +1,6 @@
 #include "model.h"
+#include "random_cycle.h"
+#include <set>
 #include "package.h"
 #include "dds.h"
 #include <iostream>
@@ -20,10 +22,27 @@ int main(){try{
  require(boundedDelta(100)==.05f,"Resume timestep unbounded");require(boundedDelta(std::numeric_limits<float>::quiet_NaN())==0,"Nonfinite timestep");
  Parameters v;require(valid(v),"Default parameters invalid");v.brightness=std::numeric_limits<float>::infinity();require(!valid(v),"Infinite parameter accepted");rejects([]{parseScene("../evil");});
  auto dir=std::filesystem::temp_directory_path()/(L"VolturaWorlds-tests-"+std::to_wstring(GetCurrentProcessId()));std::filesystem::create_directories(dir);
+ {
+  Assignment random;random.random=true;random.randomInterval=30;RandomCycle cycle;
+  require(cycle.advance(random,0,true),"Random starts immediately");
+  require(!cycle.advance(random,30000,false),"Paused time does not consume interval");
+  require(!cycle.advance(random,29999,true),"Random does not switch early");
+  require(cycle.advance(random,1,true),"Random switches at exact interval");
+  cycle.reset();std::set<Scene> visited;Scene previous=random.scene;
+  for(size_t i=0;i<randomScenes.size()*3;i++){
+   require(cycle.advance(random,i?30000:0,true),"Random advances on schedule");
+   require(random.scene!=previous&&random.scene!=Scene::Off&&random.scene!=Scene::Video,"Random excludes Off, video and consecutive repeats");previous=random.scene;
+   visited.insert(random.scene);if(i%randomScenes.size()==randomScenes.size()-1){require(visited.size()==randomScenes.size(),"Complete shuffle has no repeats");visited.clear();}
+  }
+  Settings shuffle;shuffle.displays.emplace_back(L"random-monitor",random);saveSettings(dir,shuffle);
+  auto loadedRandom=assignmentFor(loadSettings(dir),L"random-monitor");require(loadedRandom.random&&loadedRandom.randomInterval==30,"Random settings persist");
+  random.random=false;require(!cycle.advance(random,999999,true),"Manual mode stops cycle");
+  shuffle.displays[0].second.randomInterval=0;rejects([&]{saveSettings(dir,shuffle);});
+ }
  require(parseScene("off")==Scene::Off&&sceneName(Scene::Off)=="off","Off scene identity failed");
  {Settings off;Assignment a;a.scene=Scene::Off;a.video=L"retained.mp4";off.displays.emplace_back(L"off-monitor",a);saveSettings(dir,off);auto restored=assignmentFor(loadSettings(dir),L"off-monitor");require(restored.scene==Scene::Off&&restored.video==a.video,"Off settings roundtrip preserves video");}
  require(parseScene("bloom")==Scene::Bloom&&sceneName(Scene::Bloom)=="bloom","Bloom scene identity failed");
- for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury}){
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples}){
   require(parseScene(sceneName(scene))==scene&&isProceduralWorld(scene),"Procedural World scene identity failed");
   Settings settings;Assignment world;world.scene=scene;world.params.palette=2;world.params.strength=.7f;world.reaction=Reaction::Gentle;settings.displays.emplace_back(L"world-monitor",world);saveSettings(dir,settings);
   auto restoredWorld=assignmentFor(loadSettings(dir),L"world-monitor");require(restoredWorld.scene==scene&&restoredWorld.params.palette==2&&restoredWorld.params.strength==.7f&&restoredWorld.reaction==Reaction::Gentle,"Procedural World settings roundtrip failed");
@@ -34,7 +53,7 @@ int main(){try{
  {std::ofstream out(dir/L"settings.json");out<<"{\"version\":999}";}rejects([&]{loadSettings(dir);});
  WorldPackage package;package.title="Test";package.assignment=a;package.preview={137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,2,0,0,0,2,8,6,0,0,0,114,182,13,36,0,0,0,21,73,68,65,84,120,156,99,100,104,248,255,159,129,129,129,129,9,68,128,48,0,37,25,2,130,143,80,141,6,0,0,0,0,73,69,78,68,174,66,96,130};
  {auto folded=package;folded.assignment.scene=Scene::Bloom;auto bloomFile=dir/L"bloom.world";writePackage(bloomFile,folded);require(readPackage(bloomFile).assignment.scene==Scene::Bloom,"Bloom package roundtrip failed");}
- for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury}){auto world=package;world.assignment.scene=scene;auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");}
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples}){auto world=package;world.assignment.scene=scene;auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");}
  auto file=dir/L"test.world";writePackage(file,package);auto loaded=readPackage(file);require(loaded.title=="Test"&&loaded.assignment.scene==Scene::Smoke,"Package roundtrip failed");
  {std::fstream out(file,std::ios::binary|std::ios::in|std::ios::out);out.seekp(50);out.put('!');}rejects([&]{readPackage(file);});
  writePackage(file,package);

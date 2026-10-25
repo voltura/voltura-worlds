@@ -59,7 +59,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  pipeline(L"video.cso",false,false,videoPipeline_,true);
  pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);
  pipeline(L"aurora.cso",false,false,aurora_);pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);pipeline(L"smoke.cso",false,false,smoke_);pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);
- const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"mercury.cso"};
+ const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"mercury.cso",L"ripples.cso"};
  for(unsigned i=0;i<proceduralWorlds_.size();i++)pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);
  auto cs=shader(dir,L"fluid.cso");D3D12_COMPUTE_PIPELINE_STATE_DESC cd{};cd.pRootSignature=root_.Get();cd.CS={cs.data(),cs.size()};check(device_->CreateComputePipelineState(&cd,IID_PPV_ARGS(&fluid_)),"Create fluid pipeline");
  auto coordinateCode=shader(dir,L"smoke_coordinates.cso");cd.CS={coordinateCode.data(),coordinateCode.size()};check(device_->CreateComputePipelineState(&cd,IID_PPV_ARGS(&coordinatePipeline_)),"Create detail coordinate pipeline");

@@ -14,7 +14,7 @@ import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SCENES = ('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse',
-          'lattice', 'drift', 'contour', 'mercury')
+          'lattice', 'drift', 'contour', 'mercury', 'ripples')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--scenes', nargs='+', choices=SCENES, default=list(SCENES),
                     help='Capture only these Worlds, retaining existing media for the others.')
@@ -53,14 +53,19 @@ def font(size, bold=False):
     return ImageFont.truetype(str(font_dir / ('segoeuib.ttf' if bold else 'segoeui.ttf')), size)
 draw.text((28, 19), 'voltura worlds', font=font(25), fill='#b5c2cc')
 draw.text((26, 58), 'Your desktop, alive.', font=font(67), fill='#f1f4f7')
-draw.text((30, 153), 'Ten native animated Worlds. Windows 11.', font=font(25), fill='#98eddc')
-for index, scene in enumerate(SCENES):
-    x = 28 + (index % 5) * 232
-    y = 219 + (index // 5) * 190
+draw.text((30, 153), 'Eleven native animated Worlds. Windows 11.', font=font(25), fill='#98eddc')
+# Feature Ripples, retaining the complete native frame.
+with Image.open(destination / 'ripples.jpg') as source:
+    tile = ImageOps.contain(source.convert('RGB'), (584, 329), Image.Resampling.LANCZOS)
+    preview.paste(tile, (28, 220))
+draw.text((28, 566), 'Ripples', font=font(28), fill='#f1f4f7')
+draw.text((150, 574), 'A moment by the water.', font=font(20), fill='#98eddc')
+for index, scene in enumerate(scene for scene in SCENES if scene != 'ripples'):
+    x = 644 + (index % 2) * 268
+    y = 207 + (index // 2) * 79
     with Image.open(destination / f'{scene}.jpg') as source:
-        # The complete 16:9 native frame is retained in every thumbnail.
-        tile = ImageOps.contain(source.convert('RGB'), (216, 122), Image.Resampling.LANCZOS)
+        tile = ImageOps.contain(source.convert('RGB'), (106, 60), Image.Resampling.LANCZOS)
         preview.paste(tile, (x, y))
-    draw.text((x, y + 132), scene.capitalize(), font=font(21), fill='#d5dce0')
+    draw.text((x + 117, y + 17), scene.capitalize(), font=font(19), fill='#d5dce0')
 preview.save(destination / 'social-preview.jpg', quality=93, subsampling=0)
-print('Updated social-preview.jpg: 1200 x 630, ten native-rendered Worlds.', flush=True)
+print('Updated social-preview.jpg: 1200 x 630, eleven native-rendered Worlds.', flush=True)

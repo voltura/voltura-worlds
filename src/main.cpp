@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "random_cycle.h"
 #include "updates.h"
 #include "desktop.h"
 #include "audio.h"
@@ -22,11 +23,12 @@
 using namespace worlds;
 namespace {
 constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3,renderStatusMessage=WM_APP+4;
-constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133;
+constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133,randomIntervalId=134;
 struct Visualization { Scene scene; const wchar_t* name; };
-constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
+constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
 constexpr int visualizationMenuBase=1000;
-struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;};
+constexpr int randomChoice=int(std::size(visualizations))-3;
+struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;};
 HWND controller{},library{},statusLabel{};HINSTANCE instance{};HFONT font{},headingFont{};
 HICON trayIcon{};
 std::vector<Surface> surfaces;std::vector<std::pair<std::wstring,std::wstring>> audioDevices;
@@ -91,7 +93,8 @@ void setControlText(HWND child,const std::wstring& text){
 std::filesystem::path executable(){wchar_t path[32768];DWORD n=GetModuleFileNameW(nullptr,path,32768);return std::filesystem::path(std::wstring(path,n));}
 void error(const std::exception& e){if(automated){std::ofstream out(exeDir/L"capture-error.txt");out<<e.what();return;}MessageBoxW(library?library:controller,wide(e.what()).c_str(),L"Voltura Worlds",MB_OK|MB_ICONWARNING);}
 void requestSave(){savePending=true;saveCv.notify_one();}
-Assignment& selected(){int i=int(SendDlgItemMessageW(library,monitorId,CB_GETCURSEL,0,0));if(i<0||i>=int(surfaces.size()))i=0;const auto& id=surfaces.at(i).monitor.id;for(auto& [key,a]:settings.displays)if(key==id)return a;settings.displays.emplace_back(id,Assignment{});return settings.displays.back().second;}
+Surface& selectedSurface(){int i=int(SendDlgItemMessageW(library,monitorId,CB_GETCURSEL,0,0));if(i<0||i>=int(surfaces.size()))i=0;return surfaces.at(i);}
+Assignment& selected(){const auto& id=selectedSurface().monitor.id;for(auto& [key,a]:settings.displays)if(key==id)return a;settings.displays.emplace_back(id,Assignment{});return settings.displays.back().second;}
 HWND control(const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int w,int h,int id){
  if(!wcscmp(type,L"BUTTON")&&(style&BS_TYPEMASK)!=BS_AUTOCHECKBOX)style=(style&~DWORD(BS_TYPEMASK))|BS_OWNERDRAW;
  HWND hwnd=CreateWindowExW(0,type,text,WS_CHILD|WS_VISIBLE|style,px(x),px(y),px(w),px(h),library,(HMENU)(INT_PTR)id,instance,nullptr);SendMessageW(hwnd,WM_SETFONT,(WPARAM)font,TRUE);
@@ -139,13 +142,16 @@ void syncControls(){
  int dev=0;for(size_t i=0;i<audioDevices.size();i++)if(audioDevices[i].first==settings.audioDevice)dev=int(i)+1;setComboSelection(deviceId,dev);
  setComboSelection(videoFitId,a.fit?1:0);EnableWindow(GetDlgItem(library,videoFitId),a.scene==Scene::Video);
  EnableWindow(GetDlgItem(library,reactionId),a.scene!=Scene::Video&&a.scene!=Scene::Off);EnableWindow(GetDlgItem(library,paletteId),a.scene!=Scene::Video&&a.scene!=Scene::Off);for(int id=200;id<207;id++)EnableWindow(GetDlgItem(library,id),a.scene!=Scene::Video&&a.scene!=Scene::Off);
- auto scene=wide(sceneName(a.scene));std::wstring text=previewMode?L"Preview mode · ":L"Desktop · ";text+=scene;text+=L"   |   Audio ";text+=a.reaction==Reaction::Off?L"off":a.reaction==Reaction::Gentle?L"gentle":L"expressive";if(pauseState.manual)text+=L"   |   Paused";if(!lastError.empty())text+=L"   |   "+lastError;
+ auto scene=wide(sceneName(a.scene));if(a.random)scene=L"Random · "+scene;std::wstring text=previewMode?L"Preview mode · ":L"Desktop · ";text+=scene;text+=L"   |   Audio ";text+=a.reaction==Reaction::Off?L"off":a.reaction==Reaction::Gentle?L"gentle":L"expressive";if(pauseState.manual)text+=L"   |   Paused";if(!lastError.empty())text+=L"   |   "+lastError;
  setControlText(statusLabel,text);
  int videoChoice=int(std::size(visualizations))-1;
  auto count=SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0);
  if(!a.video.empty()&&count==videoChoice)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(visualizations[videoChoice].name));
  else if(a.video.empty()&&count>videoChoice)SendDlgItemMessageW(library,visualizationId,CB_DELETESTRING,videoChoice,0);
- int choice=-1;for(size_t i=0;i<std::size(visualizations);i++)if(visualizations[i].scene==a.scene)choice=int(i);
+ int choice=-1;for(size_t i=0;i<std::size(visualizations);i++)if(int(i)!=randomChoice&&visualizations[i].scene==a.scene)choice=int(i);
+ if(a.random)choice=randomChoice;
+ auto interval=std::find(randomIntervals.begin(),randomIntervals.end(),a.randomInterval);
+ setComboSelection(randomIntervalId,int(interval-randomIntervals.begin()));EnableWindow(GetDlgItem(library,randomIntervalId),a.random);
  setComboSelection(visualizationId,choice);
 } 
 // Both entry points share the catalog and keep imported video available to return to.
@@ -154,7 +160,10 @@ bool selectVisualization(int choice){
   if(surfaces.empty()||choice<0||choice>=int(std::size(visualizations)))return false;
   auto& a=selected();auto scene=visualizations[choice].scene;
   if(scene==Scene::Video&&a.video.empty())return false;
-  a.scene=scene;requestSave();
+  a.random=choice==randomChoice;
+  if(!a.random)a.scene=scene;
+  auto& cycle=selectedSurface().randomCycle;cycle.reset();if(a.random)cycle.advance(a,0,true);
+  requestSave();
  }
  syncControls();return true;
 }
@@ -165,11 +174,23 @@ HMENU visualizationMenu(){
   auto scene=visualizations[i].scene;
   if(available&&scene==Scene::Video&&selected().video.empty())continue;
   UINT flags=MF_OWNERDRAW|(available?0:MF_GRAYED);
-  if(available&&selected().scene==scene)flags|=MF_CHECKED;
+  if(available&&(selected().random?int(i)==randomChoice:(int(i)!=randomChoice&&selected().scene==scene)))flags|=MF_CHECKED;
   AppendMenuW(menu,flags,visualizationMenuBase+i,visualizations[i].name);
  }
  MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);return menu;
 
+}
+void advanceRandomVisualizations(uint64_t elapsed){
+ bool changed=false;
+ {std::lock_guard lock(stateMutex);
+  for(auto& surface:surfaces){
+   auto entry=std::find_if(settings.displays.begin(),settings.displays.end(),[&](const auto& item){return item.first==surface.monitor.id;});
+   if(entry==settings.displays.end())continue;
+   auto pause=pauseState;pause.covered=surface.covered;
+   changed|=surface.randomCycle.advance(entry->second,elapsed,IsWindow(surface.hwnd)&&!shouldPause(pause,settings.pauseBattery));
+  }
+ }
+ if(changed)syncControls();
 }
 void startRendering(){
  renderingProblem=false;auto generation=++renderGeneration;
@@ -274,7 +295,7 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  if(msg==WM_COMMAND){int id=LOWORD(w),event=HIWORD(w);
   // Focus/open/close notifications must not reset a combo while its mouse
   // selection is in progress. Only committed selection changes update state.
-  bool dropdown=id==visualizationId||id==monitorId||id==reactionId||id==qualityId||id==fpsId||id==paletteId||id==deviceId||id==videoFitId;
+  bool dropdown=id==randomIntervalId||id==visualizationId||id==monitorId||id==reactionId||id==qualityId||id==fpsId||id==paletteId||id==deviceId||id==videoFitId;
   if(dropdown&&event!=CBN_SELCHANGE)return 0;
   if(!dropdown&&event!=BN_CLICKED)return 0;
   if(id==advancedId){
@@ -299,8 +320,8 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(id==retryId){previewMode=false;createSurfaces();syncControls();return 0;}
   if(id==pauseId){{std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}syncControls();return 0;}
   {std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;auto& a=selected();
-   if(id==applyAllId){auto copy=a;for(auto& s:surfaces){bool found=false;for(auto& [key,entry]:settings.displays)if(key==s.monitor.id){entry=copy;found=true;break;}if(!found)settings.displays.emplace_back(s.monitor.id,copy);}}
-   else if(event==CBN_SELCHANGE){int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(id==reactionId)a.reaction=Reaction(value);if(id==qualityId)settings.quality=Quality(value);if(id==fpsId)settings.fps=value==0?30:60;if(id==paletteId)a.params.palette=value;if(id==videoFitId)a.fit=value==1;if(id==deviceId)settings.audioDevice=value>0?audioDevices.at(value-1).first:L"";}
+   if(id==applyAllId){auto copy=a;for(auto& s:surfaces){bool found=false;for(auto& [key,entry]:settings.displays)if(key==s.monitor.id){entry=copy;found=true;break;}if(!found)settings.displays.emplace_back(s.monitor.id,copy);s.randomCycle.reset(true);}}
+   else if(event==CBN_SELCHANGE){int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(id==randomIntervalId&&value>=0&&value<int(randomIntervals.size())){a.randomInterval=randomIntervals[value];selectedSurface().randomCycle.reset(true);}if(id==reactionId)a.reaction=Reaction(value);if(id==qualityId)settings.quality=Quality(value);if(id==fpsId)settings.fps=value==0?30:60;if(id==paletteId)a.params.palette=value;if(id==videoFitId)a.fit=value==1;if(id==deviceId)settings.audioDevice=value>0?audioDevices.at(value-1).first:L"";}
    else if(id==batteryId)settings.pauseBattery=SendDlgItemMessageW(hwnd,id,BM_GETCHECK,0,0)==BST_CHECKED;
    requestSave();}
   syncControls();return 0;
@@ -315,7 +336,8 @@ void showLibrary(){
  uiDpi=GetDpiForWindow(library);updateUiFonts();ui::refresh(library);
  HWND title=control(L"STATIC",L"Your desktop, alive.",0,28,20,700,42,0);SendMessageW(title,WM_SETFONT,(WPARAM)headingFont,TRUE);label(L"Choose a World. Make it yours.",30,65,690);
  label(L"Display",30,108,110);combo(monitorId,150,102,570,{});for(auto& s:surfaces)SendDlgItemMessageW(library,monitorId,CB_ADDSTRING,0,(LPARAM)s.monitor.name.c_str());SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,0,0);
- label(L"Visualization",30,158,120);combo(visualizationId,155,152,565,{});for(auto& v:visualizations)if(v.scene!=Scene::Video)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(v.name));
+ label(L"Visualization",30,158,120);combo(visualizationId,155,152,345,{});for(auto& v:visualizations)if(v.scene!=Scene::Video)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(v.name));
+ combo(randomIntervalId,515,152,205,{L"Every 30 seconds",L"Every 1 minute",L"Every 2 minutes",L"Every 5 minutes",L"Every 10 minutes",L"Every 15 minutes",L"Every 30 minutes"});
  label(L"Audio reaction",30,232,120);combo(reactionId,155,226,170,{L"Off",L"Gentle",L"Expressive"});label(L"Palette",355,232,80);combo(paletteId,435,226,285,{L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"});
  control(L"BUTTON",L"Import video…",WS_TABSTOP,30,273,165,34,videoImportId);control(L"BUTTON",L"Import World…",WS_TABSTOP,205,273,165,34,importId);
  control(L"BUTTON",L"+  Advanced settings",WS_TABSTOP,385,273,210,34,advancedId);control(L"BUTTON",L"Reset settings",WS_TABSTOP,605,273,115,34,resetId);
@@ -390,7 +412,8 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
 
   if(automaticUpdates&&!sessionEnding&&GetTickCount64()>=nextUpdateCheck){nextUpdateCheck=GetTickCount64()+3600000;updates.check();}
   if(!previewMode&&GetTickCount64()>=nextDesktopRetry&&(surfaces.empty()||std::any_of(surfaces.begin(),surfaces.end(),[](const Surface& s){return !wallpaperAttached(s.hwnd);})))createSurfaces();
-  SYSTEM_POWER_STATUS power{};GetSystemPowerStatus(&power);std::vector<bool> covered;for(auto& s:surfaces)covered.push_back(!previewMode&&monitorCovered(s.monitor,GetCurrentProcessId()));std::lock_guard lock(stateMutex);pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}return 0;
+  static ULONGLONG previousRandomTick=GetTickCount64();auto now=GetTickCount64();auto elapsed=std::min<ULONGLONG>(now-previousRandomTick,2000);previousRandomTick=now;
+  SYSTEM_POWER_STATUS power{};GetSystemPowerStatus(&power);std::vector<bool> covered;for(auto& s:surfaces)covered.push_back(!previewMode&&monitorCovered(s.monitor,GetCurrentProcessId()));{std::lock_guard lock(stateMutex);pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}advanceRandomVisualizations(elapsed);}return 0;
  case WM_WTSSESSION_CHANGE:{std::lock_guard lock(stateMutex);if(w==WTS_SESSION_LOCK)pauseState.locked=true;if(w==WTS_SESSION_UNLOCK)pauseState.locked=false;}return 0;
  case WM_POWERBROADCAST:{std::lock_guard lock(stateMutex);if(w==PBT_APMSUSPEND)pauseState.suspended=true;if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND)pauseState.suspended=false;if(w==PBT_POWERSETTINGCHANGE){auto p=reinterpret_cast<POWERBROADCAST_SETTING*>(l);if(p->PowerSetting==GUID_CONSOLE_DISPLAY_STATE&&p->DataLength==sizeof(DWORD)){DWORD state;memcpy(&state,p->Data,sizeof(state));pauseState.asleep=state==0;}}}return TRUE;
  case WM_DISPLAYCHANGE:createSurfaces();return 0;
@@ -492,9 +515,9 @@ int captureMode(const std::vector<std::wstring>& args){
   }
   if(std::find(args.begin(),args.end(),L"--aurora-procedural")!=args.end())data.spare[1]=1;
   if(std::find(args.begin(),args.end(),L"--validate-lifecycle")!=args.end()){
-   const Scene lifecycleScenes[]={Scene::Aurora,Scene::Orbit,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury};
-   for(int cycle=0;cycle<20;cycle++){
-    a.scene=lifecycleScenes[cycle%10];renderer.resize(cycle%2?width:640,cycle%2?height:360);
+   const Scene lifecycleScenes[]={Scene::Aurora,Scene::Orbit,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples};
+   for(size_t cycle=0;cycle<std::size(lifecycleScenes)*2;cycle++){
+    a.scene=lifecycleScenes[cycle%std::size(lifecycleScenes)];renderer.resize(cycle%2?width:640,cycle%2?height:360);
     for(int frame=0;frame<8;frame++){data.time+=data.dt;renderer.render(a,data,false);}
     renderer.validateDebugMessages();
    }
@@ -507,6 +530,9 @@ int captureMode(const std::vector<std::wstring>& args){
   data.density=captureParameter(L"--density");data.movement=captureParameter(L"--movement");data.brightness=captureParameter(L"--brightness");data.detail=captureParameter(L"--detail");data.flow=captureParameter(L"--flow");data.turbulence=captureParameter(L"--turbulence");
   auto paletteOption=option(L"--palette",L"0");size_t paletteConsumed{};int palette=std::stoi(paletteOption,&paletteConsumed);if(paletteConsumed!=paletteOption.size()||palette<0||palette>3)throw std::runtime_error("Capture palette must be 0 to 3");data.palette=float(palette);
   auto qualityOption=option(L"--quality",L"auto");int quality=qualityOption==L"eco"?0:qualityOption==L"auto"?1:qualityOption==L"high"?2:-1;if(quality<0)throw std::runtime_error("Capture quality must be eco, auto or high");if(isProceduralWorld(scene))data.spare[0]=float(quality);
+  auto rippleProbe=option(L"--ripples-probe",L"0");size_t rippleConsumed{};int rippleMode=std::stoi(rippleProbe,&rippleConsumed);
+  if(rippleConsumed!=rippleProbe.size()||rippleMode<0||rippleMode>6||(rippleMode&&scene!=Scene::Ripples))throw std::runtime_error("Ripples probe requires the ripples scene and a mode from 0 to 6");
+  if(scene==Scene::Ripples)data.spare[1]=float(rippleMode);
   auto reactionOption=option(L"--reaction",L"off");a.reaction=reactionOption==L"off"?Reaction::Off:reactionOption==L"gentle"?Reaction::Gentle:reactionOption==L"expressive"?Reaction::Expressive:Reaction(-1);if(int(a.reaction)<0)throw std::runtime_error("Capture reaction must be off, gentle or expressive");
   float strength=std::find(args.begin(),args.end(),L"--strength")==args.end()?.5f:captureParameter(L"--strength");if(strength>1)throw std::runtime_error("Capture strength must be 0 to 1");data.reaction=(a.reaction==Reaction::Off?0.f:a.reaction==Reaction::Gentle?.35f:1.f)*strength;
   auto audioParameter=[&](const wchar_t* key){return std::find(args.begin(),args.end(),key)==args.end()?0.f:captureParameter(key);};data.bass=audioParameter(L"--bass");data.mid=audioParameter(L"--mid");data.treble=audioParameter(L"--treble");data.energy=audioParameter(L"--energy");data.impulse=audioParameter(L"--impulse");

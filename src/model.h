@@ -8,7 +8,7 @@
 #include <atomic>
 #include <chrono>
 namespace worlds {
-enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, Mercury };
+enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, Mercury, Ripples };
 enum class Quality { Eco, Auto, High };
 enum class Reaction { Off, Gentle, Expressive };
 struct Parameters {
@@ -21,6 +21,8 @@ struct Assignment {
     Reaction reaction=Reaction::Off;
     std::wstring video;
     bool fit=false;
+    bool random=false;
+    int randomInterval=300;
 };
 struct Settings {
     Quality quality=Quality::Auto;

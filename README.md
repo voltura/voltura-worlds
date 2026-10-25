@@ -21,11 +21,17 @@
 | Bioluminescent currents | Living topographic lines | Merging metallic forms |
 | [Watch](https://worlds.voltura.se/assets/drift.mp4) | [Watch](https://worlds.voltura.se/assets/contour.mp4) | [Watch](https://worlds.voltura.se/assets/mercury.mp4) |
 
+| Ripples |
+| --- |
+| Reflective water, intersecting drops, wind ripples and a translucent pebbled bottom |
+| [Watch](https://worlds.voltura.se/assets/ripples.mp4) |
+
 The product site shows recordings from the native Direct3D renderer, at their original animation speed. 
 
 ## What it does
 
 - Animates behind your desktop icons, with a World and settings for each display.
+- Shuffles all eleven Worlds with **Random**, with a saved interval for each display.
 - Offers optional Gentle or Expressive audio reaction using local playback analysis. Audio is not recorded or uploaded.
 - Pauses on battery by default, and for fully covered displays, lock, sleep and remote sessions.
 - Imports personal SDR H.264 MP4 videos and data-only `.world` packages.
@@ -34,9 +40,9 @@ The product site shows recordings from the native Direct3D renderer, at their or
 
 ## Current release
 
-**Version 0.1.6** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.6/VolturaWorlds-Setup-0.1.6-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.6). Includes all ten Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.7** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.7/VolturaWorlds-Setup-0.1.7-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.7). Includes all eleven Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
-This release refines lighting, materials and motion across the collection, fixes frozen Movement and Orbit brightness controls, and improves tray-menu scaling. Advanced settings now lets the World show through the library. Rendering recovers per display after an error, and cancelling an import keeps the UI responsive. The product site's recordings and social preview show the updated native renderer.
+This release adds **Ripples**: reflective water with overlapping drop waves, gentle wind ripples, moving clouds, and a shallow-to-deep sandy bottom with varied pebbles. **Random** rotates through all eleven Worlds without immediate repeats, with a configurable interval for each display. The product site includes a native Ripples recording and an updated social preview.
 
 Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 

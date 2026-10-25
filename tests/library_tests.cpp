@@ -127,12 +127,19 @@ void CALLBACK captureMenu(HWND,UINT,UINT_PTR timer,DWORD){
   bmi.bmiHeader={sizeof(BITMAPINFOHEADER),width,-height,1,32,BI_RGB};void* bits{};
   auto bitmap=CreateDIBSection(screen,&bmi,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(dc,bitmap);PrintWindow(popup,dc,2);
   int top=height,bottom=-1;
+  // ClearType's edge pixels need not equal the foreground exactly, especially
+  // at 96 DPI. Measure at least half text coverage against the menu background
+  // while retaining the same row-height and rendered-glyph-size requirements.
+  int fr=GetRValue(ui::foreground)-GetRValue(ui::surface),fg=GetGValue(ui::foreground)-GetGValue(ui::surface),fb=GetBValue(ui::foreground)-GetBValue(ui::surface);
+  int contrast=fr*fr+fg*fg+fb*fb;
   for(int y=std::max(0,int(row.top-window.top));y<std::min(height,int(row.bottom-window.top));y++)
    for(int x=MulDiv(40,menuDpi,96);x<std::min(width,MulDiv(190,menuDpi,96));x++){
     auto pixel=static_cast<DWORD*>(bits)[y*width+x];
-    if((pixel&0xffffff)==(DWORD(GetRValue(ui::foreground))<<16|DWORD(GetGValue(ui::foreground))<<8|GetBValue(ui::foreground))){top=std::min(top,y);bottom=std::max(bottom,y);}
+    int coverage=(int((pixel>>16)&255)-GetRValue(ui::surface))*fr+(int((pixel>>8)&255)-GetGValue(ui::surface))*fg+(int(pixel&255)-GetBValue(ui::surface))*fb;
+    if(coverage*2>=contrast){top=std::min(top,y);bottom=std::max(bottom,y);}
    }
   nativeMenuScaleCorrect=std::abs((row.bottom-row.top)-MulDiv(36,menuDpi,96))<=2&&bottom-top+1>=MulDiv(9,menuDpi,96)&&bottom-top+1<=MulDiv(18,menuDpi,96);
+  if(!nativeMenuScaleCorrect)std::cerr<<"Menu DPI="<<menuDpi<<" row="<<(row.bottom-row.top)<<" ink="<<(bottom-top+1)<<" window="<<width<<"x"<<height<<" rowY="<<(row.top-window.top)<<"\n";
   SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(nullptr,screen);
  }
  EndMenu();KillTimer(nullptr,timer);
@@ -173,16 +180,27 @@ int wmain(int argc,wchar_t** argv){
   requireUi(selectVisualization(2)&&selected().scene==Scene::Smoke,"Quick switch updates selected display");
   requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==2,"Quick switch synchronizes dropdown");
   requireUi(selectVisualization(3)&&selected().scene==Scene::Bloom,"Bloom can be selected from the catalog");
-  for(int i=4;i<offChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
+  for(int i=4;i<randomChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
   requireUi(!selectVisualization(videoChoice)&&!selectVisualization(-1),"Unavailable video and invalid selections leave scene intact");
   // Real native surfaces on the test desktop prove that Off reveals the desktop
   // and affects only the selected display, including Apply to all displays.
   for(auto& surface:surfaces)surface.hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,L"STATIC",L"Off test surface",WS_POPUP|WS_VISIBLE,0,0,32,32,nullptr,nullptr,instance,nullptr);
+  selectVisualization(randomChoice);requireUi(selected().random&&selected().scene!=Scene::Off,"Random starts a built-in visualization");
+  requireUi(IsWindowEnabled(GetDlgItem(library,randomIntervalId)),"Random interval is enabled");
+  mouseSelect(randomIntervalId,0);requireUi(selected().randomInterval==30,"Random interval is configurable");
+  if(argc>1){auto out=std::filesystem::path(argv[1]);std::filesystem::create_directories(out);pump();screenshot(out/L"random.bmp");}
+  auto randomScene=selected().scene;advanceRandomVisualizations(29000);requireUi(selected().scene==randomScene,"Random retains scene until interval");
+  pauseState.manual=true;advanceRandomVisualizations(30000);requireUi(selected().scene==randomScene,"Random respects pause");pauseState.manual=false;
+  advanceRandomVisualizations(1000);requireUi(selected().scene!=randomScene&&selected().random,"Random switches after active interval");
+  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==randomChoice,"Random selection survives automatic switching");
+  menu=visualizationMenu();requireUi(GetMenuState(menu,visualizationMenuBase+randomChoice,MF_BYCOMMAND)&MF_CHECKED,"Tray marks Random");DestroyMenu(menu);
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).random,"Apply to all copies Random mode");
   mouseSelect(visualizationId,offChoice);requireUi(selected().scene==Scene::Off&&!IsWindowVisible(surfaces[0].hwnd)&&IsWindowVisible(surfaces[1].hwnd),"Off dropdown hides only the selected display");
   menu=visualizationMenu();requireUi((GetMenuState(menu,visualizationMenuBase+offChoice,MF_BYCOMMAND)&MF_CHECKED)!=0,"Context menu marks Off checked");DestroyMenu(menu);
   requireUi(selectVisualization(0)&&IsWindowVisible(surfaces[0].hwnd),"Selecting a World restores its surface");
   requireUi(selectVisualization(offChoice)&&!IsWindowVisible(surfaces[0].hwnd),"Context menu Off hides the surface");
   SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(!IsWindowVisible(surfaces[1].hwnd)&&assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Off,"Apply to all hides every display");
+  requireUi(!selected().random&&!IsWindowEnabled(GetDlgItem(library,randomIntervalId)),"Manual selection stops Random");
   selectVisualization(0);SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(IsWindowVisible(surfaces[1].hwnd),"Apply to all restores every display");
   for(auto& surface:surfaces){DestroyWindow(surface.hwnd);surface.hwnd=nullptr;}
   mouseSelect(monitorId,1);mouseSelect(paletteId,2);requireUi(selected().params.palette==2,"Palette model changes");

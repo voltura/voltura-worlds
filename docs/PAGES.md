@@ -8,11 +8,11 @@
 python -m http.server 8080 --bind 127.0.0.1 --directory site
 ```
 
-Visit `http://127.0.0.1:8080`. Stop the server with Ctrl+C when finished. Verify all ten scene choices, play/pause, fullscreen, narrow layouts, keyboard focus and reduced-motion behavior. Visitors who prefer reduced motion see a still until they choose Play.
+Visit `http://127.0.0.1:8080`. Stop the server with Ctrl+C when finished. Verify all eleven scene choices, play/pause, fullscreen, narrow layouts, keyboard focus and reduced-motion behavior. Visitors who prefer reduced motion see a still until they choose Play.
 
 ## Native media
 
-The ten 1600 × 900, eight-second, silent clips are captured directly by the app's native renderer at 30 frames per second. They use ordinary scene settings, without capture-only visual experiments, interpolation or retiming. They show actual native graphics, not the approved concept mockups or proof of physical desktop attachment. Only the selected clip plays; it pauses when hidden or out of view. Posters remain available when video playback is blocked. The 1200 × 630 social preview is composed from these same native posters and includes all ten Worlds.
+The eleven 1600 × 900, eight-second, silent clips are captured directly by the app's native renderer at 30 frames per second. They use ordinary scene settings, without capture-only visual experiments, interpolation or retiming. They show actual native graphics, not the approved concept mockups or proof of physical desktop attachment. Only the selected clip plays; it pauses when hidden or out of view. Posters remain available when video playback is blocked. The 1200 × 630 social preview is composed from these same native posters and features Ripples beside native thumbnails of the other ten Worlds.
 
 To regenerate after building the app, install the development tools with `python -m pip install -r requirements-dev.txt` (the script also supports `.deps/python`) and run:
 
@@ -20,10 +20,10 @@ To regenerate after building the app, install the development tools with `python
 python scripts/capture-site-media.py
 ```
 
-To refresh just the six Worlds introduced in 0.1.5 while retaining unchanged original recordings:
+To refresh Ripples while retaining the other recordings:
 
 ```powershell
-python scripts/capture-site-media.py --scenes silk eclipse lattice drift contour mercury
+python scripts/capture-site-media.py --scenes ripples
 ```
 
 The social preview is regenerated after capture. To regenerate only that preview from existing native posters, use `--social-only`.

@@ -12,12 +12,20 @@ const listeners = () => ({
 const video = { ...listeners(), paused: true, plays: 0,
   play() { this.paused = false; this.plays++; this.emit('play'); return Promise.resolve(); },
   pause() { this.paused = true; this.emit('pause'); },
+  source: { src: 'assets/aurora.mp4' },
+  querySelector() { return this.source; },
+  load() {},
 };
-const toggle = listeners(), cinema = {}, expand = listeners();
+const html = fs.readFileSync(path.join(__dirname, '../site/index.html'), 'utf8');
+const worlds = [...html.matchAll(/data-world="([a-z]+)"/g)].map(match => ({
+  ...listeners(), dataset: { world: match[1] }, classList: { toggle() {} },
+}));
+const toggle = listeners(), cinema = { dataset: { scene: 'aurora' } }, expand = listeners();
 const motion = { ...listeners(), matches: false };
-const elements = { '#world-video': video, '#play-toggle': toggle, '.cinema': cinema, '#fullscreen': expand };
+const elements = { '#world-video': video, '#play-toggle': toggle, '.cinema': cinema, '#fullscreen': expand,
+  '#scene-number': {}, '#scene-title': {}, '#scene-description': {} };
 const document = { ...listeners(), hidden: false,
-  querySelector: selector => elements[selector], querySelectorAll: () => [],
+  querySelector: selector => elements[selector], querySelectorAll: () => worlds,
 };
 let intersection;
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../site/script.js'), 'utf8'), {
@@ -40,4 +48,15 @@ assert.equal(video.plays, 2);
 toggle.emit('click');
 visible(false); visible(true);
 assert.equal(video.plays, 2, 'Explicit pause must survive leaving and returning to the viewport');
+assert.equal(worlds.length, 11, 'All eleven native Worlds must be selectable');
+for (const button of worlds.slice(1)) {
+  button.emit('click');
+  assert.equal(video.source.src, `assets/${button.dataset.world}.mp4`);
+  assert.equal(video.poster, `assets/${button.dataset.world}.jpg`);
+  assert.match(elements['#scene-number'].textContent, / \/ 11$/);
+  assert.equal(video.plays, 2, 'Choosing a scene must preserve explicit pause');
+}
+assert.equal(elements['#scene-title'].textContent, 'Ripples');
+assert.match(elements['#scene-description'].textContent, /water/);
 console.log('PASS: offscreen, tab visibility, motion preference and explicit pause transitions');
+console.log('PASS: eleven scene selections, matching posters/clips, counters and Ripples description');
