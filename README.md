@@ -38,6 +38,8 @@ The product site shows recordings from the native Direct3D renderer, at their or
 - Provides a themed Windows library, advanced controls and a notification-area menu.
 - Leaves your ordinary Windows wallpaper intact. Choose **Off** to reveal it, or **Exit Worlds** to stop the app.
 
+Current source builds add **Mars** beside Orbit: an 8K NASA/USGS globe with MOLA terrain relief, thin atmospheric scattering, distance-based sunlight and calm rotation. Its advanced controls adjust terrain relief, camera drift, dust and atmosphere, with natural color grades and subtle audio response. See [Mars imagery and controls](assets/mars/ATTRIBUTION.md).
+
 ## Current release
 
 **Version 0.1.7** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.7/VolturaWorlds-Setup-0.1.7-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.7). Includes all eleven Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.

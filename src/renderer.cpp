@@ -56,6 +56,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
   pd.DepthStencilState.DepthEnable=geometry;pd.DepthStencilState.DepthWriteMask=alpha?D3D12_DEPTH_WRITE_MASK_ZERO:D3D12_DEPTH_WRITE_MASK_ALL;pd.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_LESS_EQUAL;
   auto& b=pd.BlendState.RenderTarget[0];b.RenderTargetWriteMask=alpha?(D3D12_COLOR_WRITE_ENABLE_RED|D3D12_COLOR_WRITE_ENABLE_GREEN|D3D12_COLOR_WRITE_ENABLE_BLUE):D3D12_COLOR_WRITE_ENABLE_ALL;b.BlendEnable=alpha;b.SrcBlend=D3D12_BLEND_SRC_ALPHA;b.DestBlend=D3D12_BLEND_INV_SRC_ALPHA;b.BlendOp=D3D12_BLEND_OP_ADD;b.SrcBlendAlpha=D3D12_BLEND_ONE;b.DestBlendAlpha=D3D12_BLEND_ZERO;b.BlendOpAlpha=D3D12_BLEND_OP_ADD;
   check(device_->CreateGraphicsPipelineState(&pd,IID_PPV_ARGS(&output)),"Create scene pipeline");};
+ pipeline(L"mars.cso",false,true,mars_,false,orbitSamples_);pipeline(L"mars_space.cso",false,false,marsSpace_,false,orbitSamples_);
  pipeline(L"video.cso",false,false,videoPipeline_,true);
  pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);
  pipeline(L"aurora.cso",false,false,aurora_);pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);pipeline(L"smoke.cso",false,false,smoke_);pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);
@@ -112,10 +113,23 @@ void Renderer::makeOrbitTargets(){
  auto dsv=dsv_->GetCPUDescriptorHandleForHeapStart();dsv.ptr+=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);device_->CreateDepthStencilView(depth.Get(),nullptr,dsv);
  orbitColor_=std::move(color);orbitDepth_=std::move(depth);orbitTargetBytes_=bytes;
 }
-void Renderer::loadPlanet(){
+void Renderer::loadStars(){
+ if(starTexture_)return;
  loadDds(assetDirectory_/L"orbit"/L"runtime"/L"milkyway-2020.dds",starTexture_,82);
  D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
  device_->CreateShaderResourceView(nullptr,&empty,cpu(83));device_->CreateShaderResourceView(nullptr,&empty,cpu(84));
+}
+void Renderer::loadMars(){
+ if(marsColor_&&marsNormal_)return;
+ // 393..395 are outside Smoke transport and tracer descriptor ranges.
+ loadStars();
+ loadDds(assetDirectory_/L"mars"/L"runtime"/L"mars-color.dds",marsColor_,393);
+ loadDds(assetDirectory_/L"mars"/L"runtime"/L"mars-normal.dds",marsNormal_,394);
+ D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&empty,cpu(395));
+}
+void Renderer::loadPlanet(){
+ loadStars();
  loadDds(assetDirectory_/L"orbit"/L"runtime"/L"earth-january.dds",planetTexture_,72);
  loadDds(assetDirectory_/L"orbit"/L"runtime"/L"earth-clouds-8192.dds",cloudTexture_,73);
  loadTexture(assetDirectory_/L"orbit"/L"earth-night-2016.jpg",nightTexture_,74,4096,true);
@@ -594,17 +608,20 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
- if(lastScene_==Scene::Orbit&&assignment.scene!=Scene::Orbit){
+ if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars)){
   idle();
   auto releaseTexture=[&](ComPtr<ID3D12Resource>& texture){
    if(!texture)return;
    auto desc=texture->GetDesc();assetBytes_-=device_->GetResourceAllocationInfo(0,1,&desc).SizeInBytes;texture.Reset();
   };
-  releaseTexture(planetTexture_);releaseTexture(cloudTexture_);releaseTexture(nightTexture_);releaseTexture(starTexture_);
+  if(lastScene_==Scene::Orbit){releaseTexture(planetTexture_);releaseTexture(cloudTexture_);releaseTexture(nightTexture_);}
+  if(lastScene_==Scene::Mars){releaseTexture(marsColor_);releaseTexture(marsNormal_);}
+  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars)releaseTexture(starTexture_);
  }
+ if(assignment.scene==Scene::Mars)loadMars();
  if(assignment.scene==Scene::Aurora)loadAurora();
  if(assignment.scene==Scene::Orbit&&(!planetTexture_||!cloudTexture_||!nightTexture_||!starTexture_))loadPlanet();
- if(assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom)makeOrbitTargets();
+ if(assignment.scene==Scene::Orbit||assignment.scene==Scene::Mars||assignment.scene==Scene::Bloom)makeOrbitTargets();
  else if(orbitColor_){idle();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;}
  if(assignment.scene==Scene::Smoke&&!velocity_[0].resource)makeFluid();
  if(assignment.scene==Scene::Smoke&&smokeFilamentsEnabled_)makeSmokeFilaments();
@@ -620,7 +637,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   if(fineAtlasEnabled_&&(data.dt>0||!fineAtlasReady_))stepFineAtlas(data);
  }
  unsigned renderTiming=beginGpuStage(11);
- bool multisample=(assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom)&&orbitSamples_>1;
+ bool multisample=(assignment.scene==Scene::Orbit||assignment.scene==Scene::Mars||assignment.scene==Scene::Bloom)&&orbitSamples_>1;
  auto target=buffers_[frameIndex_].Get();if(!multisample)transition(hdr_.Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
  auto rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=(multisample?5:2)*rtvStride_;auto dsv=dsv_->GetCPUDescriptorHandleForHeapStart();if(multisample)dsv.ptr+=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);list_->OMSetRenderTargets(1,&rtv,FALSE,&dsv);
  const float clear[]={.002f,.003f,.006f,1};list_->ClearRenderTargetView(rtv,clear,0,nullptr);list_->ClearDepthStencilView(dsv,D3D12_CLEAR_FLAG_DEPTH,1,0,0,nullptr);
@@ -629,6 +646,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
+ else if(assignment.scene==Scene::Mars){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(marsSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(393));draw(mars_.Get(),0,3);}
  else if(assignment.scene==Scene::Orbit){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(space_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(72));draw(planet_.Get(),0,256*128*6);draw(planet_.Get(),3,24*12*6,400);draw(planet_.Get(),5,8*4*6,1800);draw(planet_.Get(),6,48*24*6,18);draw(planet_.Get(),4,96*48*6,3);draw(atmosphere_.Get(),7,128*64*6);draw(atmosphere_.Get(),2,256*128*6);draw(atmosphere_.Get(),1,256*128*6);}
  else if(assignment.scene==Scene::Smoke){auto visible=flowmapLive_?flowmapTotal_.resource.Get():density_[d_].resource.Get();transition(visible,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);transition(curl_.resource.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);list_->SetGraphicsRootDescriptorTable(2,gpu(flowmapLive_?335:76+d_*3));list_->SetGraphicsRootDescriptorTable(4,gpu(fineAtlasEnabled_?376+fineAtlasIndex_*2:380));if(fineAtlasEnabled_){transition(fineAtlases_[fineAtlasIndex_].Get(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);data.spare[8]=256;data.spare[9]=fineAtlasFront_?16.f:8.f;}
  list_->SetGraphicsRootDescriptorTable(3,gpu(fineLightingEnabled_?382:380));

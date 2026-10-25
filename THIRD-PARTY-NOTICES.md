@@ -8,6 +8,8 @@
 Dependency license texts are included under `licenses/` and copied by the build and installer. The bootstrap process downloads pinned versions; version and hashes are recorded in scripts/bootstrap.ps1.
 # Artwork
 
+Mars uses NASA Ames/Viking/USGS colorized imagery, NASA MOLA topography and the shared NASA SVS star map. Exact source products, credits, hashes, conversion steps and public-domain notes are in `assets/mars/ATTRIBUTION.md` and `assets/mars/sources.json`.
+
 Orbit's NASA Blue Marble map is separately credited in `assets/orbit/ATTRIBUTION.md` and is not covered by the application code's MIT license. Aurora's generated texture-layer provenance is in `assets/aurora/PROVENANCE.md`.
 
 - Automatic updater and its policy tests adapted from Voltura Markdown, MIT, Copyright (c) 2026 Voltura AB. Worlds uses installer updates, its own release feed and cache, and its own opt-in preference.

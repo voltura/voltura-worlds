@@ -25,7 +25,7 @@ namespace {
 constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3,renderStatusMessage=WM_APP+4;
 constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133,randomIntervalId=134;
 struct Visualization { Scene scene; const wchar_t* name; };
-constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
+constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Mars,L"Mars"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::Mercury,L"Mercury"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
 constexpr int visualizationMenuBase=1000;
 constexpr int randomChoice=int(std::size(visualizations))-3;
 struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;};
@@ -134,6 +134,18 @@ void syncControls(){
  }
  if(surfaces.empty()){setControlText(statusLabel,lastError.empty()?L"No display is available.":lastError);return;}
  auto& a=selected();
+ // Mars uses the same saved parameters with scene-specific, meaningful labels.
+ const wchar_t* regularNames[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Density",L"Audio strength"};
+ const wchar_t* marsNames[]={L"Brightness",L"Movement",L"Terrain relief",L"Camera drift",L"Dust variation",L"Atmosphere",L"Audio strength"};
+ for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::Mars?marsNames:regularNames)[i]);
+ const wchar_t* regularPalettes[]={L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"};
+ const wchar_t* marsPalettes[]={L"Natural Mars",L"Warm dust",L"Cool dusk",L"Survey neutral"};
+ auto palettes=a.scene==Scene::Mars?marsPalettes:regularPalettes;
+ wchar_t firstPalette[80]{};SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(firstPalette));
+ if(wcscmp(firstPalette,palettes[0])!=0){
+  SendDlgItemMessageW(library,paletteId,CB_RESETCONTENT,0,0);
+  for(int i=0;i<4;i++)SendDlgItemMessageW(library,paletteId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(palettes[i]));
+ }
  // Native setters can erase and synchronously repaint even an unchanged value.
  setControlText(GetDlgItem(library,pauseId),pauseState.manual?L"Resume":L"Pause");
  setComboSelection(reactionId,int(a.reaction));setComboSelection(qualityId,int(settings.quality));setComboSelection(fpsId,settings.fps==30?0:1);setComboSelection(paletteId,a.params.palette);
@@ -343,7 +355,7 @@ void showLibrary(){
  control(L"BUTTON",L"+  Advanced settings",WS_TABSTOP,385,273,210,34,advancedId);control(L"BUTTON",L"Reset settings",WS_TABSTOP,605,273,115,34,resetId);
  addingAdvanced=true;
  label(L"Fine-tune this World",30,327,690);
- const wchar_t* names[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Density",L"Audio strength"};for(int i=0;i<7;i++){int column=i%2,row=i/2;label(names[i],30+column*350,367+row*44,115);HWND slider=control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS|WS_TABSTOP,145+column*350,360+row*44,220,32,200+i);SendMessageW(slider,TBM_SETRANGE,TRUE,MAKELPARAM(0,i==6?100:200));}
+ const wchar_t* names[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Density",L"Audio strength"};for(int i=0;i<7;i++){int column=i%2,row=i/2;control(L"STATIC",names[i],0,30+column*350,367+row*44,115,24,210+i);HWND slider=control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS|WS_TABSTOP,145+column*350,360+row*44,220,32,200+i);SendMessageW(slider,TBM_SETRANGE,TRUE,MAKELPARAM(0,i==6?100:200));}
  label(L"Video position",380,499,115);combo(videoFitId,495,493,220,{L"Fill",L"Fit"});
  label(L"Quality",30,546,110);combo(qualityId,145,540,220,{L"Eco",L"Auto",L"High"});label(L"Frame limit",380,546,115);combo(fpsId,495,540,220,{L"30 FPS",L"60 FPS"});
  label(L"Audio output",30,591,115);combo(deviceId,145,585,570,{L"Follow system output"});audioDevices=AudioCapture::devices();for(auto& d:audioDevices)SendDlgItemMessageW(library,deviceId,CB_ADDSTRING,0,(LPARAM)d.second.c_str());
@@ -515,16 +527,25 @@ int captureMode(const std::vector<std::wstring>& args){
   }
   if(std::find(args.begin(),args.end(),L"--aurora-procedural")!=args.end())data.spare[1]=1;
   if(std::find(args.begin(),args.end(),L"--validate-lifecycle")!=args.end()){
-   const Scene lifecycleScenes[]={Scene::Aurora,Scene::Orbit,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples};
+   const Scene lifecycleScenes[]={Scene::Aurora,Scene::Orbit,Scene::Mars,Scene::Orbit,Scene::Mars,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples};
    for(size_t cycle=0;cycle<std::size(lifecycleScenes)*2;cycle++){
     a.scene=lifecycleScenes[cycle%std::size(lifecycleScenes)];renderer.resize(cycle%2?width:640,cycle%2?height:360);
     for(int frame=0;frame<8;frame++){data.time+=data.dt;renderer.render(a,data,false);}
     renderer.validateDebugMessages();
    }
    renderer.resize(width,height);a.scene=scene;
+   if(scene==Scene::Mars){
+    renderer.render(a,data,false);renderer.idle();auto marsBytes=renderer.allocations();
+    for(int cycle=0;cycle<3;cycle++){
+     a.scene=Scene::Orbit;renderer.render(a,data,false);a.scene=Scene::Mars;renderer.render(a,data,false);
+     renderer.resize(720,1280);renderer.render(a,data,false);renderer.resize(width,height);renderer.render(a,data,false);renderer.idle();
+     if(renderer.allocations()!=marsBytes)throw std::runtime_error("Mars resources changed after Orbit/resize roundtrip");
+     renderer.validateDebugMessages();
+    }
+   }
   }
   auto startTimeOption=option(L"--start-time",L"0");size_t startConsumed{};float startTime=std::stof(startTimeOption,&startConsumed);
-  if(startConsumed!=startTimeOption.size()||!std::isfinite(startTime)||startTime<0||startTime>86400||(startTime!=0&&scene!=Scene::Orbit&&scene!=Scene::Aurora&&scene!=Scene::Bloom&&!isProceduralWorld(scene)))throw std::runtime_error("Capture start time requires a procedural World and a finite value from 0 to 86400 seconds");
+  if(startConsumed!=startTimeOption.size()||!std::isfinite(startTime)||startTime<0||startTime>86400||(startTime!=0&&scene!=Scene::Orbit&&scene!=Scene::Mars&&scene!=Scene::Aurora&&scene!=Scene::Bloom&&!isProceduralWorld(scene)))throw std::runtime_error("Capture start time requires a procedural World and a finite value from 0 to 86400 seconds");
   // Exercise the actual shader controls in native capture regressions.
   auto captureParameter=[&](const wchar_t* key){auto value=option(key,L"1");size_t consumed{};float number=std::stof(value,&consumed);if(consumed!=value.size()||!std::isfinite(number)||number<0||number>2)throw std::runtime_error("Capture parameter must be finite and between 0 and 2");return number;};
   data.density=captureParameter(L"--density");data.movement=captureParameter(L"--movement");data.brightness=captureParameter(L"--brightness");data.detail=captureParameter(L"--detail");data.flow=captureParameter(L"--flow");data.turbulence=captureParameter(L"--turbulence");
@@ -563,7 +584,7 @@ int captureMode(const std::vector<std::wstring>& args){
   report["startTimeOffsetSeconds"]=startTime;
   report["timingWarmupFrames"]=timingWarmup;
   report["timingSampleCount"]=timings.size();
-  if(isProceduralWorld(scene))report["quality"]=utf8(qualityOption);
+  if(isProceduralWorld(scene)||scene==Scene::Mars)report["quality"]=utf8(qualityOption);
   if(flowmapReference||flowmapLive){report["flowmapLive"]=flowmapLive;report["flowmapAdaptive"]=flowmapAdaptive;report["flowmapAdaptiveRenewals"]=renderer.flowmapAdaptiveRenewals();report["flowmapReconstruction"]=flowmapCubic||flowmapLive?"Bounded Catmull-Rom":"Trilinear";report["flowmapRenewalSeconds"]=renewalSeconds;report["flowmapRenewals"]=renderer.flowmapRenewals();}
   if(!transportTest.empty())report["transportField"]=transportDeform?"Reversible nonlinear deformation":"Rigid rotation";
   if(!referenceVolume.empty()){report["densitySource"]=transportTest.empty()?"Imported frozen RGBA16F reference volume":"Imported RGBA16F analytic-transport seed";report["simulationSteps"]=transportTest.empty()?0:frames;report["flowmapReference"]=flowmapReference;report["evidence"]="Native D3D12 imported-volume diagnostic; simulationSteps identifies analytic transport; not live smoke or physical display";}

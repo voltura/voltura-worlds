@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / '.deps/python'))
 import imageio_ffmpeg
 from PIL import Image, ImageChops, ImageStat
 
-SCENES = ('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse',
+SCENES = ('aurora', 'orbit', 'mars', 'smoke', 'bloom', 'silk', 'eclipse',
           'lattice', 'drift', 'contour', 'mercury')
 
 

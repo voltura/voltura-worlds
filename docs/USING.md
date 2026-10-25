@@ -1,6 +1,8 @@
 # Voltura Worlds 0.1.7 for Windows
 
-A per-user Windows 11 x64 desktop application with eleven built-in Worlds: **Aurora**, **Orbit**, **Smoke**, **Bloom**, **Silk**, **Eclipse**, **Lattice**, **Drift**, **Contour**, **Mercury**, and **Ripples**. C++20, Direct3D 12, HLSL. MIT licensed.
+The current source build is a per-user Windows 11 x64 desktop application with twelve built-in Worlds: **Aurora**, **Orbit**, **Mars**, **Smoke**, **Bloom**, **Silk**, **Eclipse**, **Lattice**, **Drift**, **Contour**, **Mercury**, and **Ripples**. C++20, Direct3D 12, HLSL. MIT licensed.
+
+Mars is a local development addition. The published 0.1.7 installer contains the preceding eleven Worlds.
 
 ## Install and try it
 
@@ -8,7 +10,7 @@ Run `dist/VolturaWorlds-Setup-0.1.7-win-x64.exe`. No administrator account is re
 
 Choose a display, then a World. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 
-Choose **Random** to shuffle through all eleven built-in Worlds, showing each once before reshuffling. The interval beside the visualization selector defaults to **Every 5 minutes**, with choices from 30 seconds to 30 minutes. Each display saves its own Random mode and interval. The countdown pauses with playback. Selecting a specific World, Off, or an imported video stops the shuffle.
+Choose **Random** to shuffle through all built-in Worlds, showing each once before reshuffling. The interval beside the visualization selector defaults to **Every 5 minutes**, with choices from 30 seconds to 30 minutes. Each display saves its own Random mode and interval. The countdown pauses with playback. Selecting a specific World, Off, or an imported video stops the shuffle.
 
 Closing the library leaves the background running. Reopen it through the notification-area icon or the Start-menu shortcut. Use **Pause**, **Resume**, or **Exit Worlds** to control playback. Exit reveals your ordinary Windows wallpaper; Worlds does not overwrite it.
 
@@ -21,6 +23,8 @@ Personal SDR H.264 MP4 videos can be imported, copied to the managed library, an
 User settings and imported assets live in `%LOCALAPPDATA%\Voltura\Worlds`. Uninstall from Windows Settings; exit Worlds first. Uninstall asks whether to keep your library and preferences.
 
 Bloom is an original animated folded-sheet World inspired by the blue Windows 11 wallpaper. It uses native 3D geometry with slow breathing, curling, and rocking movement, four palettes, and optional audio reaction.
+
+**Mars** shows a complete globe using NASA/USGS Viking imagery and MOLA terrain data. Brightness controls exposure; Movement controls its 15-minute rotation and slow drift; Terrain relief adjusts surface normals; Camera drift adjusts the framing motion; Dust variation changes suspended-dust contrast; Atmosphere adjusts the thin haze. The four Mars palettes preserve natural surface colors. Gentle and Expressive audio modes modulate atmospheric scattering, scaled by Audio strength. Movement at zero freezes the scene and audio response. Sunlight uses a fixed mean distance of 1.524 AU and a fixed orbital composition. See [source data and reproduction](../assets/mars/ATTRIBUTION.md).
 
 **Ripples** shows calm reflective water from above, with scattered drops producing expanding concentric waves that overlap and interfere. Overlaps share one displaced surface: crests reinforce, opposite phases cancel, and reflections and refraction follow the combined shape. Gentle wind produces drifting patches of small, curved ripples between the drops, while clouds move across the reflections and softly shade the water. A sandy, pebbled bottom slopes from clear foreground shallows into deeper tinted water; surface motion refracts its fixed features, and depth gradually reduces their visibility. Density adjusts drop frequency, Flow controls wave and wind speed, Detail controls drop-wave fineness, and Turbulence adjusts the wind disturbance. Movement at zero freezes the water and clouds together. It supports the shared palettes, quality settings, and optional audio reaction. Higher quality refines the surface intersection as well as the small water texture.
 

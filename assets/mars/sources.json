@@ -1,0 +1,25 @@
+{
+  "viking-color.jpg": {
+    "url": "https://astrogeology.usgs.gov/ckan/dataset/7131d503-cdc9-45a5-8f83-5126c0fd397e/resource/5ea881c6-01b3-41fa-a7af-42d2131b54f1/download/mars_viking_mdim21_clrmosaic_1km.jpg",
+    "sha256": "fdfcd335559c3dc67052b7e8a9565d850e336ac0d1f3ea7f5eb7826ffb44ecb2"
+  },
+  "mola-elevation.img": {
+    "url": "https://pds-geosciences.wustl.edu/mgs/urn-nasa-pds-mgs_mola_topography_derived/meg032/megt90n000fb.img",
+    "sha256": "09ae1c0956afcdc869bd82c55993849f67c16ef0efe73f38cb1ea204c186ad8b"
+  },
+  "mola-elevation.xml": {
+    "url": "https://pds-geosciences.wustl.edu/mgs/urn-nasa-pds-mgs_mola_topography_derived/meg032/megt90n000fb.xml",
+    "sha256": "5a6e71a01e1674769274416a958021df4ca4cf191a7631d88235d8e6b8146715"
+  },
+  "derivation": {
+    "dimensions": [
+      8192,
+      4096
+    ],
+    "radiusMeters": 3396000.0,
+    "normalBasis": "east, north, outward; physical elevation slopes; no baked exaggeration",
+    "longitude": "-180..180 positive east; north at top",
+    "pillow": "12.3.0",
+    "numpy": "2.5.4"
+  }
+}

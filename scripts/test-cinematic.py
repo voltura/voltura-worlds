@@ -13,7 +13,7 @@ import sys
 from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENES = ('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse',
+SCENES = ('aurora', 'orbit', 'mars', 'smoke', 'bloom', 'silk', 'eclipse',
           'lattice', 'drift', 'contour', 'mercury')
 
 
@@ -63,7 +63,7 @@ def main():
                     turbulence=extreme, density=extreme)
         if scene == 'aurora':
             capture('switch-resize', frames=18, validate_lifecycle=True)
-        if scene in SCENES[:4]:
+        if scene in ('aurora', 'orbit', 'mars', 'smoke', 'bloom'):
             signal = {'bass': .8, 'mid': .6, 'treble': .7, 'energy': .9, 'impulse': .5}
             off = capture('audio-off', **signal)
             assert ImageChops.difference(baseline, off).getbbox() is None, f'{scene}: disabled audio leaked'
@@ -86,7 +86,7 @@ def main():
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output/'results.json').write_text(json.dumps(report, indent=2))
         print(f'PASS {scene}: native palette/extreme/resize checks'
-              + (' and frozen/audio contracts' if scene in SCENES[:4] else ''), flush=True)
+              + (' and frozen/audio contracts' if scene in ('aurora', 'orbit', 'mars', 'smoke', 'bloom') else ''), flush=True)
 
 
 if __name__ == '__main__':
