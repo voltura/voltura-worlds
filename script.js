@@ -17,13 +17,14 @@
   const cinema = document.querySelector('.cinema');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let wantsMotion = !reducedMotion.matches;
+  let inView = false;
   let selected = 'aurora';
   const syncButton = () => {
     const label = video.paused ? 'Play animation' : 'Pause animation';
     toggle.textContent = label + (video.paused ? ' ▷' : ' Ⅱ');
     toggle.setAttribute('aria-label', label);
   };
-  const play = () => { if (wantsMotion && !document.hidden) video.play().catch(syncButton); };
+  const play = () => { if (wantsMotion && inView && !document.hidden) video.play().catch(syncButton); };
   video.addEventListener('play', syncButton);
   video.addEventListener('pause', syncButton);
   video.addEventListener('error', () => {
@@ -69,6 +70,7 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) video.pause(); else play(); });
   reducedMotion.addEventListener('change', () => { wantsMotion = !reducedMotion.matches; if (wantsMotion) play(); else video.pause(); });
   new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting) play(); else video.pause();
+    inView = entries[0].isIntersecting;
+    if (inView) play(); else video.pause();
   }, { threshold: 0.1 }).observe(cinema);
 })();
