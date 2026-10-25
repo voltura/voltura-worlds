@@ -16,7 +16,7 @@ The signed helper waits for the app to exit and verifies the candidate again. Re
 
 Windows shutdown/sign-out cancels installation, including a subsequently cancelled shutdown. The helper and installer check the inherited cancellation event and Windows shutdown state. No elevation or reboot is requested. Tests of session messages use isolated test windows rather than shutting down the computer.
 
-For publication, upload the matching installer and lowercase SHA-256 `SHA256SUMS.txt` together. The GitHub release can describe an early product preview while using the normal numbered release channel; explicitly marked GitHub prereleases are excluded from automatic updates.
+For publication, upload the matching installer and lowercase SHA-256 `SHA256SUMS.txt` together. Worlds follows the normal numbered release channel; explicitly marked GitHub prereleases are excluded from automatic updates.
 
 ## Verification
 

@@ -22,5 +22,5 @@ if ($SigningConfig) {
  & (Join-Path $PSScriptRoot 'sign.ps1') -Path $installer -CertificateThumbprint $signing.certificateThumbprint -TimestampUrl $signing.timestampUrl -AllowSelfSigned:([bool]$signing.allowSelfSigned)
 }
 $signature = Get-AuthenticodeSignature -LiteralPath $installer
-@{ version='0.1.4'; installer=(Split-Path $installer -Leaf); sha256=(Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash; bytes=(Get-Item -LiteralPath $installer).Length; signatureStatus=[string]$signature.Status; signer=[string]$signature.SignerCertificate.Subject; timestamped=[bool]$signature.TimeStamperCertificate; installerTesting='Not executed by package script; use test-installer-release.ps1 for isolated validation' } | ConvertTo-Json | Set-Content (Join-Path $repo 'dist/preview-manifest.json')
-Write-Host "Preview installer prepared: $installer"
+@{ version='0.1.4'; installer=(Split-Path $installer -Leaf); sha256=(Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash; bytes=(Get-Item -LiteralPath $installer).Length; signatureStatus=[string]$signature.Status; signer=[string]$signature.SignerCertificate.Subject; timestamped=[bool]$signature.TimeStamperCertificate; installerTesting='Not executed by package script; use test-installer-release.ps1 for isolated validation' } | ConvertTo-Json | Set-Content (Join-Path $repo 'dist/release-manifest.json')
+Write-Host "Installer prepared: $installer"

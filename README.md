@@ -22,9 +22,9 @@ The product site shows recordings from the native Direct3D renderer, at their or
 - Provides a themed Windows library, advanced controls and a notification-area menu.
 - Leaves your ordinary Windows wallpaper intact. Choose **Off** to reveal it, or **Exit Worlds** to stop the app.
 
-## Preview status
+## Current release
 
-Worlds is an early **0.1.4 preview**. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.4/VolturaWorlds-Setup-0.1.4-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.4). Includes all four Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.4** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.4/VolturaWorlds-Setup-0.1.4-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.4). Includes all four Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
 Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 

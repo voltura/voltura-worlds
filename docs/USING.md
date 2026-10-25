@@ -1,4 +1,4 @@
-# Voltura Worlds 0.1.4 — Windows preview
+# Voltura Worlds 0.1.4 for Windows
 
 A per-user Windows 11 x64 desktop application with four built-in Worlds: **Aurora**, **Orbit**, **Smoke**, and **Bloom**. C++20, Direct3D 12, HLSL. MIT licensed.
 
@@ -14,7 +14,7 @@ The library follows your Windows light/dark theme. **Advanced settings** reveals
 
 Audio reaction defaults to Off. Choose Gentle or Expressive and adjust Audio strength to use local playback-device analysis. No audio is recorded or uploaded. Rendering pauses on battery by default; clear **Pause on battery** to animate while unplugged. Full display coverage, lock, sleep, suspend, and remote sessions also pause rendering.
 
-Personal SDR H.264 MP4 videos can be imported, copied to the managed library, and looped silently with Fill or Fit. Data-only `.world` packages open an import preview before applying. There is no published community site in this preview.
+Personal SDR H.264 MP4 videos can be imported, copied to the managed library, and looped silently with Fill or Fit. Data-only `.world` packages open an import preview before applying. There is no community sharing service.
 
 User settings and imported assets live in `%LOCALAPPDATA%\Voltura\Worlds`. Uninstall from Windows Settings; exit Worlds first. Uninstall asks whether to keep your library and preferences.
 
@@ -22,11 +22,11 @@ Bloom is an original animated folded-sheet World inspired by the blue Windows 11
 
 Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
 
-## Preview status
+## Current limitations
 
-The original three scenes are available for hands-on testing. Their artwork does **not** match the approved concept images. The complete original release specification remains unfinished, including the community site, full adaptive-quality system, shared multi-monitor rendering device, and broader reliability/performance acceptance. This build is a testable desktop preview, not a claim that those requirements are complete.
+The current release includes all four built-in Worlds and personal video wallpapers. A community sharing service, full adaptive-quality system and shared multi-monitor rendering device are not included.
 
-The user is testing installer behavior. Automated validation covers application contracts and native renders on a private desktop; it does not prove physical desktop interaction, mixed-DPI multi-monitor behavior, or install/uninstall reliability for this version.
+Automated validation covers native rendering, app contracts, signed automatic updates and isolated installer lifecycle. Physical desktop, mixed-DPI multi-monitor and endurance acceptance remain unverified.
 
 ## Build
 
@@ -37,7 +37,7 @@ Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK, PowerShell, a
 ./scripts/package.ps1 -SkipBuild
 ```
 
-`package.ps1` optionally accepts `-SigningConfig` pointing to a local JSON configuration with `certificateThumbprint`, `timestampUrl`, and `allowSelfSigned`. It builds the installer; it never executes it. `dist/preview-manifest.json` records the final hash and signing status.
+`package.ps1` optionally accepts `-SigningConfig` pointing to a local JSON configuration with `certificateThumbprint`, `timestampUrl`, and `allowSelfSigned`. It builds the installer; it never executes it. `dist/release-manifest.json` records the final hash and signing status.
 
 Normal launch attaches to the desktop and opens the library. `--wallpaper` starts quietly; `--preview` opens a separate development preview surface.
 

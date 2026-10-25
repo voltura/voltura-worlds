@@ -1,4 +1,4 @@
-# Voltura Worlds 0.1.4 — Windows preview
+# Voltura Worlds 0.1.4
 
 The first public GitHub installer includes Aurora, Orbit, Smoke and Bloom, plus personal H.264 MP4 video wallpapers with silent looping and Fill/Fit.
 
@@ -14,9 +14,9 @@ Enable **Automatic updates** in the notification-area menu. Worlds checks after 
 
 Choose **Restart to update** when it appears, or **Exit Worlds** to install a ready update without restarting. Closing the library keeps Worlds running. Shutdown and sign-out cancel automatic installation. Your settings, library, imported videos and startup choice are retained. Details: [automatic updates](UPDATES.md).
 
-## Preview limitations
+## Known limitations
 
-This remains an early preview. Full adaptive quality, a shared multi-monitor rendering device, the community service and broader performance/endurance acceptance remain unfinished. Automated native tests and isolated installer checks do not establish physical desktop, audio-listening or mixed-DPI multi-monitor acceptance.
+Full adaptive quality, a shared multi-monitor rendering device, the community service and broader performance/endurance acceptance remain unfinished. Automated native tests and isolated installer checks do not establish physical desktop, audio-listening or mixed-DPI multi-monitor acceptance.
 
 ## Validation
 
