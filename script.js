@@ -45,7 +45,7 @@
       document.querySelector('#scene-description').textContent = description;
       video.pause();
       video.poster = `assets/${name}.jpg`;
-      video.setAttribute('aria-label', `${title}: native animated wallpaper preview`);
+      video.setAttribute('aria-label', `${title}: native animated wallpaper`);
       video.querySelector('source').src = `assets/${name}.mp4`;
       video.load();
       play();
