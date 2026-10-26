@@ -9,6 +9,7 @@ import sys
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'.deps/python'))
 from PIL import Image,ImageChops,ImageStat
+import numpy as np
 
 def difference(a,b):return sum(ImageStat.Stat(ImageChops.difference(a,b)).mean)/3
 
@@ -81,6 +82,27 @@ def main():
   assert run.returncode!=0,'Invalid capture probe accepted'
  manifest=json.loads((ROOT/'assets/pluto/sources.json').read_text())
  assert manifest['derivation']['dimensions']==[5920,2960],'Unexpected texture resolution'
+ # Regressions for the reported coverage-edge line and far-side softness.
+ gray=np.asarray(reference,dtype=np.float32).mean(axis=2)/255
+ samples=np.asarray(manifest['derivation']['originalCoverageBoundarySamples'])
+ xs,ys=samples[:,0],samples[:,1]
+ seam_deficits=[]
+ for offset in range(-3,4):
+  row=np.clip(ys+offset,8,gray.shape[0]-9)
+  deficit=np.mean((gray[row-8,xs]+gray[row+8,xs])*.5-gray[row,xs])
+  seam_deficits.append(float(deficit))
+ assert max(seam_deficits)<.04,'Dark line follows old southern coverage boundary'
+ results['coverageEdgeMaxMeanDeficit']=max(seam_deficits)
+ with Image.open(ROOT/'assets/pluto/runtime/pluto-color.dds') as texture:
+  reduced=np.asarray(texture.convert('RGB').resize((1480,740),Image.Resampling.LANCZOS),dtype=np.float32).mean(axis=2)/255
+ def clarity(box):
+  x0,y0,x1,y1=box;c=reduced[y0:y1,x0:x1]
+  return float(np.abs(np.diff(c,axis=0)).mean()+np.abs(np.diff(c,axis=1)).mean())
+ encounter=clarity((440,210,640,430))
+ ratios=[clarity(box)/encounter for box in ((20,145,310,440),(1150,145,1460,440))]
+ assert all(.65<ratio<3.5 for ratio in ratios),'Far-side clarity does not match encounter-side detail'
+ results['farSideClarityRatios']=ratios
+ assert np.max(np.abs(gray[:,0]-gray[:,-1]))<.025,'Longitude texture seam'
  raw=(ROOT/'assets/pluto/runtime/pluto-color.dds').read_bytes()
  hashes=json.loads((ROOT/'assets/pluto/runtime-hashes.json').read_text(encoding='utf-8-sig'))
  entry=hashes[0] if isinstance(hashes,list) else hashes

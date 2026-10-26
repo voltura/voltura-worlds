@@ -77,13 +77,13 @@ The product site shows recordings from the native Direct3D renderer, at their or
 
 **Mercury** adds an 8K MESSENGER globe with measured terrain relief, a natural gray-brown surface, strong sunlight and no atmospheric halo. It rotates in 15 minutes and shares the stationary catalog-star sky. Controls adjust terrain relief, camera drift, Sun angle and surface contrast. The older metallic World is now **Plastic metal**. See [Mercury sources and rendering](assets/mercury/ATTRIBUTION.md).
 
-**Pluto** adds a New Horizons photographic globe with its bright heart initially facing the viewer, a restrained blue limb and stationary catalog stars. A rotation takes 15 minutes at default Movement. See [Pluto imagery and rendering limits](assets/pluto/ATTRIBUTION.md).
+**Pluto** combines the original New Horizons heart-region imagery with a detailed artistic reconstruction of the under-resolved far side and unobserved south, a restrained blue limb and stationary catalog stars. A rotation takes 15 minutes at default Movement. See [Pluto imagery and rendering limits](assets/pluto/ATTRIBUTION.md).
 
 ## Current release
 
-**Version 0.1.8** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.8/VolturaWorlds-Setup-0.1.8-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.8). Includes all **22 Worlds** and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.9** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.9/VolturaWorlds-Setup-0.1.9-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.9). Includes all **22 Worlds** and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
-This release adds **Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun**, plus **Random Solar System**, optional body statistics and shared stationary catalog stars. The earlier metallic World is now named **Plastic metal**. The product site includes an eight-second native recording for every World and a refreshed social preview.
+This release repairs Pluto's lower texture seam and reconstructs sharper far-side terrain to match the encounter side's visual clarity. The original heart region is retained. Reconstructed areas are artistic imagery, not additional spacecraft measurements. Includes all 22 Worlds and the existing Solar System features.
 
 **Upgrading from 0.1.7 or earlier:** download and run this installer manually. The larger texture collection exceeds those versions' 64 MiB automatic-update limit. Existing settings, imported videos and startup preferences are retained. Version 0.1.8 supports larger future update downloads.
 
