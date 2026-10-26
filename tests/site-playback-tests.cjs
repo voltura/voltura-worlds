@@ -12,7 +12,7 @@ const listeners = () => ({
 const video = { ...listeners(), paused: true, plays: 0,
   play() { this.paused = false; this.plays++; this.emit('play'); return Promise.resolve(); },
   pause() { this.paused = true; this.emit('pause'); },
-  source: { src: 'assets/earth.mp4?v=0.1.8' },
+  source: { src: 'assets/earth.mp4?v=0.1.10' },
   querySelector() { return this.source; },
   load() {},
 };
@@ -51,8 +51,8 @@ assert.equal(video.plays, 2, 'Explicit pause must survive leaving and returning 
 assert.equal(worlds.length, 22, 'All 22 native Worlds must be selectable');
 for (const button of worlds) {
   button.emit('click');
-  assert.equal(video.source.src, `assets/${button.dataset.world}.mp4?v=0.1.8`);
-  assert.equal(video.poster, `assets/${button.dataset.world}.jpg?v=0.1.8`);
+  assert.equal(video.source.src, `assets/${button.dataset.world}.mp4?v=0.1.10`);
+  assert.equal(video.poster, `assets/${button.dataset.world}.jpg?v=0.1.10`);
   assert.match(elements['#scene-number'].textContent, / \/ 22$/);
   assert.equal(video.plays, 2, 'Choosing a scene must preserve explicit pause');
 }

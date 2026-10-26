@@ -1,14 +1,12 @@
 # Automatic updates
 
-Worlds adapts the native updater from Voltura Markdown, the closest sister app: C++, a per-user NSIS installation, a notification-area lifetime, and the same Voltura signing certificate. Web-only sister apps and Voltura Air's different runtime were less suitable.
-
 Enable **Automatic updates** in the Worlds tray menu. It is off by default and saved separately in `%LOCALAPPDATA%\Voltura\Worlds\preferences.ini`, so the ordinary settings writer cannot overwrite the choice. Disabling cancels downloads and prevents installation.
 
 The first background check runs after five seconds, then hourly while Worlds is open. It follows the latest published, non-draft, non-prerelease release in `voltura/voltura-worlds`. Numeric versions must be newer. Installed identity requires an exact match between the executable path and the HKCU installation registration. Uninstalled development copies never update automatically.
 
 Downloads and verification run below normal thread priority. Only HTTPS GitHub release hosts are accepted, with bounded redirects, timeouts, a ten-minute transfer deadline and a 512 MiB installer limit. Errors remain quiet and are retried on a later check. There is no service or scheduled task.
 
-Public versions through 0.1.7 retain the previous 64 MiB limit. They require a manual installer update when the next installer exceeds that size; the larger limit applies after installation of the updated app.
+Install manually when upgrading from 0.1.7 or earlier: its 64 MiB download limit is too small for the Solar System texture collection.
 
 The installer must match its entry in `SHA256SUMS.txt`, product/company/version metadata, expected original filename and the running application's signing certificate. Authenticode verifies the signature and timestamp. The only trust exception is the same pinned self-signed publisher's untrusted root. Modified payloads, another publisher, unsigned builds and downgrades cannot update. Certificate changes require a manual installation.
 
@@ -24,4 +22,4 @@ For publication, upload the matching installer and lowercase SHA-256 `SHA256SUMS
 
 `./scripts/build.ps1` runs native rendering, desktop, imports, video, UI and updater policy checks. `./scripts/test-updates.ps1 -SigningConfig <local-config.json>` tests signed staging, superseding releases, interrupted downloads, cancellation and modified-payload rejection.
 
-`./scripts/test-installer-release.ps1 -SigningConfig <local-config.json>` compiles a separately identified signed NSIS installer and tests a signed 0.1.3 baseline upgrading to 0.1.9 through the real helper. It also checks installation, ordinary upgrades, startup opt-out, all 22 packaged Worlds and video, host recovery and uninstallation. Its private desktop, registration, shortcut, file association and installation directory are isolated from the regular installation. The temporary opt-in is restored afterward.
+`./scripts/test-installer-release.ps1 -SigningConfig <local-config.json>` compiles a separately identified signed NSIS installer and tests a signed installed baseline upgrading through the real helper. It also checks installation, ordinary upgrades, startup opt-out, all 22 packaged Worlds and video, host recovery and uninstallation. Its private desktop, registration, shortcut, file association and installation directory are isolated from the regular installation. The temporary opt-in is restored afterward.

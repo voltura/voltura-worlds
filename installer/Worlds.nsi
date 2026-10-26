@@ -19,20 +19,20 @@ Unicode true
  !define PROFILE_DIR "$LOCALAPPDATA\Voltura\Worlds"
 !endif
 !ifndef OUTPUT
- !define OUTPUT "..\dist\VolturaWorlds-Setup-0.1.9-win-x64.exe"
+ !define OUTPUT "..\dist\VolturaWorlds-Setup-0.1.10-win-x64.exe"
 !endif
 Name "Voltura Worlds"
-Caption "Voltura Worlds 0.1.9 Setup"
+Caption "Voltura Worlds 0.1.10 Setup"
 BrandingText "Voltura AB"
 ManifestDPIAware true
 ManifestSupportedOS all
-VIProductVersion "0.1.9.0"
+VIProductVersion "0.1.10.0"
 VIAddVersionKey "ProductName" "Voltura Worlds"
 VIAddVersionKey "CompanyName" "Voltura AB"
 VIAddVersionKey "FileDescription" "Voltura Worlds Setup"
-VIAddVersionKey "FileVersion" "0.1.9"
-VIAddVersionKey "ProductVersion" "0.1.9"
-VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.1.9-win-x64.exe"
+VIAddVersionKey "FileVersion" "0.1.10"
+VIAddVersionKey "ProductVersion" "0.1.10"
+VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.1.10-win-x64.exe"
 VIAddVersionKey "LegalCopyright" "Voltura AB"
 !define MUI_ICON "artwork\worlds.ico"
 !define MUI_UNICON "artwork\worlds.ico"
@@ -296,7 +296,7 @@ Section "Voltura Worlds"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_KEY}"
  ${EndIf}
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayName" "Voltura Worlds"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.1.9"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.1.10"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "Publisher" "Voltura AB"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayIcon" "$INSTDIR\VolturaWorlds.exe"

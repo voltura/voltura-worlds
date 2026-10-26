@@ -9,6 +9,6 @@ Evidence is written to `artifacts/installer-lifecycle/results.json`; native capt
 
 Silent installation supports `/S /NOSTARTUP`. Without `/NOSTARTUP`, a fresh installation enables startup and an upgrade preserves the existing choice. NSIS `/D=` can select a directory and must be the last argument. Ordinary upgrades remember the previously installed directory.
 
-The current executable is an unsigned development build. Signing and installed desktop release-candidate validation remain outstanding.
+Signing depends on the build. Use `-SigningConfig <local-config.json>` with `scripts/package.ps1` to sign the application and installer; inspect `dist/release-manifest.json` for the resulting hash and signing status. For isolated signed installer and updater checks, use `scripts/test-installer-release.ps1 -SigningConfig <local-config.json>`. A timestamped self-signed certificate does not establish public publisher trust.
 
 The lifecycle test also runs `worlds_desktop_tests.exe` against the installed application. It creates a private synthetic Explorer-style host, verifies delayed attachment and recovery after host destruction, and requests a clean application exit. Build the test executable with `scripts/build.ps1` before standalone installer validation. This does not restart or manipulate the user's real Explorer session.

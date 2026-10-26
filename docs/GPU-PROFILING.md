@@ -16,5 +16,3 @@ Native regressions:
 
 - `gpu_stage_contracts`: profiling leaves PNG output identical; stage totals fit inside the enclosing frame timing.
 - `smoke_empty_space_contracts`: skipping preserves PNG output for sparse, mature, and rectangular fields.
-
-Revision 93's matched 1080p captures reduced average scene drawing from 4.71 ms to 2.81 ms with identical PNG output. Whole-frame performance and visual quality remain below acceptance targets. These results justify investigating how to spend the saved rendering time on finer structure; they do not establish that finer structure has been delivered.

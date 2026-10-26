@@ -12,7 +12,7 @@ Visit `http://127.0.0.1:8080`. Stop the server with Ctrl+C when finished. Verify
 
 ## Native media
 
-The 22 1600 × 900, eight-second, silent clips are captured directly by the app's native renderer at 30 frames per second. They use ordinary scene settings, without capture-only visual experiments, interpolation or retiming. They show actual native graphics, not the approved concept mockups or proof of physical desktop attachment. Only the selected clip plays; it pauses when hidden or out of view. Posters remain available when video playback is blocked. The 1200 × 630 social preview is composed from these same native posters and features Earth beside native thumbnails of the other ten new Solar System Worlds.
+The 22 1600 × 900, eight-second, silent clips are captured directly by the app's native renderer at 30 frames per second. They use ordinary scene settings, without capture-only visual experiments, interpolation or retiming. They show actual native graphics; they do not verify physical desktop attachment. Only the selected clip plays; it pauses when hidden or out of view. Posters remain available when video playback is blocked. The 1200 × 630 social preview is composed from these same native posters and features Earth beside native thumbnails of the other ten Solar System Worlds.
 
 To regenerate after building the app, install the development tools with `python -m pip install -r requirements-dev.txt` (the script also supports `.deps/python`) and run:
 
@@ -20,7 +20,7 @@ To regenerate after building the app, install the development tools with `python
 python scripts/capture-site-media.py
 ```
 
-To refresh the eleven Solar System additions while retaining the other recordings:
+To refresh the eleven Solar System Worlds while retaining the other recordings:
 
 ```powershell
 python scripts/capture-site-media.py --scenes mercury venus earth mars jupiter saturn uranus neptune moon pluto sun
@@ -53,3 +53,5 @@ Preserve unrelated DNS records. Following publication, verify the canonical doma
 ## Downloads
 
 The two Download for Windows buttons point to the matching installer under `voltura/voltura-worlds/releases/download/v<version>/`. Publish the complete release and its checksum before pushing site links. Update both buttons, the preview version label, README and user guide together. Verify a fresh download against the published checksum after Pages finishes.
+
+Feature descriptions must distinguish the downloadable installer from current development features. Keep the development section clearly labeled until a release containing those capabilities is published.

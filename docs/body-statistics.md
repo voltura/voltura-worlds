@@ -2,8 +2,8 @@
 
 **Show body statistics** is an opt-in preference for each display. It appears
 below the visualization selector, is copied by Apply to all displays, and is
-turned off by Reset settings. Switching scenes retains the preference; only
-the eight planets, Moon, Pluto and Sun render a card. World packages are unchanged.
+turned off by Restore defaults. Switching scenes retains the preference; only
+the eight planets, Moon, Pluto and Sun render a card. Version-2 desktop presets preserve this preference; version-1 single-World packages do not include it.
 
 **Random Solar System** shuffles those same 11 bodies. General Random retains
 its existing pool. Both modes use the existing active-playback interval and

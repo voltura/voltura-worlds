@@ -1,4 +1,4 @@
-param([string]$Installer = (Join-Path (Split-Path $PSScriptRoot) 'dist/VolturaWorlds-Setup-0.1.9-win-x64.exe'), [string]$UpgradeFrom = '', [string]$UpdateBaseline = '', [ValidatePattern('^VolturaWorlds-Test-[a-f0-9]{32}$')][string]$TestIdentity = '')
+param([string]$Installer = (Join-Path (Split-Path $PSScriptRoot) 'dist/VolturaWorlds-Setup-0.1.10-win-x64.exe'), [string]$UpgradeFrom = '', [string]$UpdateBaseline = '', [ValidatePattern('^VolturaWorlds-Test-[a-f0-9]{32}$')][string]$TestIdentity = '')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $reportDir = Join-Path $repo 'artifacts/installer-lifecycle'
@@ -72,7 +72,7 @@ try {
    if (!$helperProcess.WaitForExit(60000)) { $helperProcess.Kill(); throw 'Automatic installer helper timed out.' }
    if ($helperProcess.ExitCode -ne 0) { Get-Content (Join-Path (Split-Path (Split-Path $updateHelper)) 'updates.log'); throw 'Automatic installer helper failed.' }
    if ((Get-FileHash -LiteralPath $updateTarget).Hash -ne $expectedUpdateHash) { throw 'Automatic update did not install the exact signed application.' }
-   $results.automaticUpdate = 'passed; signed 0.1.3 baseline to signed 0.1.9 through the real NSIS installer and helper'
+   $results.automaticUpdate = 'passed; signed 0.1.3 baseline to signed 0.1.10 through the real NSIS installer and helper'
   } finally {
    if ($updateHelper) {
     $ownedCache = [IO.Path]::GetFullPath((Split-Path (Split-Path $updateHelper)))
