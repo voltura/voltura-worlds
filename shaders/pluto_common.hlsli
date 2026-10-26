@@ -11,5 +11,8 @@ float2 plutoScreen(float2 uv){
 float3 plutoBody(float3 n){return plutoRY(plutoRX(n,-radians(25)), -plutoClock()*(2*plutoPi/900));}
 float2 plutoUV(float3 body){return float2(.5+atan2(body.x,body.z)/(2*plutoPi),.5-asin(clamp(body.y,-1,1))/plutoPi);}
 float2 plutoGradient(float2 v){v.x-=round(v.x);return v;}
-float3 plutoLight(){float a=radians(35+(turbulence-1)*25);return normalize(float3(sin(a),.18,cos(a)));}
+// Near-frontal default (~18 degrees from the view, 8 degrees above it)
+// keeps the globe silhouette readable against space while retaining volume.
+// Sun angle still offers a calm near-full view through stronger side shading.
+float3 plutoLight(){float a=radians(16+(turbulence-1)*16);return normalize(float3(sin(a),tan(radians(8)),cos(a)));}
 float3 plutoGrade(float3 c){return c*(palette<.5?float3(1,1,1):palette<1.5?float3(1.07,1.015,.94):palette<2.5?float3(.94,1.01,1.09):float3(.985,1.0,1.025));}

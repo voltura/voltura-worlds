@@ -44,6 +44,19 @@ def main():
  assert difference(base,capture('audio',reaction='expressive',strength=1,energy=1))>.001,'No audio response'
  assert difference(base.crop((0,0,100,360)),capture('sky-later',start_time=225,reaction='expressive',strength=1,energy=1).crop((0,0,100,360)))==0,'Stars move/react'
  assert max(hi for lo,hi in capture('black',brightness=0).getextrema())<=1,'Brightness zero leaves light'
+ # The default wallpaper light should expose a round disc, with only a thin
+ # dark sliver. Disable haze and bloom-level exposure so illumination is measured
+ # independently of the atmospheric rim and bright photographic patches.
+ matte=np.asarray(capture('readable-disc',start_time=450,density=0,brightness=.2))
+ silhouette=np.asarray(capture('readable-disc-mask',pluto_probe=2).convert('L'))>50
+ dark_fraction=float(np.mean(matte.max(axis=2)[silhouette]<=3))
+ assert dark_fraction<.05,'Default lighting hides too much of the round silhouette'
+ rows=np.where(silhouette.any(axis=1))[0];middle=rows[len(rows)//2]
+ xs=np.where(silhouette[middle])[0];lit=xs[matte[middle,xs].max(axis=1)>6]
+ readable_width=float((lit[-1]-lit[0]+1)/(xs[-1]-xs[0]+1))
+ assert readable_width>.96,'Illuminated middle reads narrower than the globe'
+ results['defaultDarkDiscFraction']=dark_fraction
+ results['defaultReadableDiameterFraction']=readable_width
  # Compare independently projected photographic source samples across the heart,
  # longitude seam and far side. A low exposure avoids the shared bloom knee.
  with Image.open(ROOT/'assets/pluto/runtime/pluto-color.dds') as im:reference=im.convert('RGB')

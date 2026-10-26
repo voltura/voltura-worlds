@@ -116,6 +116,31 @@ void screenshot(const std::filesystem::path& path,HWND target=library){
 }
 std::filesystem::path menuShot;
 HMENU measuredMenu{};bool nativeMenuScaleCorrect=false;
+void requireMenuTextRecovery(){
+ // Reproduce the reported mismatch without changing the user's displays:
+ // Windows supplies a scaled row, but the retained owner font is still 96 DPI.
+ HDC screen=GetDC(nullptr),dc=CreateCompatibleDC(screen);
+ auto stale=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
+ for(UINT dpi:{96u,120u,144u,192u,216u,240u,288u}){
+  int width=MulDiv(230,dpi,96),height=MulDiv(36,dpi,96);
+  BITMAPINFO bmi{};bmi.bmiHeader={sizeof(BITMAPINFOHEADER),width,-height,1,32,BI_RGB};void* bits{};
+  auto bitmap=CreateDIBSection(screen,&bmi,DIB_RGB_COLORS,&bits,nullptr,0);auto previous=SelectObject(dc,bitmap);
+  DRAWITEMSTRUCT item{};item.CtlType=ODT_MENU;item.hDC=dc;item.rcItem={0,0,width,height};item.itemData=reinterpret_cast<ULONG_PTR>(L"Open Worlds");
+  auto originalFont=GetCurrentObject(dc,OBJ_FONT);
+  ui::draw(item,stale,false,dpi);GdiFlush();
+  requireUi(GetCurrentObject(dc,OBJ_FONT)==originalFont,"Menu painting restores the borrowed DC font");
+  int top=height,bottom=-1;
+  for(int y=0;y<height;y++)for(int x=MulDiv(40,dpi,96);x<MulDiv(190,dpi,96);x++){
+   DWORD pixel=static_cast<DWORD*>(bits)[y*width+x];
+   if(std::abs(int((pixel>>16)&255)-int(GetRValue(ui::surface)))>100){top=std::min(top,y);bottom=std::max(bottom,y);}
+  }
+  bool correct=bottom-top+1>=MulDiv(9,dpi,96)&&bottom-top+1<=MulDiv(18,dpi,96);
+  // Drawing must restore the borrowed DC's font and release temporary fonts.
+  SelectObject(dc,previous);DeleteObject(bitmap);
+  requireUi(correct,"Scaled menu rows must recover full-size text from a stale 96-DPI font");
+ }
+ DeleteObject(stale);DeleteDC(dc);ReleaseDC(nullptr,screen);
+}
 void CALLBACK captureMenu(HWND,UINT,UINT_PTR timer,DWORD){
  HWND popup=FindWindowW(L"#32768",nullptr);if(popup){
   screenshot(menuShot,popup);
@@ -144,10 +169,39 @@ void CALLBACK captureMenu(HWND,UINT,UINT_PTR timer,DWORD){
  }
  EndMenu();KillTimer(nullptr,timer);
 }
-void captureThemedMenu(const std::filesystem::path& path,bool submenu){
+void requireSolarMenu(){
+ const wchar_t* names[]={L"Random",L"",L"Sun",L"Mercury",L"Venus",L"Earth",L"Moon",L"Mars",L"Jupiter",L"Saturn",L"Uranus",L"Neptune",L"Pluto"};
+ for(int choice=0;choice<=solarRandomChoice;choice++){
+  requireUi(selectVisualization(choice),"Menu choices remain selectable");
+  HMENU root=visualizationMenu(),solar=GetSubMenu(root,2);
+  requireUi(solar&&GetMenuItemCount(solar)==int(std::size(names)),"Solar System follows Orbit and contains rotation plus all bodies");
+  MENUITEMINFOW heading{sizeof(heading)};heading.fMask=MIIM_DATA|MIIM_STATE;
+  requireUi(GetMenuItemInfoW(root,2,TRUE,&heading)&&!wcscmp(reinterpret_cast<const wchar_t*>(heading.dwItemData),L"Solar System"),"Solar submenu heading");
+  bool solarActive=choice==solarRandomChoice||(!isRandomChoice(choice)&&bodyFacts(selected().scene));
+  requireUi(bool(heading.fState&MFS_CHECKED)==solarActive,"Solar heading tracks manual bodies and solar rotation only");
+  int checked=0;
+  for(int i=0;i<GetMenuItemCount(solar);i++){
+   MENUITEMINFOW item{sizeof(item)};item.fMask=MIIM_DATA|MIIM_FTYPE|MIIM_ID|MIIM_STATE;
+   requireUi(GetMenuItemInfoW(solar,i,TRUE,&item),"Solar item available");
+   if(i==1){requireUi(item.fType&MFT_SEPARATOR,"Random is separated from bodies");continue;}
+   requireUi(!wcscmp(reinterpret_cast<const wchar_t*>(item.dwItemData),names[i]),"Solar items have the intended order and labels");
+   if(item.fState&MFS_CHECKED){checked++;requireUi(item.wID==visualizationMenuBase+choice,"Only the selected solar command is checked");}
+  }
+  requireUi(checked==(solarActive?1:0),"Solar rotation checks Random rather than its current body");
+  for(int i=0;i<GetMenuItemCount(root);i++){
+   if(i==2)continue;
+   int command=int(GetMenuItemID(root,i))-visualizationMenuBase;
+   requireUi(command>=0&&command<int(std::size(visualizations))&&!bodyFacts(visualizations[command].scene)&&command!=solarRandomChoice,"Solar choices are absent from the parent menu");
+  }
+  DestroyMenu(root);
+ }
+ selectVisualization(1);
+}
+void captureThemedMenu(const std::filesystem::path& path,int submenu){
  WNDCLASSW cls{};cls.hInstance=instance;cls.lpfnWndProc=[](HWND hwnd,UINT msg,WPARAM w,LPARAM l)->LRESULT{if(msg==WM_DESTROY)return 0;return controllerProc(hwnd,msg,w,l);};cls.lpszClassName=L"VolturaMenuTestOwner";RegisterClassW(&cls);
  HWND owner=CreateWindowW(cls.lpszClassName,L"Menu test",WS_POPUP,0,0,0,0,nullptr,nullptr,instance,nullptr);
- HMENU menu=submenu?visualizationMenu():CreatePopupMenu();
+ HMENU root=submenu?visualizationMenu():CreatePopupMenu();
+ HMENU menu=submenu==2?GetSubMenu(root,2):root;
  if(!submenu){AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_OWNERDRAW|MF_POPUP,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,L"Pause");}
  MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);
  // Reopen after stale state, as happens when a display disappears and returns.
@@ -159,8 +213,42 @@ void captureThemedMenu(const std::filesystem::path& path,bool submenu){
  requireUi(actual.lfHeight==-MulDiv(16,menuDpi,96),"Menu font is recreated at the current owner DPI");
  auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());
  SetTimer(nullptr,0,250,captureMenu);TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,100,100,0,owner,nullptr);
- if(hook)UnhookWindowsHookEx(hook);DeleteObject(menuFont);menuFont=nullptr;DestroyMenu(menu);DestroyWindow(owner);
+ if(hook)UnhookWindowsHookEx(hook);DeleteObject(menuFont);menuFont=nullptr;DestroyMenu(root);DestroyWindow(owner);
  requireUi(nativeMenuScaleCorrect,"Native popup row height and rendered text must scale together");
+}
+HWND navigationOwner=nullptr;
+HMENU navigationRoot=nullptr;
+int navigationStep=0;
+bool navigationOpened=false;
+void CALLBACK navigateSolarMenu(HWND,UINT,UINT_PTR timer,DWORD){
+ if(navigationStep<3)PostMessageW(navigationOwner,WM_KEYDOWN,VK_DOWN,1);
+ if(navigationStep==3)PostMessageW(navigationOwner,WM_KEYDOWN,VK_RIGHT,1);
+ if(navigationStep==4){
+  EnumThreadWindows(GetCurrentThreadId(),[](HWND window,LPARAM)->BOOL{
+   MENUBARINFO bar{sizeof(bar)};
+   if(GetMenuBarInfo(window,OBJID_CLIENT,0,&bar)&&bar.hMenu==GetSubMenu(navigationRoot,2))navigationOpened=true;
+   return TRUE;
+  },0);
+  PostMessageW(navigationOwner,WM_KEYDOWN,VK_RETURN,1);
+ }
+ if(++navigationStep>8){EndMenu();KillTimer(nullptr,timer);}
+}
+void requireSolarNavigation(){
+ navigationOwner=CreateWindowW(L"STATIC",L"Menu navigation",WS_POPUP,100,100,1,1,nullptr,nullptr,instance,nullptr);
+ navigationRoot=visualizationMenu();navigationStep=0;navigationOpened=false;
+ prepareTrayMenu(navigationOwner,{100,100});SetForegroundWindow(navigationOwner);
+ // Use the real owner drawing and menu-loop handling for native input messages.
+ SetWindowLongPtrW(navigationOwner,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(controllerProc));
+ auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());
+ auto timer=SetTimer(nullptr,0,200,navigateSolarMenu);
+ int command=TrackPopupMenu(navigationRoot,TPM_RETURNCMD|TPM_NONOTIFY,100,100,0,navigationOwner,nullptr);
+ KillTimer(nullptr,timer);if(hook)UnhookWindowsHookEx(hook);
+ DestroyMenu(navigationRoot);
+ SetWindowLongPtrW(navigationOwner,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(DefWindowProcW));DestroyWindow(navigationOwner);
+ DeleteObject(menuFont);menuFont=nullptr;
+ requireUi(navigationOpened,"Native navigation opens Solar System submenu");
+ requireUi(command==visualizationMenuBase+solarRandomChoice,"Keyboard selects solar Random through the submenu");
+ requireUi(selectVisualization(command-visualizationMenuBase),"Nested command uses existing selection handling");
 }
 int wmain(int argc,wchar_t** argv){
  try{
@@ -175,7 +263,8 @@ int wmain(int argc,wchar_t** argv){
   const int offChoice=int(std::size(visualizations))-2,videoChoice=int(std::size(visualizations))-1;
   requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0)==videoChoice,"Built-in visualizations appear in dropdown");
   mouseSelect(visualizationId,1);requireUi(selected().scene==Scene::Orbit,"Visualization dropdown switches scene");
-  auto menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==videoChoice,"Visualization submenu contains catalog");
+  requireSolarMenu();
+  auto menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==videoChoice-int(bodyCatalog.size()),"Visualization menu groups solar bodies");
   requireUi((GetMenuState(menu,visualizationMenuBase+1,MF_BYCOMMAND)&MF_CHECKED)!=0,"Submenu marks active visualization");DestroyMenu(menu);
   requireUi(selectVisualization(2)&&selected().scene==Scene::Mars,"Mars follows Orbit in the catalog");
   wchar_t marsLabel[80]{};GetDlgItemTextW(library,212,marsLabel,80);requireUi(wcscmp(marsLabel,L"Terrain relief")==0,"Mars terrain adjustment label");
@@ -286,7 +375,7 @@ int wmain(int argc,wchar_t** argv){
   if(SendDlgItemMessageW(library,deviceId,CB_GETCOUNT,0,0)<2){audioDevices.emplace_back(L"test-output",L"Test output");SendDlgItemMessageW(library,deviceId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Test output"));}
   mouseSelect(deviceId,1);requireUi(!settings.audioDevice.empty(),"Output model changes");
   selected().scene=Scene::Video;selected().video=L"retained.mp4";syncControls();mouseSelect(visualizationId,0);
-  menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==int(std::size(visualizations)),"Submenu remembers imported video after switching away");
+  menu=visualizationMenu();requireUi(GetMenuItemCount(menu)==int(std::size(visualizations)-bodyCatalog.size()),"Submenu remembers imported video after switching away");
   MENUITEMINFOW videoItem{sizeof(videoItem)};videoItem.fMask=MIIM_DATA;
   requireUi(GetMenuItemInfoW(menu,visualizationMenuBase+videoChoice,FALSE,&videoItem)&&std::wstring(reinterpret_cast<const wchar_t*>(videoItem.dwItemData))==L"Imported video","Remembered video has a submenu entry");DestroyMenu(menu);
   requireUi(selectVisualization(videoChoice)&&selected().scene==Scene::Video&&selected().video==L"retained.mp4","Context-menu switching restores remembered video");
@@ -339,7 +428,9 @@ int wmain(int argc,wchar_t** argv){
     auto comboWindow=GetDlgItem(library,paletteId);SetFocus(comboWindow);SendMessageW(comboWindow,WM_KEYDOWN,VK_UP,0);SendMessageW(comboWindow,WM_KEYUP,VK_UP,0);pump();requireUi(selected().params.palette==2,"Keyboard selection after theme change");
    }
   }
-  if(argc>1){for(int dark=0;dark<2;dark++){ui::refresh(library,dark);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"menu-dark.bmp":L"menu-light.bmp"),false);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"submenu-dark.bmp":L"submenu-light.bmp"),true);}}
+  for(int dark=0;dark<2;dark++){ui::refresh(library,dark);requireMenuTextRecovery();}
+  if(argc>1){for(int dark=0;dark<2;dark++){ui::refresh(library,dark);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"menu-dark.bmp":L"menu-light.bmp"),false);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"submenu-dark.bmp":L"submenu-light.bmp"),true);captureThemedMenu(std::filesystem::path(argv[1])/(dark?L"solar-submenu-dark.bmp":L"solar-submenu-light.bmp"),2);}}
+  requireSolarNavigation();
   requireRenderRecovery();
   DestroyWindow(library);library=nullptr;surfaces.clear();DeleteObject(font);font=nullptr;DeleteObject(headingFont);headingFont=nullptr;CoUninitialize();std::cout<<"All dropdowns selected with mouse messages; model updates, reset, expansion, icon and renderer recovery passed. Private desktop, no installer or user settings touched.\n";return 0;
  }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}

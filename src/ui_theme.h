@@ -87,7 +87,19 @@ inline void draw(DRAWITEMSTRUCT& d,HFONT font,bool selected=false,UINT dpi=96){
  bool hot=(d.itemState&ODS_SELECTED)!=0,disabled=(d.itemState&ODS_DISABLED)!=0;
  COLORREF fill=hot?(dark?RGB(47,73,91):RGB(218,237,243)):surface;
  HBRUSH brush=CreateSolidBrush(fill);FillRect(d.hDC,&d.rcItem,brush);DeleteObject(brush);
- SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?muted:selected?accent:foreground);auto old=SelectObject(d.hDC,font);
+ // Native popup rows can already have their new monitor scale while the
+ // hidden owner's cached DPI/font still reflects the disconnected display.
+ // Size only the text from the final row in the supplied drawing DC's units.
+ HFONT popupFont{};
+ if(menu){
+  LOGFONTW description{};
+  if(GetObjectW(font,sizeof(description),&description)){
+   description.lfHeight=-MulDiv(d.rcItem.bottom-d.rcItem.top,16,36);
+   description.lfWidth=0;
+   popupFont=CreateFontIndirectW(&description);
+  }
+ }
+ SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?muted:selected?accent:foreground);auto old=SelectObject(d.hDC,popupFont?popupFont:font);
  std::wstring text;
  if(menu){auto value=reinterpret_cast<const wchar_t*>(d.itemData);if(value)text=value;}
  else if(combo){if(d.itemID!=UINT(-1)){auto length=SendMessageW(d.hwndItem,CB_GETLBTEXTLEN,d.itemID,0);if(length>=0&&length<32768){text.resize(size_t(length)+1);SendMessageW(d.hwndItem,CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(text.data()));}}}
@@ -95,6 +107,7 @@ inline void draw(DRAWITEMSTRUCT& d,HFONT font,bool selected=false,UINT dpi=96){
  RECT r=d.rcItem;r.left+=menu?MulDiv(40,dpi,96):12;r.right-=menu?MulDiv(28,dpi,96):12;
  if(menu&&(d.itemState&ODS_CHECKED)){RECT mark=d.rcItem;mark.left+=MulDiv(10,dpi,96);mark.right=mark.left+MulDiv(18,dpi,96);DrawTextW(d.hDC,L"✓",-1,&mark,DT_VCENTER|DT_SINGLELINE|DT_CENTER);}
  DrawTextW(d.hDC,text.c_str(),-1,&r,DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|(combo||menu?DT_LEFT:DT_CENTER));SelectObject(d.hDC,old);
+ if(popupFont)DeleteObject(popupFont);
  if(!menu&&!combo){
   // Use the control's edge for focus, keeping the label free of inner outlines.
   bool focused=!disabled&&(d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT);

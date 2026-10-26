@@ -204,15 +204,30 @@ bool selectVisualization(int choice){
 }
 HMENU visualizationMenu(){
  HMENU menu=CreatePopupMenu();std::lock_guard lock(stateMutex);
- for(size_t i=0;i<std::size(visualizations);i++){
+ HMENU solar=CreatePopupMenu();
+ auto appendChoice=[&](HMENU target,size_t i,const wchar_t* name){
   bool available=!surfaces.empty();
   auto scene=visualizations[i].scene;
-  if(available&&scene==Scene::Video&&selected().video.empty())continue;
+  if(available&&scene==Scene::Video&&selected().video.empty())return;
   UINT flags=MF_OWNERDRAW|(available?0:MF_GRAYED);
   if(available&&(selected().random?int(i)==randomChoiceFor(selected()):(!isRandomChoice(int(i))&&selected().scene==scene)))flags|=MF_CHECKED;
-  AppendMenuW(menu,flags,visualizationMenuBase+i,visualizations[i].name);
+  AppendMenuW(target,flags,visualizationMenuBase+i,name);
+ };
+ appendChoice(solar,solarRandomChoice,L"Random");
+ AppendMenuW(solar,MF_SEPARATOR,0,nullptr);
+ constexpr Scene solarOrder[]={Scene::Sun,Scene::Mercury,Scene::Venus,Scene::Earth,Scene::Moon,Scene::Mars,Scene::Jupiter,Scene::Saturn,Scene::Uranus,Scene::Neptune,Scene::Pluto};
+ for(auto scene:solarOrder)for(size_t i=0;i<std::size(visualizations);i++)if(visualizations[i].scene==scene)appendChoice(solar,i,visualizations[i].name);
+ for(size_t i=0;i<std::size(visualizations);i++){
+  if(bodyFacts(visualizations[i].scene)||int(i)==solarRandomChoice)continue;
+  appendChoice(menu,i,visualizations[i].name);
+  if(visualizations[i].scene==Scene::Orbit){
+   UINT flags=MF_POPUP|MF_OWNERDRAW;
+   if(surfaces.empty())flags|=MF_GRAYED;
+   else if(selected().random?selected().randomPool==RandomPool::SolarSystem:bodyFacts(selected().scene)!=nullptr)flags|=MF_CHECKED;
+   AppendMenuW(menu,flags,reinterpret_cast<UINT_PTR>(solar),L"Solar System");
+  }
  }
- MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);return menu;
+ MENUINFO info{sizeof(info),MIM_BACKGROUND|MIM_APPLYTOSUBMENUS};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);return menu;
 
 }
 void advanceRandomVisualizations(uint64_t elapsed){
