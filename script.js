@@ -63,9 +63,9 @@
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();
-      video.poster = `assets/${name}.jpg?v=0.1.9`;
+      video.poster = `assets/${name}.jpg?v=0.1.10`;
       video.setAttribute('aria-label', `${title}: native animated wallpaper`);
-      video.querySelector('source').src = `assets/${name}.mp4?v=0.1.9`;
+      video.querySelector('source').src = `assets/${name}.mp4?v=0.1.10`;
       video.load();
       play();
     });
