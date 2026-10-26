@@ -13,7 +13,7 @@ def main():
         for repeat in range(3):
             for scene in (('jupiter','saturn') if repeat%2==0 else ('saturn','jupiter')):
                 folder=a.output/f'{w}x{h}-{scene}-{repeat}';folder.mkdir(parents=True,exist_ok=True)
-                command=[sys.executable,str(ROOT/'scripts/test_desktop.py'),'--',str(a.executable.resolve()),'--capture-dir',str(folder),'--scene',scene,'--width',str(w),'--height',str(h),'--frames','300','--timing-warmup','60','--quality','high']
+                command=[sys.executable,str(ROOT/'scripts/run-private-desktop.py'),'--',str(a.executable.resolve()),'--capture-dir',str(folder),'--scene',scene,'--width',str(w),'--height',str(h),'--frames','300','--timing-warmup','60','--quality','high']
                 run=subprocess.run(command,capture_output=True,text=True,timeout=300)
                 if run.returncode:raise RuntimeError(run.stdout+run.stderr)
                 metrics=json.loads((folder/'metrics.json').read_text());assert metrics['timingSampleCount']==240

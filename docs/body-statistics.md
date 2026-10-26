@@ -55,7 +55,4 @@ wallpaper's D3D12 render target. It receives no mouse input and is included in
 native screenshots. Body, palette, output size and work-area insets invalidate the cache. Hiding
 the card releases its texture after waiting for outstanding GPU work.
 
-Native capture accepts `--show-body-statistics`. Run
-`scripts/test-body-statistics.py build/Release/VolturaWorlds.exe` for captures
-and image comparisons, including a GPU lifecycle check. The captures are saved
-under `artifacts/body-statistics`.
+Native capture accepts `--show-body-statistics` for deliberate visual review. Verify card placement and appearance in the running app with the intended display and taskbar layout.

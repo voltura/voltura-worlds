@@ -12,7 +12,7 @@ output = root / 'artifacts' / 'pix' / scene
 output.mkdir(parents=True, exist_ok=True)
 args = 'profile-' + scene
 subprocess.run([
-    sys.executable, str(root / 'scripts/test_desktop.py'), '--', str(pix),
+    sys.executable, str(root / 'scripts/run-private-desktop.py'), '--', str(pix),
     '--log-file=' + str(output / 'capture.log'),
     'launch', '--command-line=' + args, '--working-directory=' + str(root),
     str(root / 'build/Release/VolturaWorlds.exe'),

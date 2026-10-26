@@ -58,7 +58,7 @@ def main():
             for repeat in range(args.repeats):
                 folder = output/args.phase/scene/quality/str(repeat)
                 folder.mkdir(parents=True, exist_ok=True)
-                command = [sys.executable, str(ROOT/'scripts/test_desktop.py'), '--',
+                command = [sys.executable, str(ROOT/'scripts/run-private-desktop.py'), '--',
                            str(executable), '--capture-dir', str(folder), '--scene', scene,
                            '--width', '1920', '--height', '1080', '--frames', str(args.frames),
                            '--grid', str(grid), '--quality', quality, '--debug-gpu']
@@ -74,7 +74,7 @@ def main():
         if not args.skip_video:
             folder = output/args.phase/scene/'motion'
             folder.mkdir(parents=True, exist_ok=True)
-            subprocess.run([sys.executable, str(ROOT/'scripts/test_desktop.py'), '--',
+            subprocess.run([sys.executable, str(ROOT/'scripts/run-private-desktop.py'), '--',
                             str(executable), '--capture-dir', str(folder), '--scene', scene,
                             '--width', '1920', '--height', '1080', '--frames', str(args.frames),
                             '--grid', '80', '--quality', 'auto', '--record', '360', '--debug-gpu'],

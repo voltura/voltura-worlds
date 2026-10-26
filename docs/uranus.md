@@ -29,7 +29,7 @@ The static background reuses the existing shared NASA Milky Way and catalog-star
 texture. No additional Uranus texture allocation is required. See
 [shared sky attribution](../assets/space/ATTRIBUTION.md).
 
-Native regression captures support `--scene uranus` and the existing parameter,
+Native diagnostic captures support `--scene uranus` and the existing parameter,
 audio, and start-time flags. `--uranus-probe` selects ordinary rendering (0),
 unlit cloud albedo (1), silhouette (2), or fixed illumination (3). These probes
 are capture diagnostics and do not add library settings.

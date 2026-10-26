@@ -8,18 +8,16 @@ Downloads and verification run below normal thread priority. Only HTTPS GitHub r
 
 Install manually when upgrading from 0.1.7 or earlier: its 64 MiB download limit is too small for the Solar System texture collection.
 
-The installer must match its entry in `SHA256SUMS.txt`, product/company/version metadata, expected original filename and the running application's signing certificate. Authenticode verifies the signature and timestamp. The only trust exception is the same pinned self-signed publisher's untrusted root. Modified payloads, another publisher, unsigned builds and downgrades cannot update. Certificate changes require a manual installation.
+The installer must match the `sha256:` digest supplied by GitHub for the release asset, product/company/version metadata, expected original filename and the running application's signing certificate. Authenticode verifies the signature and timestamp. The only trust exception is the same pinned self-signed publisher's untrusted root. Modified payloads, another publisher, unsigned builds and downgrades cannot update. Certificate changes require a manual installation.
 
 Verified downloads are staged in `%LOCALAPPDATA%\Voltura\Worlds\Updates`, separated by executable path. Partial downloads cannot install. **Restart to update** appears in the tray menu when ready; it exits normally, applies the verified installer and relaunches quietly behind the desktop. **Exit Worlds** also applies a ready update, without relaunching. Closing the library keeps Worlds running and does not apply the update.
 
 The signed helper waits for the app to exit and verifies the candidate again. Reopening before installation cancels the waiting update; an installation already applying briefly delays startup. The installer preserves startup opt-out and the selected installation directory. Executable replacement uses staging and rollback on failure. User scenes, imported videos and settings are retained.
 
-Windows shutdown/sign-out cancels installation, including a subsequently cancelled shutdown. The helper and installer check the inherited cancellation event and Windows shutdown state. No elevation or reboot is requested. Tests of session messages use isolated test windows rather than shutting down the computer.
+Windows shutdown/sign-out cancels installation, including a subsequently cancelled shutdown. The helper and installer check the inherited cancellation event and Windows shutdown state. No elevation or reboot is requested.
 
-For publication, upload the matching installer and lowercase SHA-256 `SHA256SUMS.txt` together. Worlds follows the normal numbered release channel; explicitly marked GitHub prereleases are excluded from automatic updates.
+For publication, upload the signed installer. GitHub computes its SHA-256 digest automatically and exposes it in release-asset metadata. Worlds uses that metadata directly; no separate checksum file is required. Worlds follows the normal numbered release channel; explicitly marked GitHub prereleases are excluded from automatic updates.
 
-## Verification
+## Development workflow
 
-`./scripts/build.ps1` runs native rendering, desktop, imports, video, UI and updater policy checks. `./scripts/test-updates.ps1 -SigningConfig <local-config.json>` tests signed staging, superseding releases, interrupted downloads, cancellation and modified-payload rejection.
-
-`./scripts/test-installer-release.ps1 -SigningConfig <local-config.json>` compiles a separately identified signed NSIS installer and tests a signed installed baseline upgrading through the real helper. It also checks installation, ordinary upgrades, startup opt-out, all 22 packaged Worlds and video, host recovery and uninstallation. Its private desktop, registration, shortcut, file association and installation directory are isolated from the regular installation. The temporary opt-in is restored afterward.
+Use code review and focused verification of the running app. Build and sign through the release scripts; follow the [release checklist](RELEASING.md). Automatic updates still verify the downloaded SHA-256 against GitHub metadata, Authenticode signature/timestamp, signing identity and product/version metadata before staging and applying a payload.

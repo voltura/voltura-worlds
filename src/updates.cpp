@@ -429,17 +429,6 @@ bool installed(const fs::path &target) {
     wchar_t value[32768];
     DWORD size = sizeof(value);
     std::wstring key = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\VolturaWorlds";
-#ifdef WORLDS_UPDATE_TESTING
-    wchar_t testKey[128]{};
-    auto count = GetEnvironmentVariableW(L"WORLDS_UPDATES_TEST_PRODUCT_KEY", testKey, (DWORD)std::size(testKey));
-    std::wstring_view selected(testKey);
-    constexpr std::wstring_view prefix = L"VolturaWorlds-Test-";
-    if (count && count < std::size(testKey) && selected.starts_with(prefix) &&
-        selected.size() == prefix.size() + 32 &&
-        std::all_of(
-            selected.begin() + prefix.size(), selected.end(), [](wchar_t c) { return iswxdigit(c) != 0; }))
-        key = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + std::wstring(selected);
-#endif
     auto status = RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"InstallLocation",
                                RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr, value, &size);
     return status == ERROR_SUCCESS && normalized(fs::path(value) / L"VolturaWorlds.exe") == normalized(target);
@@ -514,7 +503,7 @@ std::string getText(const std::wstring &url, const std::atomic_bool &cancel) {
 }
 struct Release {
     Version version;
-    std::string asset;
+    std::string asset, digest;
 };
 Release releaseInfo(std::string_view json, bool setup, bool requireAssets = true) {
     auto doc = JsonReader{json}.document();
@@ -524,38 +513,23 @@ Release releaseInfo(std::string_view json, bool setup, bool requireAssets = true
     auto version = Version::parse(std::string_view(tag).substr(1));
     std::string name = setup ? "VolturaWorlds-Setup-" + version.text() + "-win-x64.exe" : "VolturaWorlds.exe";
     if (!requireAssets)
-        return {version, name};
+        return {version, name, {}};
     auto &assets = doc.at("assets");
     need(assets.type == '[');
-    int payload = 0, checksums = 0;
+    int payload = 0;
+    std::string digest;
     for (auto &asset : assets.items) {
         auto assetName = asset.at("name").string();
-        if (assetName == name)
+        if (assetName == name) {
             ++payload;
-        if (assetName == "SHA256SUMS.txt")
-            ++checksums;
-    }
-    need(payload == 1 && checksums == 1, "Release assets incomplete");
-    return {version, name};
-}
-std::string checksum(std::string_view text, const std::string &name) {
-    std::string result;
-    while (!text.empty()) {
-        auto stop = text.find('\n');
-        auto line = text.substr(0, stop);
-        if (!line.empty() && line.back() == '\r')
-            line.remove_suffix(1);
-        if (line.size() > 66 && line.substr(64, 2) == "  " && line.substr(66) == name) {
-            need(result.empty());
-            result = std::string(line.substr(0, 64));
-            need(digestText(result));
+            auto value = asset.at("digest").string();
+            need(value.starts_with("sha256:"), "Release asset SHA-256 digest missing");
+            digest = value.substr(7);
+            need(digestText(digest), "Invalid release asset SHA-256 digest");
         }
-        if (stop == text.npos)
-            break;
-        text.remove_prefix(stop + 1);
     }
-    need(!result.empty(), "Release checksum missing");
-    return result;
+    need(payload == 1, "Release assets incomplete");
+    return {version, name, digest};
 }
 std::string read(const fs::path &file) {
     std::ifstream in(file, std::ios::binary | std::ios::ate);
@@ -596,13 +570,6 @@ struct Candidate {
 };
 bool automaticUpdatesAllowed(const fs::path &root) {
     auto profile = root.parent_path().parent_path() / L"preferences.ini";
-#ifdef WORLDS_UPDATE_TESTING
-    wchar_t testProfile[32768]{};
-    auto count =
-        GetEnvironmentVariableW(L"WORLDS_UPDATES_TEST_PROFILE", testProfile, (DWORD)std::size(testProfile));
-    if (count && count < std::size(testProfile))
-        profile = testProfile;
-#endif
     return ordinary(profile) &&
            GetPrivateProfileIntW(L"worlds", L"automaticUpdates", 0, profile.c_str()) != 0;
 }
@@ -777,11 +744,6 @@ struct Updates::State {
     std::mutex mutex;
     std::optional<Candidate> ready;
     std::unique_ptr<Handle> sessionSignal;
-#ifdef WORLDS_UPDATE_TESTING
-    fs::path target;
-    std::function<std::string(const std::wstring &, const std::atomic_bool &)> text;
-    std::function<void(const std::wstring &, const fs::path &, const std::atomic_bool &)> file;
-#endif
 };
 bool Updates::ready() const {
     if (!state) return false;
@@ -813,32 +775,6 @@ void Updates::sessionEnd() {
         state->ready.reset();
     }
 }
-#ifdef WORLDS_UPDATE_TESTING
-void Updates::fixture(const fs::path &directory) {
-    state = std::make_shared<State>();
-    state->text = [directory](const std::wstring &url, const std::atomic_bool &cancel) {
-        need(!cancel.load());
-        return read(directory / (url.ends_with(L"SHA256SUMS.txt") ? L"SHA256SUMS.txt" : L"release.json"));
-    };
-    state->file = [directory](const std::wstring &, const fs::path &destination,
-                              const std::atomic_bool &cancel) {
-        writeAtomic(directory / L"download-started", "started\n");
-        std::ifstream in(directory / L"payload.exe", std::ios::binary);
-        std::ofstream out(destination, std::ios::binary);
-        need((bool)in && (bool)out);
-        char buffer[65536];
-        while (in) {
-            need(!cancel.load());
-            in.read(buffer, sizeof(buffer));
-            out.write(buffer, in.gcount());
-            Sleep(150);
-        }
-        out.close();
-        need(in.eof() && (bool)out);
-        writeAtomic(directory / L"download-finished", "finished\n");
-    };
-}
-#endif
 void Updates::check() {
     if (!state) {
         try {
@@ -862,10 +798,6 @@ void Updates::check() {
             fs::path root;
             try {
                 auto target = executable();
-#ifdef WORLDS_UPDATE_TESTING
-                if (!work->target.empty())
-                    target = work->target;
-#endif
                 root = cacheRoot(target);
                 Lock lock(gateName(target) + L"-download");
                 // Another reader may be finishing the same download. Wait only on this worker,
@@ -891,9 +823,7 @@ void Updates::check() {
                     work->sessionSignal = std::move(signal);
                 }
                 auto setup = installed(target);
-#ifndef WORLDS_UPDATE_TESTING
                 need(setup, "Automatic updates require the installed app");
-#endif
                 auto old = cached(root, target);
                 auto latestSeen = wanted(root, target);
                 prune(root, old ? old->directory : fs::path{});
@@ -917,10 +847,6 @@ void Updates::check() {
                     }
                 }
                 auto text = [&](const std::wstring &url) {
-#ifdef WORLDS_UPDATE_TESTING
-                    if (work->text)
-                        return work->text(url, work->cancel);
-#endif
                     return getText(url, work->cancel);
                 };
                 auto metadata =
@@ -955,8 +881,7 @@ void Updates::check() {
                 }
                 // Invalidate the shared marker before fetching any part of the newer payload.
                 invalidatePending(release.version);
-                releaseInfo(metadata,
-                            setup); // A published tag counts as discovered even during asset upload.
+                release = releaseInfo(metadata, setup); // A published tag counts as discovered even during asset upload.
                 if (old && old->version == release.version && old->setup == setup) {
                     writeAtomic(root / L"pending", old->marker());
                     std::lock_guard guard(work->mutex);
@@ -966,17 +891,11 @@ void Updates::check() {
                 need(!work->closing && !work->cancel);
                 auto url = L"https://github.com/voltura/voltura-worlds/releases/download/v" +
                            wide(release.version.text()) + L"/";
-                auto digest = checksum(text(url + L"SHA256SUMS.txt"), release.asset);
                 auto id = std::to_wstring(GetCurrentProcessId()) + std::to_wstring(GetTickCount64());
-                Candidate next{release.version, digest, root, root / id, target, setup};
+                Candidate next{release.version, release.digest, root, root / id, target, setup};
                 need(fs::create_directory(next.directory));
                 auto partial = next.directory / L"download.part";
                 try {
-#ifdef WORLDS_UPDATE_TESTING
-                    if (work->file)
-                        work->file(url + wide(release.asset), partial, work->cancel);
-                    else
-#endif
                     {
                         std::ofstream out(partial, std::ios::binary | std::ios::trunc);
                         need((bool)out);
@@ -1137,9 +1056,7 @@ int updateHelper(int argc, wchar_t **argv) {
                 need(signer(target) == pin && next->version > fileVersion(target),
                      "Running reader identity changed");
                 need(next->setup == installed(target), "Installation location changed");
-#ifndef WORLDS_UPDATE_TESTING
                 need(next->setup, "Only installed updates are supported");
-#endif
                 verify(*next, pin, session.ending);
                 need(read(root / L"pending") == next->marker());
                 verified = true;

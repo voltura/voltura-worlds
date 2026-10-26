@@ -10,7 +10,7 @@ The current app has 22 built-in Worlds, independent display assignments, Random 
 - [HDR output](HDR.md): output selection, fallback and numeric diagnostics.
 - [Video implementation](VIDEO-IMPLEMENTATION.md): decoder support, GPU transfer, framing and playback rates.
 - [Automatic updates](UPDATES.md): settings, verification, staging and installation.
-- [Installer validation](INSTALLER-VALIDATION.md): packaging and isolated lifecycle checks.
+- [Release checklist](RELEASING.md): visual acceptance, signing, packaging and publication.
 - [Website maintenance](PAGES.md): preview, native media, publication and downloads.
 
 ## Rendering and sources
@@ -19,8 +19,8 @@ The current app has 22 built-in Worlds, independent display assignments, Random 
 - [Artwork and third-party credits](../THIRD-PARTY-NOTICES.md), including the source and rendering notices for Mars, Mercury, Saturn and Pluto.
 - [GPU profiling](GPU-PROFILING.md) and [frozen-volume diagnostics](SMOKE-REFERENCE-VOLUMES.md). Diagnostic capture options are separate from library settings.
 
-## Validation
+## Development verification
 
-`./scripts/build.ps1` compiles the app and runs the registered CTest checks. Install `requirements-dev.txt` first. For focused checks, use CTest’s `-R <name>` filter with `--test-dir build -C Release --output-on-failure`.
+This repository uses code review, compiler feedback and focused use of the actual app, with the user's visual feedback guiding iteration. Automated tests and their build targets have been removed. See the [release checklist](RELEASING.md).
 
-Native capture and private-desktop checks validate specific rendering and application contracts. Physical HDR appearance, actual monitor reconnection and sustained desktop performance require observation on suitable hardware.
+Optional native captures and profiling tools remain available for deliberate visual review and investigation. Physical HDR appearance, monitor reconnection and sustained desktop performance require observation on suitable hardware.

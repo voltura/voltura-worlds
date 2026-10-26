@@ -19,7 +19,7 @@ def main():
     if args.frames<48 or args.repeats<1:parser.error('Use at least 48 frames and one repeat')
     def capture(name,**options):
         folder=args.output/name
-        command=[sys.executable,str(ROOT/'scripts/test_desktop.py'),'--',str(args.executable.resolve()),
+        command=[sys.executable,str(ROOT/'scripts/run-private-desktop.py'),'--',str(args.executable.resolve()),
                  '--capture-dir',str(folder),'--scene','sun']
         for key,value in options.items():command.extend(['--'+key.replace('_','-'),str(value)])
         subprocess.run(command,check=True,capture_output=True,timeout=300)

@@ -41,21 +41,3 @@ The fixed-view Worlds keep their stars stationary; Moon projects them with
 its orbiting camera. See [shared sky attribution](../assets/space/ATTRIBUTION.md).
 Orbit retains its original sky. Switching between the two sky variants
 replaces the existing resource rather than keeping both resident.
-
-## Verification
-
-`jupiter_render_contracts` checks independent OPAL geography/methane
-projection at four phases, source landmarks, inferred wind motion, measured
-oblate shape, all controls/palettes/quality modes, frozen time/audio, a
-900-second full composition, dark night-side lighting, viewport allocation
-growth and D3D12 scene-switch/resize lifecycle, including geometry fallback.
-
-`planet_stars_render_contracts` checks visible small stars in the supported
-Worlds, stationary backgrounds in Earth/Mars/Jupiter, Moon camera motion and
-its complete sky loop, plus unchanged packed texture size. Existing space
-World tests continue to check opaque unlit globe interiors and frozen audio.
-
-Ignored evidence is stored under `artifacts/jupiter/` and
-`artifacts/planet-stars/`. Native motion recordings use the original
-30 FPS animation speed. Performance captures are short offscreen D3D12
-readbacks, not sustained desktop/multi-monitor presentation or power tests.

@@ -28,7 +28,7 @@ destination.mkdir(parents=True, exist_ok=True)
 for scene in (() if options.social_only else options.scenes):
     folder = ROOT / 'artifacts/site-media' / scene
     subprocess.run([
-        sys.executable, str(ROOT / 'scripts/test_desktop.py'), '--',
+        sys.executable, str(ROOT / 'scripts/run-private-desktop.py'), '--',
         str(ROOT / 'build/Release/VolturaWorlds.exe'),
         '--capture-dir', str(folder), '--scene', scene,
         '--width', '1600', '--height', '900', '--frames', '180', '--record', '240',

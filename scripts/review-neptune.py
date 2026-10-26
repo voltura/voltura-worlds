@@ -19,7 +19,7 @@ def main():
 
     def capture(scene, name, **options):
         folder = args.output/name
-        command = [sys.executable, str(ROOT/'scripts/test_desktop.py'), '--',
+        command = [sys.executable, str(ROOT/'scripts/run-private-desktop.py'), '--',
                    str(args.executable.resolve()), '--scene', scene,
                    '--capture-dir', str(folder), '--debug-gpu']
         for key, value in options.items():

@@ -1,4 +1,4 @@
-"""Run GUI checks on a private Windows desktop without switching the user's desktop."""
+"""Run capture tools on a private Windows desktop without switching the user's desktop."""
 
 import ctypes as c
 from ctypes import wintypes as w
@@ -87,7 +87,7 @@ def run(command):
     process = ProcessInfo()
     handles = []
     try:
-        name = "VolturaTests-" + uuid.uuid4().hex
+        name = "VolturaCapture-" + uuid.uuid4().hex
         desktop = check(
             api(
                 user,
@@ -204,7 +204,7 @@ def isolate():
     if "--interactive" in sys.argv:
         sys.argv.remove("--interactive")
         return
-    if not desktop_name().startswith("VolturaTests-"):
+    if not desktop_name().startswith("VolturaCapture-"):
         raise SystemExit(run([sys.executable, str(pathlib.Path(sys.argv[0]).resolve()), *sys.argv[1:]]))
 
 
@@ -213,5 +213,5 @@ if __name__ == "__main__":
     if command[:1] == ["--"]:
         command.pop(0)
     if not command:
-        raise SystemExit("Usage: python scripts/test_desktop.py -- executable [arguments ...]")
+        raise SystemExit("Usage: python scripts/run-private-desktop.py -- executable [arguments ...]")
     raise SystemExit(run(command))

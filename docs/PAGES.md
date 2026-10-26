@@ -52,6 +52,6 @@ Preserve unrelated DNS records. Following publication, verify the canonical doma
 
 ## Downloads
 
-The two Download for Windows buttons point to the matching installer under `voltura/voltura-worlds/releases/download/v<version>/`. Publish the complete release and its checksum before pushing site links. Update both buttons, the preview version label, README and user guide together. Verify a fresh download against the published checksum after Pages finishes.
+The two Download for Windows buttons point to the matching installer under `voltura/voltura-worlds/releases/download/v<version>/`. Publish the signed installer before pushing site links. Update both buttons, the preview version label, README and user guide together. Check the published download links and changed site content after Pages finishes.
 
 Feature descriptions must distinguish the downloadable installer from current development features. Keep the development section clearly labeled until a release containing those capabilities is published.

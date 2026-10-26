@@ -38,17 +38,16 @@ Enable **Automatic updates** in the notification-area menu to download verified 
 
 ## Build and run
 
-Requires Windows 11 x64, Visual Studio 2026 C++ desktop tools, the Windows SDK, PowerShell and Python 3.12 or newer with pip. NSIS is needed for packaging. The bootstrap script downloads and checks the native dependencies; install the Python test and media tools before building.
+Requires Windows 11 x64, Visual Studio 2026 C++ desktop tools, the Windows SDK and PowerShell. NSIS is needed for packaging. The bootstrap script downloads and checks the native dependencies. Python and `requirements-dev.txt` are optional tools for texture processing, diagnostics and site media generation, not application build prerequisites.
 
 ```powershell
 git clone https://github.com/voltura/voltura-worlds.git
 cd voltura-worlds
-python -m pip install -r requirements-dev.txt
 ./scripts/build.ps1
 ./build/Release/VolturaWorlds.exe
 ```
 
-The build script runs CTest after compilation. To produce a per-user installer:
+Build compiles the application without automated tests. Development uses code review and visual feedback in the running app. See the [release checklist](docs/RELEASING.md). To produce a per-user installer:
 
 ```powershell
 ./scripts/package.ps1 -SkipBuild

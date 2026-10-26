@@ -1,6 +1,6 @@
-"""Alternate original/candidate shader captures to check small GPU regressions.
+"""Alternate original/candidate shader captures to measure GPU performance changes.
 
-Run with Worlds closed and no other rendering tests in progress. The original
+Run with Worlds closed and no other rendering captures in progress. The original
 shader snapshot must exist; the candidate is restored even on capture failure.
 """
 import argparse
@@ -41,7 +41,7 @@ def main():
                         for name, data in candidate.items():
                             (live/name).write_bytes((original/name).read_bytes() if phase == 'before' else data)
                         folder = output/'paired'/scene/quality/f'{repeat}-{phase}'
-                        subprocess.run([sys.executable, str(ROOT/'scripts/test_desktop.py'), '--',
+                        subprocess.run([sys.executable, str(ROOT/'scripts/run-private-desktop.py'), '--',
                                         str(ROOT/'build/Release/VolturaWorlds.exe'), '--scene', scene,
                                         '--capture-dir', str(folder), '--width', '1920', '--height', '1080',
                                         '--quality', quality, '--grid', str({'eco':64,'auto':80,'high':96}[quality]),

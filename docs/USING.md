@@ -110,15 +110,16 @@ Earth combines NASA geography, independently moving clouds and shadows, ocean gl
 
 ## Build
 
-Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK, PowerShell, Python 3.12 or newer with pip, and NSIS are required for development. Install the Python test and capture tools before building. Application dependencies are packaged locally; Python and build tools are not needed by users.
+Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK and PowerShell are required to build. NSIS is needed for packaging. Python and `requirements-dev.txt` are optional for texture processing, diagnostics and media capture. Application dependencies are packaged locally; development tools are not needed by users.
 
 ```powershell
-python -m pip install -r requirements-dev.txt
 ./scripts/build.ps1
 ./scripts/package.ps1 -SkipBuild
 ```
 
-`package.ps1` optionally accepts `-SigningConfig` pointing to a local JSON configuration with `certificateThumbprint`, `timestampUrl`, and `allowSelfSigned`. It builds the installer; it never executes it. `dist/release-manifest.json` records the final hash and signing status.
+`package.ps1` optionally accepts `-SigningConfig` pointing to a local JSON configuration with `certificateThumbprint`, `timestampUrl`, and `allowSelfSigned`. It builds the installer; it never executes it. `dist/release-manifest.json` records the final version, size and signing status.
+
+Development uses code review and focused visual verification in the running app, with user feedback guiding changes. Automated tests are not part of this repository. See the [release checklist](RELEASING.md).
 
 Normal launch attaches to the desktop and opens the library. `--wallpaper` starts quietly; `--preview` opens a separate development preview surface.
 

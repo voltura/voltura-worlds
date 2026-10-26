@@ -29,16 +29,3 @@ and is occluded by the lunar globe. This is an accelerated camera journey,
 not an ephemeris simulation. There is no displaced terrain, crater
 self-shadowing, lunar atmosphere or uniform night-side fill. Shared bloom
 represents camera glare rather than atmospheric scattering.
-
-## Validation commands
-
-```powershell
-python scripts/test-moon.py build/Release/VolturaWorlds.exe
-```
-
-The `moon_render_contracts` CTest entry checks official-source landmark
-samples, seam/pole conversion, independent perspective geography at four
-tour phases, finite night illumination, a complete camera loop, independent
-controls/palettes, audio/frozen time, all quality options, Earth size and
-occlusion, Earth lighting against the shared Sun, and debug-layer resource
-lifecycle under scene switching/resizing and single-sample fallback.

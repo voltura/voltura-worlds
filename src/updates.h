@@ -10,9 +10,6 @@ namespace wu {
 class Updates {
     struct State;
     std::shared_ptr<State> state;
-#ifdef WORLDS_UPDATE_TESTING
-    friend void testUpdates();
-#endif
   public:
     void check();
     void cancel();
@@ -20,9 +17,6 @@ class Updates {
     void close(bool install, bool restart = false);
     bool ready() const;
     ~Updates();
-#ifdef WORLDS_UPDATE_TESTING
-    void fixture(const std::filesystem::path &directory);
-#endif
 };
 bool enabled();
 void setEnabled(bool value);
@@ -30,7 +24,4 @@ void setEnabled(bool value);
 int updateHelper(int argc, wchar_t **argv);
 // Cooperates with an active installation only; ordinary launches do no disk/network work.
 bool updateReaderMayStart();
-#ifdef WORLDS_UPDATE_TESTING
-void testUpdates();
-#endif
 } // namespace wu

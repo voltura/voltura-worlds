@@ -13,9 +13,7 @@ an imported frozen volume and accepts multiples of four from 24 through 384.
 Wide-density and transport modes are rejected. The file must match the override
 exactly. Normal wallpaper dimensions and quality settings do not change.
 High-resolution reference captures can exceed the product memory budget; they
-are diagnostic evidence, not a production quality tier. The reference-volume
-contract checks byte-identical upload/readback with independent grid dimensions
-and rejection of invalid values and incompatible modes.
+are diagnostic evidence, not a production quality tier. Use these captures only when investigating volume rendering or reviewing a visual change.
 
 The default remains frozen. For capture-only transport research, adding
 `--transport-test maccormack` seeds the analytic rotation with the imported
@@ -23,7 +21,7 @@ density. Adding `--flowmap-reference` as well instead advects FP32 coordinates
 and samples the original density through that map. This mode requires an
 imported volume and MacCormack transport selection; it does not use the live
 smoke forces, emitters or chart resets. The command selects the comparison
-fixture, not a claim that the map itself uses MacCormack interpolation.
+volume, not a claim that the map itself uses MacCormack interpolation.
 Metrics identify `flowmapReference` and the number of `simulationSteps`.
 
 The flow-map diagnostic keeps the original density in the first density
@@ -31,12 +29,8 @@ texture and writes mapped output into the second. It is not enabled in normal
 wallpaper rendering. Repeated nonlinear deformation, chart renewal, source
 injection and long-running smoke quality are still unverified.
 
-`smoke_flowmap_contracts` checks actual quarter-turn motion and fine-pattern
-retention after a full turn using GPU density readback. The central-plane
-error bound is specific to this analytic fixture, not artwork acceptance.
-
 `--transport-deform` selects a reversible divergence-free nonlinear flow rather
-than rigid rotation. It requires imported density and a transport test. Its
+than rigid rotation. It requires imported density and a transport diagnostic. Its
 time multiplier reverses the deformation so exact trajectories return after
 12 seconds; a halfway check confirms that the field did deform.
 
@@ -56,7 +50,7 @@ no renewal.
 density instead of trilinear sampling. It clamps each result to the eight
 nearest reference samples to prevent interpolation overshoot. Both switches
 are capture-only and require flow-map reference mode. Renewal still loses
-detail; the sharper reconstruction reduces that loss in the measured fixture
+detail; the sharper reconstruction reduces that loss in the measured volume
 but is not evidence of artifact-free live smoke or imperceptible renewal.
 
 `--flowmap-live` is a separate capture-only experiment using the real fluid
@@ -91,7 +85,7 @@ unaffected. Metrics distinguish distortion-triggered renewals from total count.
 Example from the repository root:
 
 ```powershell
-python scripts/test_desktop.py -- build/Release/VolturaWorlds.exe --capture-dir artifacts/reference-check --scene smoke --width 960 --height 540 --frames 1 --grid 96 --smoke-reference-volume <path-to-rgba16f-volume> --debug-gpu --fluid-diagnostics --smoke-render-diagnostics
+python scripts/run-private-desktop.py -- build/Release/VolturaWorlds.exe --capture-dir artifacts/reference-check --scene smoke --width 960 --height 540 --frames 1 --grid 96 --smoke-reference-volume <path-to-rgba16f-volume> --debug-gpu --fluid-diagnostics --smoke-render-diagnostics
 ```
 
 Grid96 selects192-cubed density. The reference upload remains alive for the
