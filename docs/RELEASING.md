@@ -19,6 +19,9 @@ Update version references and release notes. Build the final Release output if n
 
 Build reports its elapsed time and compiles only the application and its required libraries/shaders. Packaging reports its own elapsed time, signs the application and installer, and writes version, filename, size and signing information to `dist/release-manifest.json`. Without `-SkipBuild`, packaging builds first. It never installs the app.
 
+The installer uses solid ZLIB compression to keep packaging fast. Prefer this
+speed/size tradeoff over the much slower LZMA compression for the bundled textures.
+
 Authenticode signing and timestamp verification are handled by the signing scripts. A timestamped self-signed certificate is not publicly trusted. Keep production validation and updater verification intact.
 
 ## 3. Publish the accepted result

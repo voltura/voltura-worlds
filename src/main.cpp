@@ -37,6 +37,21 @@ bool isRandomChoice(int choice){return choice==randomChoice||choice==solarRandom
 int randomChoiceFor(const Assignment& a){return a.randomPool==RandomPool::SolarSystem?solarRandomChoice:randomChoice;}
 struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;bool renderingFailed=false,outputFallback=false;std::wstring performanceStatus,renderingError;uint64_t renderedFrames=0;double effectiveFps=0;std::optional<double> pendingVideoSpeed;std::wstring videoMessage;};
 HWND controller{},library{},statusLabel{};HINSTANCE instance{};HFONT font{},headingFont{};
+const std::wstring& appCaption(){
+ // Read the loaded module so this describes the running build even if the
+ // executable on disk is subsequently replaced. Keep the version in app.rc.
+ static const std::wstring caption=[] {
+  auto resource=FindResourceW(instance,MAKEINTRESOURCEW(VS_VERSION_INFO),RT_VERSION);
+  auto data=resource?LoadResource(instance,resource):nullptr;
+  VS_FIXEDFILEINFO* info=nullptr;UINT size=0;
+  if(data&&VerQueryValueW(LockResource(data),L"\\",reinterpret_cast<void**>(&info),&size)&&size>=sizeof(*info)&&info->dwSignature==0xFEEF04BD){
+   auto version=std::to_wstring(HIWORD(info->dwProductVersionMS))+L"."+std::to_wstring(LOWORD(info->dwProductVersionMS))+L"."+std::to_wstring(HIWORD(info->dwProductVersionLS));
+   if(LOWORD(info->dwProductVersionLS))version+=L"."+std::to_wstring(LOWORD(info->dwProductVersionLS));
+   return L"Voltura Worlds "+version;
+  }
+  return std::wstring(L"Voltura Worlds (version unavailable)");
+ }();return caption;
+}
 HICON trayIcon{};bool trayRegistered=false;
 std::vector<Surface> surfaces;std::vector<std::pair<std::wstring,std::wstring>> audioDevices;
 std::wstring selectedMonitorId;
@@ -580,7 +595,7 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
 void showLibrary(){
  if(library){ShowWindow(library,SW_RESTORE);SetForegroundWindow(library);return;}
  uiDpi=GetDpiForSystem();
- library=CreateWindowExW(WS_EX_APPWINDOW|WS_EX_COMPOSITED,L"VolturaWorldLibrary",L"Voltura Worlds",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_VSCROLL|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,px(780),px(500),nullptr,nullptr,instance,nullptr);
+ library=CreateWindowExW(WS_EX_APPWINDOW|WS_EX_COMPOSITED,L"VolturaWorldLibrary",appCaption().c_str(),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_VSCROLL|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,px(780),px(500),nullptr,nullptr,instance,nullptr);
  if(!library)throw std::runtime_error("Cannot open Worlds library.");
  try{
  uiDpi=GetDpiForWindow(library);updateUiFonts();ui::refresh(library);
@@ -651,7 +666,7 @@ HICON createTrayIcon(){
  Gdiplus::GdiplusShutdown(token);
  return icon;
 }
-void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,L"Voltura Worlds");trayRegistered=Shell_NotifyIconW(NIM_ADD,&n)||Shell_NotifyIconW(NIM_MODIFY,&n);if(trayRegistered){n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);}if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
+void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP|NIF_SHOWTIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,appCaption().c_str());trayRegistered=Shell_NotifyIconW(NIM_ADD,&n)||Shell_NotifyIconW(NIM_MODIFY,&n);if(trayRegistered){n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);}if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
 void prepareTrayMenu(HWND owner,POINT point){
  // Windows scales native menus using their owner. Keep the hidden controller
  // on the invocation monitor, including after HDMI reconnects or scale changes.
