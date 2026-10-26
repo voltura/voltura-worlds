@@ -125,7 +125,8 @@ try {
   }
  }
  foreach ($scene in @('aurora','bloom','smoke','silk','eclipse','lattice','drift','contour','plastic_metal','ripples','mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','moon','pluto','sun')) {
-  & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir "installed-$scene") --scene $scene --width 640 --height 360 --frames 1 --start-time 8 --debug-gpu
+  $captureOffset = if ($scene -eq 'smoke') { @() } else { @('--start-time', '8') }
+  & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir "installed-$scene") --scene $scene --width 640 --height 360 --frames 1 @captureOffset --debug-gpu
   if ($LASTEXITCODE -ne 0) { throw "Installed $scene renderer validation failed." }
  }
  $results.installedNewWorlds = 'passed; all 22 Worlds rendered using packaged shaders with D3D12 debug validation'
