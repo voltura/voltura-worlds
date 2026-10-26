@@ -19,12 +19,12 @@ try {
   & 'C:\Program Files (x86)\NSIS\makensis.exe' /V2 Worlds.nsi
   if ($LASTEXITCODE) { throw 'Installer build failed' }
  } finally { Pop-Location }
- $installer = Join-Path $repo 'dist/VolturaWorlds-Setup-0.1.10-win-x64.exe'
+ $installer = Join-Path $repo 'dist/VolturaWorlds-Setup-0.1.11-win-x64.exe'
  if ($SigningConfig) {
   & (Join-Path $PSScriptRoot 'sign.ps1') -Path $installer -CertificateThumbprint $signing.certificateThumbprint -TimestampUrl $signing.timestampUrl -AllowSelfSigned:([bool]$signing.allowSelfSigned)
  }
  $signature = Get-AuthenticodeSignature -LiteralPath $installer
- @{ version='0.1.10'; installer=(Split-Path $installer -Leaf); bytes=(Get-Item -LiteralPath $installer).Length; signatureStatus=[string]$signature.Status; signer=[string]$signature.SignerCertificate.Subject; timestamped=[bool]$signature.TimeStamperCertificate } | ConvertTo-Json | Set-Content (Join-Path $repo 'dist/release-manifest.json')
+ @{ version='0.1.11'; installer=(Split-Path $installer -Leaf); bytes=(Get-Item -LiteralPath $installer).Length; signatureStatus=[string]$signature.Status; signer=[string]$signature.SignerCertificate.Subject; timestamped=[bool]$signature.TimeStamperCertificate } | ConvertTo-Json | Set-Content (Join-Path $repo 'dist/release-manifest.json')
  Write-Host "Installer prepared: $installer"
 } finally {
  $packageTimer.Stop()

@@ -4,8 +4,12 @@
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <string>
+#include <stdexcept>
 
 namespace worlds::ui {
+inline void appendComboChoice(HWND window,const wchar_t* text){
+ if(!window||SendMessageW(window,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text))<0)throw std::runtime_error("Cannot populate selection control.");
+}
 inline bool dark=false;
 inline COLORREF background{},surface{},foreground{},muted{},accent{},border{};
 inline HBRUSH backgroundBrush{},surfaceBrush{};
@@ -76,7 +80,7 @@ inline LRESULT CALLBACK comboBorder(HWND hwnd,UINT msg,WPARAM w,LPARAM l,UINT_PT
   int index=int(SendMessageW(hwnd,CB_GETCURSEL,0,0));auto length=SendMessageW(hwnd,CB_GETLBTEXTLEN,index,0);
   if(length>=0&&length<32768){std::wstring text(size_t(length)+1,L'\0');SendMessageW(hwnd,CB_GETLBTEXT,index,reinterpret_cast<LPARAM>(text.data()));
    RECT label=r;label.left+=MulDiv(10,GetDpiForWindow(hwnd),96);label.right=info.rcButton.left-4;SetBkMode(dc,TRANSPARENT);SetTextColor(dc,enabled?foreground:muted);
-   auto old=SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(hwnd,WM_GETFONT,0,0)));DrawTextW(dc,text.c_str(),-1,&label,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);SelectObject(dc,old);
+   auto old=SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(hwnd,WM_GETFONT,0,0)));DrawTextW(dc,text.c_str(),-1,&label,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);SelectObject(dc,old);
   }
   if(msg==WM_PAINT)EndPaint(hwnd,&ps);return 0;
  }
@@ -119,7 +123,7 @@ inline void draw(DRAWITEMSTRUCT& d,HFONT font,bool selected=false,UINT dpi=96){
  else {text.resize(size_t(GetWindowTextLengthW(d.hwndItem))+1);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));}
  RECT r=d.rcItem;r.left+=menu?MulDiv(40,dpi,96):12;r.right-=menu?MulDiv(28,dpi,96):12;
  if(menu&&(d.itemState&ODS_CHECKED)){RECT mark=d.rcItem;mark.left+=MulDiv(10,dpi,96);mark.right=mark.left+MulDiv(18,dpi,96);DrawTextW(d.hDC,L"✓",-1,&mark,DT_VCENTER|DT_SINGLELINE|DT_CENTER);}
- DrawTextW(d.hDC,text.c_str(),-1,&r,DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|(combo||menu||list?DT_LEFT:DT_CENTER));SelectObject(d.hDC,old);
+ DrawTextW(d.hDC,text.c_str(),-1,&r,DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|(combo||list?DT_NOPREFIX:0)|(combo||menu||list?DT_LEFT:DT_CENTER));SelectObject(d.hDC,old);
  if(popupFont)DeleteObject(popupFont);
  if(!menu&&!combo&&!list){
   // Use the control's edge for focus, keeping the label free of inner outlines.
@@ -170,7 +174,7 @@ inline bool promoteTray(const std::wstring& executable,bool& changed){
  HKEY root{};if(RegOpenKeyExW(HKEY_CURRENT_USER,L"Control Panel\\NotifyIconSettings",0,KEY_READ,&root)!=ERROR_SUCCESS)return false;
  bool found=false;wchar_t keyName[256];auto expected=normalizedPath(executable);
  for(DWORD index=0;;index++){
-  DWORD count=256;LONG result=RegEnumKeyExW(root,index,keyName,&count,nullptr,nullptr,nullptr,nullptr);if(result==ERROR_NO_MORE_ITEMS)break;if(result!=ERROR_SUCCESS)continue;
+  DWORD count=256;LONG result=RegEnumKeyExW(root,index,keyName,&count,nullptr,nullptr,nullptr,nullptr);if(result!=ERROR_SUCCESS)break;
   HKEY key{};if(RegOpenKeyExW(root,keyName,0,KEY_QUERY_VALUE|KEY_SET_VALUE,&key)!=ERROR_SUCCESS)continue;
   wchar_t path[32768]{};DWORD size=sizeof(path);
   if(RegGetValueW(key,nullptr,L"ExecutablePath",RRF_RT_REG_SZ|RRF_RT_REG_EXPAND_SZ,nullptr,path,&size)==ERROR_SUCCESS&&_wcsicmp(normalizedPath(path).c_str(),expected.c_str())==0){

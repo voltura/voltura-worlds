@@ -15,7 +15,7 @@ std::shared_ptr<GpuContext> GpuContext::acquire(LUID preferred,bool debug,bool a
  std::vector<Microsoft::WRL::ComPtr<IDXGIAdapter1>> adapters;
  Microsoft::WRL::ComPtr<IDXGIAdapter1> preferredAdapter;
  if((preferred.HighPart||preferred.LowPart)&&SUCCEEDED(factory->EnumAdapterByLuid(preferred,IID_PPV_ARGS(&preferredAdapter))))adapters.push_back(preferredAdapter);
- for(UINT i=0;allowFallback;i++){Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;if(factory->EnumAdapterByGpuPreference(i,DXGI_GPU_PREFERENCE_UNSPECIFIED,IID_PPV_ARGS(&adapter))==DXGI_ERROR_NOT_FOUND)break;adapters.push_back(adapter);}
+ for(UINT i=0;allowFallback;i++){Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;auto result=factory->EnumAdapterByGpuPreference(i,DXGI_GPU_PREFERENCE_UNSPECIFIED,IID_PPV_ARGS(&adapter));if(result==DXGI_ERROR_NOT_FOUND)break;if(FAILED(result))throw std::runtime_error("Cannot enumerate graphics adapters");adapters.push_back(adapter);}
  for(auto& adapter:adapters){
   DXGI_ADAPTER_DESC1 desc{};if(!adapter||FAILED(adapter->GetDesc1(&desc))||(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE))continue;
   auto key=std::tuple{desc.AdapterLuid.HighPart,desc.AdapterLuid.LowPart,debug};

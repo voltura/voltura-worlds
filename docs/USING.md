@@ -2,13 +2,13 @@
 
 The per-user Windows 11 x64 app includes **22 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Version **0.1.10** includes HDR output, per-display adaptive performance, broader video controls and saved desktop presets.
+Version **0.1.11** includes HDR output, per-display adaptive performance, broader video controls and saved desktop presets.
 
-[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.10/VolturaWorlds-Setup-0.1.10-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.11/VolturaWorlds-Setup-0.1.11-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
 
 ## Install and try it
 
-Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.1.10-win-x64.exe` after packaging a local build. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
+Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.1.11-win-x64.exe` after packaging a local build. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. In the tray menu, the eleven bodies are grouped under **Solar System**. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 

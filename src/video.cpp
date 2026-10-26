@@ -71,11 +71,15 @@ unsigned encodedColourTransfer(const std::filesystem::path& path,const std::stri
   };return scan(scan,0,length,0);
  }
  if(container=="mkv"||container=="webm"){
+  constexpr uint64_t unknownSize=UINT64_MAX-1;
   auto scan=[&](auto&& self,uint64_t begin,uint64_t end,unsigned depth)->unsigned{
    if(depth>12)return 0;
    while(begin<end&&budget>0){--budget;auto h=bytes(begin,size_t(std::min<uint64_t>(end-begin,16)));size_t p=0;
-    auto vint=[&](bool id)->uint64_t{if(p>=h.size()||!h[p])return UINT64_MAX;unsigned n=1;while(n<=8&&!(h[p]&(0x80>>(n-1))))++n;if(n>8||n>h.size()-p)return UINT64_MAX;uint64_t value=h[p++]&(id?255:0xff>>n);for(unsigned i=1;i<n;i++)value=(value<<8)|h[p++];return value;};
-    auto id=vint(true),count=vint(false);if(id==UINT64_MAX||count==UINT64_MAX||p>h.size())return 0;auto payload=begin+p;auto stop=count>end-payload?end:payload+count;
+    auto vint=[&](bool id)->uint64_t{if(p>=h.size()||!h[p])return UINT64_MAX;unsigned n=1;while(n<=8&&!(h[p]&(0x80>>(n-1))))++n;if(n>8||n>h.size()-p)return UINT64_MAX;uint64_t value=h[p++]&(id?255:0xff>>n);for(unsigned i=1;i<n;i++)value=(value<<8)|h[p++];return !id&&value==((uint64_t{1}<<(7*n))-1)?unknownSize:value;};
+    auto id=vint(true),count=vint(false);if(id==UINT64_MAX||count==UINT64_MAX||p>h.size())return 0;auto payload=begin+p;
+    // All-one size data means unknown at every VINT width, not 127/16383/etc.
+    if(count!=unknownSize&&count>end-payload)return 0;
+    auto stop=count==unknownSize?end:payload+count;
     if(id==0x55ba&&count<=8){auto value=bytes(payload,size_t(count));unsigned t=unsigned(be(value));if(t==16||t==18)return t;}
     if(id==0x63a2&&count<=65536){auto value=bytes(payload,size_t(count));auto t=h264SequenceTransfer(value);if(t==16||t==18)return t;}
     if(id==0x18538067||id==0x1654ae6b||id==0xae||id==0xe0||id==0x55b0){auto t=self(self,payload,stop,depth+1);if(t)return t;}
@@ -154,9 +158,14 @@ VideoPlayer::~VideoPlayer()=default;
 bool VideoPlayer::setPlaybackRate(double value){
  VideoSettings settings;settings.speed=value;if(!validVideoSettings(settings))throw std::runtime_error("Invalid video playback speed");
  auto& p=*impl_;mediaCheck(p.events->failure.load(),"Windows could not load this video");if(p.engine->GetReadyState()<MF_MEDIA_ENGINE_READY_HAVE_METADATA)return false;
- value=canonicalVideoSpeed(value);if(std::abs(p.engine->GetPlaybackRate()-value)<1e-6)return true;
+ auto matches=[](double actual,double expected){return std::isfinite(actual)&&std::abs(actual-expected)<1e-6;};
+ value=canonicalVideoSpeed(value);if(matches(p.engine->GetPlaybackRate(),value))return true;
  auto previous=p.engine->GetPlaybackRate();auto result=p.engine->SetDefaultPlaybackRate(value);if(SUCCEEDED(result))result=p.engine->SetPlaybackRate(value);
- if(FAILED(result)||std::abs(p.engine->GetPlaybackRate()-value)>1e-6){p.engine->SetDefaultPlaybackRate(previous);p.engine->SetPlaybackRate(previous);throw VideoRateRejected("This video cannot play at the selected speed. The previous speed is retained.");}return true;
+ if(FAILED(result)||!matches(p.engine->GetPlaybackRate(),value)){
+  auto restoredDefault=p.engine->SetDefaultPlaybackRate(previous),restored=p.engine->SetPlaybackRate(previous);
+  if(FAILED(restoredDefault)||FAILED(restored)||!matches(p.engine->GetPlaybackRate(),previous))throw std::runtime_error("Windows could not restore the previous video speed. Playback will be restarted.");
+  throw VideoRateRejected("This video cannot play at the selected speed. The previous speed is retained.");
+ }return true;
 }
 double VideoPlayer::playbackRate()const{return impl_->engine->GetPlaybackRate();}
 void VideoPlayer::setPaused(bool value){auto& p=*impl_;if(p.paused==value)return;checked(value?p.engine->Pause():p.engine->Play(),"Change video playback state");p.paused=value;}
@@ -176,7 +185,10 @@ namespace {
 std::vector<unsigned char> encodePreview(const VideoInfo& info,const std::vector<BYTE>& pixels){
  ComPtr<IWICImagingFactory> factory;checked(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&factory)),"Create thumbnail encoder");ComPtr<IWICBitmap> bitmap;
  checked(factory->CreateBitmapFromMemory(info.width,info.height,GUID_WICPixelFormat32bppBGRA,info.width*4,UINT(pixels.size()),const_cast<BYTE*>(pixels.data()),&bitmap),"Create thumbnail bitmap");
- double aspect=info.displayAspect>0?info.displayAspect:double(info.width)/info.height;UINT width=UINT(std::max(1.,std::min(540.,280.*aspect))),height=UINT(std::max(1.,width/aspect));
+ double aspect=std::isfinite(info.displayAspect)&&info.displayAspect>0?info.displayAspect:double(info.width)/info.height;
+ // Rounding the narrow side up to one pixel must not expand the other side
+ // beyond the thumbnail bounds (extreme pixel-aspect ratios can be enormous).
+ UINT width=UINT(std::clamp(280.*aspect,1.,540.)),height=UINT(std::clamp(width/aspect,1.,280.));
  ComPtr<IWICBitmapScaler> scaler;checked(factory->CreateBitmapScaler(&scaler),"Create thumbnail scaler");checked(scaler->Initialize(bitmap.Get(),width,height,WICBitmapInterpolationModeFant),"Scale thumbnail");
  ComPtr<IStream> stream;checked(CreateStreamOnHGlobal(nullptr,TRUE,&stream),"Create thumbnail stream");ComPtr<IWICBitmapEncoder> encoder;checked(factory->CreateEncoder(GUID_ContainerFormatPng,nullptr,&encoder),"Create PNG thumbnail");checked(encoder->Initialize(stream.Get(),WICBitmapEncoderNoCache),"Initialize thumbnail encoder");ComPtr<IWICBitmapFrameEncode> frame;checked(encoder->CreateNewFrame(&frame,nullptr),"Create thumbnail frame");checked(frame->Initialize(nullptr),"Initialize thumbnail frame");checked(frame->SetSize(width,height),"Size thumbnail");WICPixelFormatGUID format=GUID_WICPixelFormat32bppBGRA;checked(frame->SetPixelFormat(&format),"Set thumbnail pixels");checked(frame->WriteSource(scaler.Get(),nullptr),"Encode thumbnail");checked(frame->Commit(),"Finish thumbnail frame");checked(encoder->Commit(),"Finish thumbnail");
  STATSTG stat{};checked(stream->Stat(&stat,STATFLAG_NONAME),"Read thumbnail length");HGLOBAL memory{};checked(GetHGlobalFromStream(stream.Get(),&memory),"Read thumbnail data");auto bytes=static_cast<BYTE*>(GlobalLock(memory));if(!bytes)throw std::runtime_error("Cannot read thumbnail memory");std::vector<BYTE> encoded(bytes,bytes+size_t(stat.cbSize.QuadPart));GlobalUnlock(memory);return encoded;
@@ -204,13 +216,14 @@ VideoPreflight preflightVideo(const std::filesystem::path& file,std::stop_token 
  ID3D12CommandList* lists[]={list.Get()};queue->ExecuteCommandLists(1,lists);player.consumed();
  checked(queue->Signal(fence.Get(),1),"Signal validation readback");
  while(fence->GetCompletedValue()<1){cancellation(stop);if(GetTickCount64()>=deadline)throw VideoError(VideoErrorKind::Timeout,"Video GPU validation timed out.");std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+ checked(device->GetDeviceRemovedReason(),"Video GPU unavailable during readback");
  std::vector<BYTE> pixels(size_t(info.width)*info.height*4);BYTE* bytes{};D3D12_RANGE range{0,SIZE_T(size)};checked(readback->Map(0,&range,reinterpret_cast<void**>(&bytes)),"Read validation pixels");for(unsigned y=0;y<info.height;y++)std::memcpy(pixels.data()+size_t(y)*info.width*4,bytes+footprint.Offset+size_t(y)*footprint.Footprint.RowPitch,size_t(info.width)*4);D3D12_RANGE empty{};readback->Unmap(0,&empty);cancellation(stop);
  return {info,encodePreview(info,pixels)};
 }
 std::vector<unsigned char> videoPreview(const std::filesystem::path& file,std::stop_token stop,LUID adapter){return preflightVideo(file,stop,adapter).preview;}
 std::filesystem::path copyVideoToLibrary(const std::filesystem::path& library,const std::filesystem::path& source,std::stop_token stop,LUID adapter){
  cancellation(stop);auto info=inspectVideo(source);std::filesystem::create_directories(library);GUID guid{};checked(CoCreateGuid(&guid),"Create video identifier");wchar_t name[40]{};StringFromGUID2(guid,name,40);
- auto stage=library/(std::wstring(name)+L".pending"),destination=library/name;auto filename=std::filesystem::path("video."+info.container);std::filesystem::create_directory(stage);
+ auto stage=library/(std::wstring(name)+L".pending"),destination=library/name;auto filename=std::filesystem::path("video."+info.container);if(!std::filesystem::create_directory(stage))throw VideoError(VideoErrorKind::Copy,"Import staging directory already exists.");
  try{auto progress=[](LARGE_INTEGER,LARGE_INTEGER,LARGE_INTEGER,LARGE_INTEGER,DWORD,DWORD,HANDLE,HANDLE,LPVOID token)->DWORD{return static_cast<std::stop_token*>(token)->stop_requested()?PROGRESS_CANCEL:PROGRESS_CONTINUE;};
   if(!CopyFileExW(source.c_str(),(stage/filename).c_str(),progress,&stop,nullptr,COPY_FILE_FAIL_IF_EXISTS)){cancellation(stop);throw VideoError(VideoErrorKind::Copy,"Video could not be copied. Check available disk space and file access.");}
   preflightVideo(stage/filename,stop,adapter);cancellation(stop);std::filesystem::rename(stage,destination);

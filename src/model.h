@@ -8,6 +8,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <exception>
 namespace worlds {
 enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, PlasticMetal, Ripples, Mars, Earth, Moon, Jupiter, Saturn, Mercury, Venus, Uranus, Neptune, Pluto, Sun };
 enum class OutputPreference { Auto, Sdr };
@@ -57,6 +58,7 @@ void saveSettings(const std::filesystem::path&,const Settings&);
 Assignment assignmentFor(const Settings&,const std::wstring&);
 std::string utf8(const std::wstring&);
 std::wstring wide(const std::string&);
+std::wstring describeError(const std::exception&);
 std::string sceneName(Scene);
 Scene parseScene(const std::string&);
 bool isProceduralWorld(Scene);

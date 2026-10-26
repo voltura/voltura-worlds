@@ -820,6 +820,11 @@ void Updates::check() {
                 {
                     std::lock_guard guard(work->mutex);
                     need(!work->cancel && !work->closing);
+                    // A cancelled Windows shutdown can leave the old session's
+                    // named event alive and signaled while its worker exits.
+                    // Start this live session cleanly; sessionEnd takes the
+                    // same lock before signaling the newly published handle.
+                    need(ResetEvent(*signal) != FALSE);
                     work->sessionSignal = std::move(signal);
                 }
                 auto setup = installed(target);
@@ -882,7 +887,8 @@ void Updates::check() {
                 // Invalidate the shared marker before fetching any part of the newer payload.
                 invalidatePending(release.version);
                 release = releaseInfo(metadata, setup); // A published tag counts as discovered even during asset upload.
-                if (old && old->version == release.version && old->setup == setup) {
+                if (old && old->version == release.version && old->setup == setup &&
+                    old->digest == release.digest) {
                     writeAtomic(root / L"pending", old->marker());
                     std::lock_guard guard(work->mutex);
                     work->ready = old;

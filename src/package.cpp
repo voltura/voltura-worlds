@@ -48,6 +48,7 @@ void validateWorldPreview(const Bytes& b){
 }
 static void validate(const WorldPackage& p){
  if(p.title.empty()||p.title.size()>120||p.description.size()>4000||p.attribution.size()>2000||!valid(p.assignment.params))throw std::runtime_error("Invalid World metadata");
+ for(const auto* text:{&p.title,&p.description,&p.attribution}){wide(*text);if(text->find('\0')!=std::string::npos)throw std::runtime_error("World metadata contains a null character");}
  validateWorldPreview(p.preview);if(p.assignment.scene==Scene::Video){if(!legacyAvcMp4(p.video))throw std::runtime_error("World version 1 video must be an H.264 MP4.");}else if(!p.video.empty())throw std::runtime_error("Preset cannot contain video");
  if(int(p.assignment.reaction)<0||int(p.assignment.reaction)>2)throw std::runtime_error("Invalid reaction");
 }
@@ -68,9 +69,10 @@ WorldPackage readPackage(const std::filesystem::path& file){
  if(pos!=end||lastLocal!=central||!files.contains("manifest.json")||!files.contains("preview.png")||files.at("manifest.json").size()>65536)throw std::runtime_error("Invalid package layout");
  auto j=nlohmann::json::parse(files.at("manifest.json"));if(j.at("format")!="voltura-world"||j.at("version")!=1)throw std::runtime_error("Unsupported World version");
  const std::set<std::string> keys={"format","version","title","description","attribution","scene","reaction","parameters","fit"};for(auto it=j.begin();it!=j.end();++it)if(!keys.contains(it.key()))throw std::runtime_error("Unknown manifest field");
- WorldPackage p;p.title=j.at("title");p.description=j.value("description",std::string{});p.attribution=j.value("attribution",std::string{});p.assignment.scene=parseScene(j.at("scene"));int reaction=j.at("reaction");if(reaction<0||reaction>2)throw std::runtime_error("Invalid reaction");p.assignment.reaction=Reaction(reaction);p.assignment.fit=j.value("fit",false);
+ auto integer=[](const nlohmann::json& value,int low,int high){if(!value.is_number_integer()||value<low||value>high)throw std::runtime_error("Invalid World integer");return value.get<int>();};
+ WorldPackage p;p.title=j.at("title");p.description=j.value("description",std::string{});p.attribution=j.value("attribution",std::string{});p.assignment.scene=parseScene(j.at("scene"));p.assignment.reaction=Reaction(integer(j.at("reaction"),0,2));p.assignment.fit=j.value("fit",false);
  auto values=j.at("parameters");const std::set<std::string> parameterKeys={"brightness","movement","detail","flow","turbulence","density","strength","palette"};for(auto it=values.begin();it!=values.end();++it)if(!parameterKeys.contains(it.key()))throw std::runtime_error("Unknown scene parameter");
- p.assignment.params={values.at("brightness"),values.at("movement"),values.at("detail"),values.at("flow"),values.at("turbulence"),values.at("density"),values.at("strength"),values.at("palette")};
+ p.assignment.params={values.at("brightness"),values.at("movement"),values.at("detail"),values.at("flow"),values.at("turbulence"),values.at("density"),values.at("strength"),integer(values.at("palette"),0,3)};
  p.preview=std::move(files.at("preview.png"));if(files.contains("video.mp4"))p.video=std::move(files.at("video.mp4"));validate(p);return p;
 }
 void writePackage(const std::filesystem::path& file,const WorldPackage& p){
@@ -83,12 +85,15 @@ void writePackage(const std::filesystem::path& file,const WorldPackage& p){
   put32(central,0x02014b50);put16(central,20);put16(central,20);put16(central,0);put16(central,0);put16(central,0);put16(central,0);put32(central,checksum);put32(central,size);put32(central,size);put16(central,(uint16_t)name.size());put16(central,0);put16(central,0);put16(central,0);put16(central,0);put32(central,0);put32(central,offset);central.insert(central.end(),name.begin(),name.end());
  }
  uint32_t offset=(uint32_t)b.size();b.insert(b.end(),central.begin(),central.end());put32(b,0x06054b50);put16(b,0);put16(b,0);put16(b,(uint16_t)files.size());put16(b,(uint16_t)files.size());put32(b,(uint32_t)central.size());put32(b,offset);put16(b,0);if(b.size()>limit)throw std::runtime_error("Package exceeds 100 MiB");
- auto tmp=file;tmp+=L".pending";{std::ofstream out(tmp,std::ios::binary|std::ios::trunc);if(!out.write(reinterpret_cast<const char*>(b.data()),b.size()))throw std::runtime_error("Cannot write package");}
- if(!MoveFileExW(tmp.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){std::filesystem::remove(tmp);throw std::runtime_error("Cannot commit package");}
+ auto tmp=file;tmp+=L"."+wide(newPresetId())+L".pending";
+ try{
+  std::ofstream out(tmp,std::ios::binary|std::ios::trunc);out.write(reinterpret_cast<const char*>(b.data()),b.size());out.close();if(!out)throw std::runtime_error("Cannot finish package");
+  if(!MoveFileExW(tmp.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Cannot commit package");
+ }catch(...){std::error_code ec;std::filesystem::remove(tmp,ec);throw;}
 }
-Assignment installPackage(const std::filesystem::path& library,const WorldPackage& p){
- validate(p);std::filesystem::create_directories(library);GUID id{};if(FAILED(CoCreateGuid(&id)))throw std::runtime_error("Cannot allocate library identifier");wchar_t name[40];StringFromGUID2(id,name,40);auto stage=library/(std::wstring(name)+L".pending"),dest=library/name;
- std::filesystem::create_directory(stage);try{writePackage(stage/L"source.world",p);if(p.assignment.scene==Scene::Video){std::ofstream out(stage/L"video.mp4",std::ios::binary);if(!out.write(reinterpret_cast<const char*>(p.video.data()),p.video.size()))throw std::runtime_error("Cannot import video");}std::filesystem::rename(stage,dest);}catch(...){std::error_code ec;std::filesystem::remove_all(stage,ec);throw;}
+Assignment installPackage(const std::filesystem::path& library,const WorldPackage& p,std::filesystem::path& installedDirectory){
+ validate(p);std::filesystem::create_directories(library);GUID id{};if(FAILED(CoCreateGuid(&id)))throw std::runtime_error("Cannot allocate library identifier");wchar_t name[40];StringFromGUID2(id,name,40);auto stage=library/(std::wstring(name)+L".pending"),dest=library/name;auto ownedDestination=dest;
+ if(!std::filesystem::create_directory(stage))throw std::runtime_error("Import staging directory already exists");try{writePackage(stage/L"source.world",p);if(p.assignment.scene==Scene::Video){std::ofstream out(stage/L"video.mp4",std::ios::binary);out.write(reinterpret_cast<const char*>(p.video.data()),p.video.size());out.close();if(!out)throw std::runtime_error("Cannot finish importing video");}std::filesystem::rename(stage,dest);installedDirectory=std::move(ownedDestination);}catch(...){std::error_code ec;std::filesystem::remove_all(stage,ec);throw;}
  auto a=p.assignment;if(a.scene==Scene::Video)a.video=(dest/L"video.mp4").wstring();return a;
 }
 }

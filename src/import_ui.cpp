@@ -6,18 +6,21 @@
 #include <thread>
 #include <memory>
 #include <fstream>
+#include <algorithm>
 namespace worlds {
 namespace {
 constexpr UINT ready=WM_APP+20;
 HWND activeImport{};
 UINT_PTR nextImportIdentity=0;
+struct RetiredImport {std::shared_ptr<std::atomic_bool> finished;std::jthread thread;};
+std::vector<RetiredImport> retiredImports;
 struct Import {
  UINT_PTR identity=++nextImportIdentity;
  HWND window{},image{},title{},description{},status{},button{},cancel{};HFONT font{};HBITMAP bitmap{},displayBitmap{};
- std::filesystem::path file,library,temporaryVideo;std::wstring destination,error;bool personalVideo=false;LUID adapter{};
+ std::filesystem::path file,library,temporaryVideo,installedDirectory;std::wstring destination,error;bool personalVideo=false,applied=false;LUID adapter{};
  std::function<void(const Assignment&)> apply;
  WorldPackage package;Assignment installed;std::jthread worker;bool installing=false;
- ~Import(){worker.request_stop();if(worker.joinable())worker.join();if(!temporaryVideo.empty()){std::error_code cleanupError;std::filesystem::remove(temporaryVideo,cleanupError);}if(displayBitmap&&displayBitmap!=bitmap)DeleteObject(displayBitmap);if(bitmap)DeleteObject(bitmap);if(font)DeleteObject(font);}
+ ~Import(){worker.request_stop();if(worker.joinable())worker.join();if(!applied&&!installedDirectory.empty()&&installedDirectory.parent_path()==library){std::error_code ec;std::filesystem::remove_all(installedDirectory,ec);}if(!temporaryVideo.empty()){std::error_code cleanupError;std::filesystem::remove(temporaryVideo,cleanupError);}if(displayBitmap&&displayBitmap!=bitmap)DeleteObject(displayBitmap);if(bitmap)DeleteObject(bitmap);if(font)DeleteObject(font);}
 };
 void layout(Import& state){
  UINT dpi=GetDpiForWindow(state.window);auto px=[dpi](int value){return MulDiv(value,dpi,96);};
@@ -61,13 +64,13 @@ HBITMAP preview(const std::vector<unsigned char>& bytes){
  HRESULT result=converter->CopyPixels(nullptr,w*4,w*h*4,static_cast<BYTE*>(pixels));if(FAILED(result)){DeleteObject(bitmap);checked(result);}return bitmap;
 }
 void work(Import& state){
- state.worker=std::jthread([&state](std::stop_token stop){
+ try{state.worker=std::jthread([&state](std::stop_token stop){
   HRESULT initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   try{
    if(FAILED(initialized))throw std::runtime_error("Cannot initialize import worker");
    if(state.installing){
-    if(state.personalVideo){state.installed=state.package.assignment;state.installed.video=copyVideoToLibrary(state.library,state.file,stop,state.adapter).wstring();}
-    else state.installed=installPackage(state.library,state.package);
+    if(state.personalVideo){state.installed=state.package.assignment;auto video=copyVideoToLibrary(state.library,state.file,stop,state.adapter);state.installedDirectory=video.parent_path();state.installed.video=video.wstring();}
+    else state.installed=installPackage(state.library,state.package,state.installedDirectory);
    }else{
     if(state.personalVideo){
      state.package.preview=videoPreview(state.file,stop,state.adapter);state.package.title=utf8(state.file.stem().wstring());if(state.package.title.size()>120)state.package.title="Personal video";
@@ -83,9 +86,9 @@ void work(Import& state){
     if(state.package.assignment.scene==Scene::Video)state.package.assignment.reaction=Reaction::Off;
     state.bitmap=preview(state.package.preview);
    }
-  }catch(const std::exception& error){try{state.error=wide(error.what());}catch(...){state.error=L"Cannot read this World.";}}
+  }catch(const std::exception& error){try{state.error=describeError(error);}catch(...){state.error=L"Cannot read this World.";}}
   if(SUCCEEDED(initialized))CoUninitialize();if(!stop.stop_requested())PostMessageW(state.window,ready,state.identity,0);
- });
+ });}catch(const std::exception& error){state.error=describeError(error);PostMessageW(state.window,ready,state.identity,0);}
 }
 LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
  auto state=reinterpret_cast<Import*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
@@ -100,7 +103,10 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
   if(w!=state->identity)return 0;
   if(state->worker.joinable())state->worker.join();
   if(!state->error.empty()){SetWindowTextW(state->status,state->error.c_str());return 0;}
-  if(state->installing){try{state->apply(state->installed);}catch(const std::exception& e){MessageBoxW(hwnd,wide(e.what()).c_str(),L"World imported",MB_OK|MB_ICONWARNING);}DestroyWindow(hwnd);return 0;}
+  // The callback may already have changed settings before reporting a UI error.
+  // Retain the files once application begins; cancellation before this point
+  // still removes this import's unused managed directory.
+  if(state->installing){state->applied=true;try{state->apply(state->installed);}catch(const std::exception& e){MessageBoxW(hwnd,describeError(e).c_str(),L"Cannot apply World",MB_OK|MB_ICONWARNING);}DestroyWindow(hwnd);return 0;}
   SendMessageW(state->image,STM_SETIMAGE,IMAGE_BITMAP,reinterpret_cast<LPARAM>(state->bitmap));
   state->displayBitmap=reinterpret_cast<HBITMAP>(SendMessageW(state->image,STM_GETIMAGE,IMAGE_BITMAP,0));
   layout(*state);
@@ -122,10 +128,26 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
   state->worker.request_stop();
   // A media decoder or filesystem operation may still be returning. Reap the
   // worker off the UI thread, retaining its state until that work has stopped.
-  std::thread([state]{delete state;}).detach();
+  std::unique_ptr<Import> reclaim(state);
+  try{
+   std::erase_if(retiredImports,[](const auto& task){return task.finished->load();});
+   auto finished=std::make_shared<std::atomic_bool>(false);
+   retiredImports.reserve(retiredImports.size()+1);
+   std::jthread reaper([state,finished]{delete state;finished->store(true);});
+   reclaim.release();
+   retiredImports.push_back({std::move(finished),std::move(reaper)});
+  }catch(const std::exception&){
+   // If asynchronous cleanup cannot start, the local owner stops and joins the
+   // import here rather than leaking its state or throwing through Windows.
+  }
  }
  return DefWindowProcW(hwnd,message,w,l);
 }
+}
+void closeWorldImports(){
+ if(IsWindow(activeImport))DestroyWindow(activeImport);
+ for(auto& task:retiredImports)if(task.thread.joinable())task.thread.join();
+ retiredImports.clear();
 }
 void showWorldImport(HWND owner,const std::filesystem::path& file,const std::filesystem::path& library,
  const std::wstring& destination,std::function<void(const Assignment&)> apply,bool personalVideo,LUID adapter){
@@ -134,15 +156,18 @@ void showWorldImport(HWND owner,const std::filesystem::path& file,const std::fil
  auto state=std::make_unique<Import>();state->file=file;state->library=library;state->destination=destination;state->apply=std::move(apply);state->personalVideo=personalVideo;state->adapter=adapter;
  HWND hwnd=CreateWindowExW(WS_EX_DLGMODALFRAME,cls.lpszClassName,personalVideo?L"Import video":L"Import preset",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,600,650,owner,nullptr,cls.hInstance,state.get());
  if(!hwnd)throw std::runtime_error("Cannot open import preview");
- auto data=state.release();data->window=hwnd;activeImport=hwnd;SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(data));data->font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
- auto control=[&](const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int width,int height,int id){if(!wcscmp(type,L"BUTTON"))style=(style&~DWORD(BS_TYPEMASK))|BS_OWNERDRAW;auto result=CreateWindowExW(0,type,text,WS_CHILD|WS_VISIBLE|style,x,y,width,height,hwnd,(HMENU)(INT_PTR)id,cls.hInstance,nullptr);SendMessageW(result,WM_SETFONT,(WPARAM)data->font,TRUE);return result;};
+ auto data=state.release();data->window=hwnd;activeImport=hwnd;SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(data));
+ try{
+ data->font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
+ auto control=[&](const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int width,int height,int id){if(!wcscmp(type,L"BUTTON"))style=(style&~DWORD(BS_TYPEMASK))|BS_OWNERDRAW;auto result=CreateWindowExW(0,type,text,WS_CHILD|WS_VISIBLE|style,x,y,width,height,hwnd,(HMENU)(INT_PTR)id,cls.hInstance,nullptr);if(!result)throw std::runtime_error("Cannot create import control");SendMessageW(result,WM_SETFONT,(WPARAM)data->font,TRUE);return result;};
  data->image=control(L"STATIC",L"",SS_BITMAP|SS_CENTERIMAGE,20,16,540,280,0);
  data->title=control(L"STATIC",L"Loading World…",SS_NOPREFIX,20,308,540,28,0);
  data->description=control(L"EDIT",L"",ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL,20,344,540,116,0);
  data->status=control(L"STATIC",L"Validating the package. Your desktop will change only after you choose Import and apply.",SS_NOPREFIX,20,474,540,60,0);
  data->button=control(L"BUTTON",L"Import and apply",WS_TABSTOP|BS_DEFPUSHBUTTON,206,552,190,34,IDOK);EnableWindow(data->button,FALSE);
  data->cancel=control(L"BUTTON",L"Cancel",WS_TABSTOP,412,552,148,34,IDCANCEL);
- theme(*data);sizeToWorkArea(hwnd,GetDpiForWindow(owner));layout(*data);
+ theme(*data);sizeToWorkArea(hwnd,GetDpiForWindow(hwnd));layout(*data);
  ShowWindow(hwnd,SW_SHOW);SetForegroundWindow(hwnd);work(*data);
+ }catch(...){DestroyWindow(hwnd);throw;}
 }
 }

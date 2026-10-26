@@ -28,7 +28,7 @@ See [Using Worlds](docs/USING.md) for the full guide and [documentation](docs/RE
 
 ## Current release
 
-**Version 0.1.10** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.10/VolturaWorlds-Setup-0.1.10-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.10). Includes all **22 Worlds** and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.11** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.11/VolturaWorlds-Setup-0.1.11-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.11). Includes all **22 Worlds** and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
 Pluto includes the original New Horizons heart region and artistically reconstructed far-side and southern terrain. Reconstructed detail is not additional spacecraft measurement. See [Pluto sources and limitations](assets/pluto/ATTRIBUTION.md).
 

@@ -1,4 +1,5 @@
 #include "output.h"
+#include "desktop.h"
 #include <wrl/client.h>
 namespace worlds {
 OutputConfig discoverOutput(const Monitor& monitor,OutputPreference preference,bool video){
@@ -18,11 +19,9 @@ OutputConfig discoverOutput(const Monitor& monitor,OutputPreference preference,b
  active&=matched;
  MONITORINFOEXW info{};info.cbSize=sizeof(info);bool peakFallback=missingPeak||peak==10000,missingState=false;
  std::vector<OutputTarget> targets;
- UINT count=0,modes=0;
- if(GetMonitorInfoW(monitor.handle,&info)&&GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,&count,&modes)==ERROR_SUCCESS){
-  std::vector<DISPLAYCONFIG_PATH_INFO> paths(count);std::vector<DISPLAYCONFIG_MODE_INFO> mode(modes);
-  if(QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS,&count,paths.data(),&modes,mode.data(),nullptr)==ERROR_SUCCESS)for(UINT i=0;i<count;i++){
-   const auto& p=paths[i];DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};source.header={DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,sizeof(source),p.sourceInfo.adapterId,p.sourceInfo.id};
+ if(GetMonitorInfoW(monitor.handle,&info)){
+  for(const auto& p:activeDisplayPaths()){
+   DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};source.header={DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,sizeof(source),p.sourceInfo.adapterId,p.sourceInfo.id};
    if(DisplayConfigGetDeviceInfo(&source.header)!=ERROR_SUCCESS||wcscmp(source.viewGdiDeviceName,info.szDevice))continue;
    bool targetActive=active;
    // Advanced Color alone also includes SDR ACM. Require the target's HDR (PQ) signal

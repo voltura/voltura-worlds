@@ -7,7 +7,7 @@ struct WorldPackage {std::string title,description,attribution;Assignment assign
 void validateWorldPreview(const std::vector<unsigned char>&);
 WorldPackage readPackage(const std::filesystem::path&);
 void writePackage(const std::filesystem::path&,const WorldPackage&);
-Assignment installPackage(const std::filesystem::path& library,const WorldPackage&);
+Assignment installPackage(const std::filesystem::path& library,const WorldPackage&,std::filesystem::path& installedDirectory);
 // Version 2 archives stream media from files (or byte ranges in another archive).
 struct MediaReference {std::string name;std::filesystem::path source;uint64_t offset=0,size=0;};
 struct PresetDisplay {std::wstring id,label;Assignment assignment;std::string media;};

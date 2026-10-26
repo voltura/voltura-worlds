@@ -17,6 +17,9 @@ static std::vector<char> shader(const std::filesystem::path& dir,const wchar_t* 
 static D3D12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE type){D3D12_HEAP_PROPERTIES h{};h.Type=type;return h;}
 static D3D12_RESOURCE_DESC bufferDesc(uint64_t size){D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;d.Width=size;d.Height=1;d.DepthOrArraySize=1;d.MipLevels=1;d.SampleDesc.Count=1;d.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;return d;}
 Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& dir,bool debug,bool forceSingleSample,std::shared_ptr<GpuContext> context):window_(hwnd),width_(w),height_(h){
+ // A failed constructor does not run ~Renderer. Release native handles on
+ // partial setup failure as well as through the normal destructor.
+ struct SetupHandles {HANDLE& event;HANDLE& latency;bool complete=false;~SetupHandles(){if(!complete){if(event)CloseHandle(event);if(latency)CloseHandle(latency);}}} setupHandles{event_,latency_};
  assetDirectory_=dir.parent_path()/L"assets";
  context_=context?std::move(context):GpuContext::acquire({},debug);
  if(!context_->factory||!context_->factory->IsCurrent()){ComPtr<IDXGIFactory6> refreshed;check(CreateDXGIFactory2(0,IID_PPV_ARGS(&refreshed)),"Refresh DXGI factory");context_->factory=refreshed;}
@@ -85,6 +88,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  targets();
  D3D12_SHADER_RESOURCE_VIEW_DESC nullFine{};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;nullFine.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE3D;nullFine.Texture3D.MipLevels=1;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(380));
  nullFine={};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;nullFine.Buffer.NumElements=1;nullFine.Buffer.StructureByteStride=8;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(381));
+ setupHandles.complete=true;
 }
 Renderer::~Renderer(){try{idle();}catch(...){}if(event_)CloseHandle(event_);if(latency_)CloseHandle(latency_);}
 bool Renderer::tryPresent(){
@@ -114,7 +118,12 @@ void Renderer::releaseAsset(ComPtr<ID3D12Resource>& texture){
  for(auto it=assetSlots_.begin();it!=assetSlots_.end();)if(it->second==raw)it=assetSlots_.erase(it);else ++it;
  if(auto it=textureLeases_.find(raw);it!=textureLeases_.end()){assetBytes_-=it->second->bytes;textureLeases_.erase(it);}texture.Reset();context_->sharedTextureBytes();
 }
-void Renderer::wait(uint64_t value){if(value&&fence_->GetCompletedValue()<value){check(fence_->SetEventOnCompletion(value,event_),"Wait for GPU fence");if(WaitForSingleObject(event_,10000)!=WAIT_OBJECT_0)throw std::runtime_error("GPU stopped responding");}}
+void Renderer::wait(uint64_t value){
+ if(!value)return;
+ auto completed=fence_->GetCompletedValue();if(completed==UINT64_MAX)throw std::runtime_error("Graphics device removed while waiting for GPU");
+ if(completed<value){check(fence_->SetEventOnCompletion(value,event_),"Wait for GPU fence");if(WaitForSingleObject(event_,10000)!=WAIT_OBJECT_0)throw std::runtime_error("GPU stopped responding");}
+ if(fence_->GetCompletedValue()==UINT64_MAX)throw std::runtime_error("Graphics device removed while waiting for GPU");
+}
 void Renderer::idle(){if(!queue_||!fence_||context_->removed())return;check(queue_->Signal(fence_.Get(),++fenceValue_),"Signal GPU idle");wait(fenceValue_);}
 void Renderer::validateDebugMessages(){
  idle();ComPtr<ID3D12InfoQueue> messages;if(FAILED(device_.As(&messages)))return;

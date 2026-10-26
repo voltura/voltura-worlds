@@ -3,6 +3,7 @@ Unicode true
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "x64.nsh"
 !ifndef PRODUCT_KEY
  !define PRODUCT_KEY "VolturaWorlds"
 !endif
@@ -19,20 +20,20 @@ Unicode true
  !define PROFILE_DIR "$LOCALAPPDATA\Voltura\Worlds"
 !endif
 !ifndef OUTPUT
- !define OUTPUT "..\dist\VolturaWorlds-Setup-0.1.10-win-x64.exe"
+ !define OUTPUT "..\dist\VolturaWorlds-Setup-0.1.11-win-x64.exe"
 !endif
 Name "Voltura Worlds"
-Caption "Voltura Worlds 0.1.10 Setup"
+Caption "Voltura Worlds 0.1.11 Setup"
 BrandingText "Voltura AB"
 ManifestDPIAware true
 ManifestSupportedOS all
-VIProductVersion "0.1.10.0"
+VIProductVersion "0.1.11.0"
 VIAddVersionKey "ProductName" "Voltura Worlds"
 VIAddVersionKey "CompanyName" "Voltura AB"
 VIAddVersionKey "FileDescription" "Voltura Worlds Setup"
-VIAddVersionKey "FileVersion" "0.1.10"
-VIAddVersionKey "ProductVersion" "0.1.10"
-VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.1.10-win-x64.exe"
+VIAddVersionKey "FileVersion" "0.1.11"
+VIAddVersionKey "ProductVersion" "0.1.11"
+VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.1.11-win-x64.exe"
 VIAddVersionKey "LegalCopyright" "Voltura AB"
 !define MUI_ICON "artwork\worlds.ico"
 !define MUI_UNICON "artwork\worlds.ico"
@@ -77,6 +78,11 @@ Function LaunchWorlds
  ShowWindow $HWNDPARENT ${SW_HIDE}
 FunctionEnd
 Function .onInit
+ ${IfNot} ${RunningX64}
+  MessageBox MB_OK|MB_ICONSTOP "Voltura Worlds requires 64-bit Windows." /SD IDOK
+  SetErrorLevel 1
+  Abort
+ ${EndIf}
  SetRegView 64
  System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\VolturaWorldsSetup") p.r0 ?e'
  Pop $1
@@ -296,7 +302,7 @@ Section "Voltura Worlds"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_KEY}"
  ${EndIf}
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayName" "Voltura Worlds"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.1.10"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.1.11"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "Publisher" "Voltura AB"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayIcon" "$INSTDIR\VolturaWorlds.exe"
@@ -306,6 +312,15 @@ Section "Voltura Worlds"
 SectionEnd
 Function un.onInit
  SetRegView 64
+ # Serialize uninstall with setup and other uninstallers before touching files.
+ System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\VolturaWorldsSetup") p.r0 ?e'
+ Pop $1
+ StrCpy $SetupMutex $0
+ ${If} $0 == 0
+ ${OrIf} $1 == 183
+  SetErrorLevel 1
+  Abort
+ ${EndIf}
  FindWindow $0 "VolturaWorldController"
  ${If} $0 != 0
   MessageBox MB_OK|MB_ICONINFORMATION "Please exit Voltura Worlds from the notification area before uninstalling." /SD IDOK
@@ -411,7 +426,9 @@ Section "Uninstall"
  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_KEY}"
  ReadRegStr $0 HKCU "Software\Classes\${FILE_EXTENSION}" ""
  ${If} $0 == "${WORLD_CLASS}"
-  DeleteRegKey HKCU "Software\Classes\${FILE_EXTENSION}"
+  # Preserve other applications' Open With entries and extension metadata.
+  DeleteRegValue HKCU "Software\Classes\${FILE_EXTENSION}" ""
+  DeleteRegKey /ifempty HKCU "Software\Classes\${FILE_EXTENSION}"
  ${EndIf}
  DeleteRegKey HKCU "Software\Classes\${WORLD_CLASS}"
  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}"

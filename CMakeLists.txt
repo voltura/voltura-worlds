@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(VolturaWorlds VERSION 0.1.10 LANGUAGES CXX RC)
+project(VolturaWorlds VERSION 0.1.11 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -174,12 +174,12 @@ target_sources(VolturaWorlds PRIVATE src/presets_ui.cpp)
 foreach(t worlds_core VolturaWorlds)
   target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8 /EHsc)
 endforeach()
-add_custom_command(TARGET VolturaWorlds POST_BUILD
+add_custom_target(worlds_runtime ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/licenses" "$<TARGET_FILE_DIR:VolturaWorlds>/licenses"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:VolturaWorlds>/assets"
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${SHADER_DIR}" "$<TARGET_FILE_DIR:VolturaWorlds>/shaders"
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/D3D12Core.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/d3d12SDKLayers.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/")
+add_dependencies(VolturaWorlds worlds_runtime)
 
 target_link_libraries(VolturaWorlds PRIVATE bcrypt crypt32 wintrust winhttp version)

@@ -7,14 +7,25 @@
 #include <vector>
 namespace worlds {
 inline std::string videoContainer(std::span<const unsigned char> b){
- if(b.size()>=12&&!memcmp(b.data()+4,"ftyp",4))return !memcmp(b.data()+8,"qt  ",4)?"mov":!memcmp(b.data()+8,"M4V ",4)?"m4v":"mp4";
+ if(b.size()>=8){
+  auto be=[&](size_t at,unsigned count){uint64_t value=0;for(unsigned i=0;i<count;i++)value=(value<<8)|b[at+i];return value;};
+  uint64_t size=be(0,4);size_t header=8;
+  if(size==1){if(b.size()<16)return {};size=be(8,8);header=16;}
+  if(size==0||size>=header){
+   auto type=b.data()+4;
+   if(!memcmp(type,"ftyp",4)){if(size<header+8||b.size()<header+8)return {};return !memcmp(b.data()+header,"qt  ",4)?"mov":!memcmp(b.data()+header,"M4V ",4)?"m4v":"mp4";}
+   // QuickTime's ftyp atom is optional. These top-level atoms identify a
+   // legacy candidate; native metadata/codec validation still follows.
+   if(!memcmp(type,"moov",4)||!memcmp(type,"mdat",4)||!memcmp(type,"free",4)||!memcmp(type,"skip",4)||!memcmp(type,"pnot",4)||(!memcmp(type,"wide",4)&&size==8))return "mov";
+  }
+ }
  if(b.size()>=12&&!memcmp(b.data(),"RIFF",4)&&!memcmp(b.data()+8,"AVI ",4))return "avi";
  constexpr unsigned char asf[]={0x30,0x26,0xb2,0x75,0x8e,0x66,0xcf,0x11,0xa6,0xd9,0,0xaa,0,0x62,0xce,0x6c};
  if(b.size()>=16&&!memcmp(b.data(),asf,16))return "wmv";
  if(b.size()>=5&&b[0]==0x1a&&b[1]==0x45&&b[2]==0xdf&&b[3]==0xa3){
-  auto vint=[&](size_t& at,bool keep)->uint64_t{if(at>=b.size()||!b[at])return UINT64_MAX;unsigned n=1;while(n<=8&&!(b[at]&(0x80>>(n-1))))++n;if(n>8||n>b.size()-at)return UINT64_MAX;uint64_t value=b[at++]&(keep?255:(0xff>>n));for(unsigned i=1;i<n;i++)value=(value<<8)|b[at++];return value;};
-  size_t pos=4;auto length=vint(pos,false);if(length>b.size()-pos)return {};auto end=pos+size_t(length);
-  for(unsigned count=0;pos<end&&count<128;count++){auto id=vint(pos,true),size=vint(pos,false);if(size>end-pos)return {};if(id==0x4282){std::string type(reinterpret_cast<const char*>(b.data()+pos),size_t(size));return type=="webm"?"webm":type=="matroska"?"mkv":"";}pos+=size_t(size);}
+  auto vint=[&](size_t& at,bool keep,size_t bound)->uint64_t{if(at>=bound||!b[at])return UINT64_MAX;unsigned n=1;while(n<=8&&!(b[at]&(0x80>>(n-1))))++n;if(n>8||n>bound-at)return UINT64_MAX;uint64_t value=b[at++]&(keep?255:(0xff>>n));for(unsigned i=1;i<n;i++)value=(value<<8)|b[at++];return value;};
+  size_t pos=4;auto length=vint(pos,false,b.size());if(length>b.size()-pos)return {};auto end=pos+size_t(length);
+  for(unsigned count=0;pos<end&&count<128;count++){auto id=vint(pos,true,end),size=vint(pos,false,end);if(id==UINT64_MAX||size==UINT64_MAX||size>end-pos)return {};if(id==0x4282){std::string type(reinterpret_cast<const char*>(b.data()+pos),size_t(size));return type=="webm"?"webm":type=="matroska"?"mkv":"";}pos+=size_t(size);}
  }
  return {};
 }
@@ -63,9 +74,13 @@ inline unsigned h264SequenceTransfer(std::span<const unsigned char> blob){
   if(bits(1)){bits(3);bits(1);if(bits(1)){bits(8);unsigned transfer=bits(8);bits(8);return ok?transfer:0;}}
   return 0;
  };
- if(blob.size()>6&&blob[0]==1){size_t at=6;for(unsigned i=0;i<unsigned(blob[5]&31);i++){if(at+2>blob.size())break;size_t count=(unsigned(blob[at])<<8)|blob[at+1];at+=2;if(count>blob.size()-at)break;auto t=spsTransfer(blob.subspan(at,count));if(t)return t;at+=count;}}
- for(size_t i=0;i+4<blob.size();i++)if(blob[i]==0&&blob[i+1]==0&&(blob[i+2]==1||(blob[i+2]==0&&blob[i+3]==1))){size_t start=i+(blob[i+2]==1?3:4),end=start;while(end+3<blob.size()&&!(blob[end]==0&&blob[end+1]==0&&(blob[end+2]==1||(blob[end+2]==0&&blob[end+3]==1))))end++;if(end+3>=blob.size())end=blob.size();auto t=spsTransfer(blob.subspan(start,end-start));if(t)return t;}
- return spsTransfer(blob);
+ // Any advertised HDR sequence makes the stream unsupported, even if an
+ // earlier sequence advertises SDR. Inspect all parameter sets before returning.
+ unsigned transfer=0;
+ if(blob.size()>6&&blob[0]==1){size_t at=6;for(unsigned i=0;i<unsigned(blob[5]&31);i++){if(at+2>blob.size())break;size_t count=(unsigned(blob[at])<<8)|blob[at+1];at+=2;if(count>blob.size()-at)break;auto t=spsTransfer(blob.subspan(at,count));if(t==16||t==18)return t;if(!transfer)transfer=t;at+=count;}return transfer;}
+ bool annexB=false;
+ for(size_t i=0;i+4<blob.size();i++)if(blob[i]==0&&blob[i+1]==0&&(blob[i+2]==1||(blob[i+2]==0&&blob[i+3]==1))){annexB=true;size_t start=i+(blob[i+2]==1?3:4),end=start;while(end+3<blob.size()&&!(blob[end]==0&&blob[end+1]==0&&(blob[end+2]==1||(blob[end+2]==0&&blob[end+3]==1))))end++;if(end+3>=blob.size())end=blob.size();auto t=spsTransfer(blob.subspan(start,end-start));if(t==16||t==18)return t;if(!transfer)transfer=t;}
+ return annexB?transfer:spsTransfer(blob);
 }
 
 }

@@ -35,25 +35,27 @@ constexpr int randomChoice=int(std::size(visualizations))-4;
 constexpr int solarRandomChoice=randomChoice+1;
 bool isRandomChoice(int choice){return choice==randomChoice||choice==solarRandomChoice;}
 int randomChoiceFor(const Assignment& a){return a.randomPool==RandomPool::SolarSystem?solarRandomChoice:randomChoice;}
-struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;bool renderingFailed=false,outputFallback=false;std::wstring performanceStatus;uint64_t renderedFrames=0;double effectiveFps=0;std::optional<double> pendingVideoSpeed;std::wstring videoMessage;};
+struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;bool renderingFailed=false,outputFallback=false;std::wstring performanceStatus,renderingError;uint64_t renderedFrames=0;double effectiveFps=0;std::optional<double> pendingVideoSpeed;std::wstring videoMessage;};
 HWND controller{},library{},statusLabel{};HINSTANCE instance{};HFONT font{},headingFont{};
-HICON trayIcon{};
+HICON trayIcon{};bool trayRegistered=false;
 std::vector<Surface> surfaces;std::vector<std::pair<std::wstring,std::wstring>> audioDevices;
+std::wstring selectedMonitorId;
 std::filesystem::path profile,exeDir;Settings settings;PauseState pauseState;
 std::mutex stateMutex;std::condition_variable saveCv;std::jthread renderThread,saveThread;bool savePending=false;
-std::wstring lastError;bool previewMode=true,desktopConnectionProblem=false,renderingProblem=false,outputPresentationProblem=false,automated=false;std::atomic<bool> running{true};std::atomic<unsigned> outputRevision{0};
+std::wstring lastError,settingsError,renderSetupError;bool previewMode=true,desktopConnectionProblem=false,renderingProblem=false,outputPresentationProblem=false,automated=false;std::atomic<bool> running{true};std::atomic<unsigned> outputRevision{0};
 UINT menuDpi=96;HFONT menuFont{};
 unsigned renderGeneration=0;std::atomic<bool> renderSetupFailed{false};
 UINT taskbarCreated{};AudioCapture audio;HANDLE singleInstance{};
-ULONGLONG nextDesktopRetry{},nextUpdateCheck{};
+ULONGLONG nextDesktopRetry{},nextUpdateCheck{},previousRandomTick{};
 wu::Updates updates;bool automaticUpdates=false,sessionEnding=false,restartForUpdate=false;
 struct LayoutItem{HWND hwnd;int x,y,w,h;bool advanced,footer;int sx{},sy{},sw{},sh{};};
 std::vector<LayoutItem> layoutItems;bool advancedOpen=false,addingAdvanced=false,addingFooter=false,layingOut=false,sideExpansion=false;
-int scrollOffset=0;UINT uiDpi=96;unsigned promotionAttempts=0;
+int scrollOffset=0,wheelRemainder=0;UINT uiDpi=96;unsigned promotionAttempts=0;
 int px(int value){return MulDiv(value,uiDpi,96);}
 void layoutLibrary(){
  if(!library||layingOut)return;layingOut=true;RECT client{};GetClientRect(library,&client);
- int contentHeight=advancedOpen?(sideExpansion?722:998):458;
+ // Use the same 30-DIP outer inset in compact, stacked, and side layouts.
+ int contentHeight=advancedOpen?(sideExpansion?744:1020):480;
  int total=px(contentHeight);int visible=client.bottom;
  scrollOffset=std::clamp(scrollOffset,0,std::max(0,total-visible));
  SCROLLINFO si{sizeof(si),SIF_RANGE|SIF_PAGE|SIF_POS,0,total-1,UINT(std::max(0,visible)),scrollOffset,0};SetScrollInfo(library,SB_VERT,&si,TRUE);
@@ -61,7 +63,9 @@ void layoutLibrary(){
  for(auto& item:layoutItems){bool show=!item.advanced||advancedOpen;bool side=item.advanced&&sideExpansion;int x=side?item.sx:item.x,y=side?item.sy:item.y,width=side?item.sw:item.w,height=side?item.sh:item.h;
   if(GetDlgCtrlID(item.hwnd)==retryId)show=previewMode||desktopConnectionProblem||renderingProblem||outputPresentationProblem;
   if(item.footer&&advancedOpen&&!sideExpansion)y+=540;
-  if(item.hwnd==statusLabel)y=contentHeight-72;
+  y+=10;
+  if(!side&&x+width==715)width+=5;
+  if(item.hwnd==statusLabel)y=contentHeight-30-height;
   UINT flags=SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|(show?SWP_SHOWWINDOW:SWP_HIDEWINDOW);
   if(batch)batch=DeferWindowPos(batch,item.hwnd,nullptr,px(x),px(y)-scrollOffset,px(width),px(height),flags);
  }
@@ -79,10 +83,11 @@ void updateUiFonts(){
 }
 void resizeLibrary(){
  MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(library,MONITOR_DEFAULTTONEAREST),&monitor);RECT work=monitor.rcWork,current{};GetWindowRect(library,&current);
- RECT wide{0,0,px(1240),px(722)};auto style=DWORD(GetWindowLongPtrW(library,GWL_STYLE));AdjustWindowRectExForDpi(&wide,style,FALSE,WS_EX_APPWINDOW,uiDpi);
+ RECT wide{0,0,px(1220),px(744)};auto style=DWORD(GetWindowLongPtrW(library,GWL_STYLE))&~DWORD(WS_VSCROLL);AdjustWindowRectExForDpi(&wide,style,FALSE,WS_EX_APPWINDOW,uiDpi);
  sideExpansion=advancedOpen&&wide.right-wide.left<=work.right-work.left-16;
- RECT r{0,0,px(sideExpansion?1240:760),px(advancedOpen?(sideExpansion?722:998):458)};
+ RECT r{0,0,px(sideExpansion?1220:750),px(advancedOpen?(sideExpansion?744:1020):480)};
  AdjustWindowRectExForDpi(&r,style,FALSE,WS_EX_APPWINDOW,uiDpi);
+ if(r.bottom-r.top>work.bottom-work.top)r.right+=GetSystemMetricsForDpi(SM_CXVSCROLL,uiDpi);
  int width=std::min(int(r.right-r.left),int(work.right-work.left)),height=std::min(int(r.bottom-r.top),int(work.bottom-work.top));
  int x=std::clamp(int(current.left),int(work.left),int(work.right)-width),y=std::clamp(int(current.top),int(work.top),int(work.bottom)-height);
  bool visible=IsWindowVisible(library);if(visible)SendMessageW(library,WM_SETREDRAW,FALSE,0);
@@ -96,15 +101,31 @@ void setControlText(HWND child,const std::wstring& text){
  std::wstring current(size_t(GetWindowTextLengthW(child))+1,L'\0');GetWindowTextW(child,current.data(),int(current.size()));
  if(text!=current.c_str())SetWindowTextW(child,text.c_str());
 }
+void refreshAudioDeviceChoices(){
+ if(!library)return;
+ auto devices=AudioCapture::devices();std::wstring saved;
+ {std::lock_guard lock(stateMutex);saved=settings.audioDevice;}
+ if(!saved.empty()&&std::none_of(devices.begin(),devices.end(),[&](const auto& d){return d.first==saved;}))devices.emplace_back(saved,L"Saved device (unavailable)");
+ if(devices==audioDevices&&SendDlgItemMessageW(library,deviceId,CB_GETCOUNT,0,0)==LRESULT(audioDevices.size()+1))return;
+ audioDevices=std::move(devices);auto combo=GetDlgItem(library,deviceId);
+ SendMessageW(combo,CB_RESETCONTENT,0,0);ui::appendComboChoice(combo,L"Follow system output");
+ int selected=0;for(size_t i=0;i<audioDevices.size();i++){ui::appendComboChoice(combo,audioDevices[i].second.c_str());if(audioDevices[i].first==saved)selected=int(i)+1;}
+ SendMessageW(combo,CB_SETCURSEL,selected,0);
+}
 
 std::filesystem::path executable(){wchar_t path[32768];DWORD n=GetModuleFileNameW(nullptr,path,32768);return std::filesystem::path(std::wstring(path,n));}
-void error(const std::exception& e){if(automated){std::ofstream out(exeDir/L"capture-error.txt");out<<e.what();return;}MessageBoxW(library?library:controller,wide(e.what()).c_str(),L"Voltura Worlds",MB_OK|MB_ICONWARNING);}
+void error(const std::exception& e){
+ if(automated){std::ofstream out(exeDir/L"capture-error.txt");out<<e.what();return;}
+ static bool reporting=false;if(reporting)return;
+ struct ReportGuard {bool& flag;explicit ReportGuard(bool& value):flag(value){flag=true;}~ReportGuard(){flag=false;}} guard{reporting};
+ MessageBoxW(library?library:controller,describeError(e).c_str(),L"Voltura Worlds",MB_OK|MB_ICONWARNING);
+}
 void requestSave(){savePending=true;saveCv.notify_one();}
 Surface& selectedSurface(){int i=int(SendDlgItemMessageW(library,monitorId,CB_GETCURSEL,0,0));if(i<0||i>=int(surfaces.size()))i=0;return surfaces.at(i);}
 Assignment& selected(){const auto& id=selectedSurface().monitor.id;for(auto& [key,a]:settings.displays)if(key==id)return a;settings.displays.emplace_back(id,Assignment{});return settings.displays.back().second;}
 HWND control(const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int w,int h,int id){
  if(!wcscmp(type,L"BUTTON")&&(style&BS_TYPEMASK)!=BS_AUTOCHECKBOX)style=(style&~DWORD(BS_TYPEMASK))|BS_OWNERDRAW;
- HWND hwnd=CreateWindowExW(0,type,text,WS_CHILD|WS_VISIBLE|style,px(x),px(y),px(w),px(h),library,(HMENU)(INT_PTR)id,instance,nullptr);SendMessageW(hwnd,WM_SETFONT,(WPARAM)font,TRUE);
+ HWND hwnd=CreateWindowExW(0,type,text,WS_CHILD|WS_VISIBLE|style,px(x),px(y),px(w),px(h),library,(HMENU)(INT_PTR)id,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create library control.");SendMessageW(hwnd,WM_SETFONT,(WPARAM)font,TRUE);
  SetWindowTheme(hwnd,ui::dark?L"DarkMode_Explorer":L"Explorer",nullptr);if(!wcscmp(type,TRACKBAR_CLASSW))SetWindowSubclass(hwnd,ui::sliderPaint,1,0);
  LayoutItem item{hwnd,x,y,w,h,addingAdvanced,addingFooter,x,y,w,h};
  if(addingAdvanced){
@@ -130,7 +151,7 @@ HWND control(const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int
  layoutItems.push_back(item);return hwnd;
 }
 void label(const wchar_t* text,int x,int y,int w=200){control(L"STATIC",text,0,x,y,w,24,0);}
-void combo(int id,int x,int y,int w,std::initializer_list<const wchar_t*> values){HWND c=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,x,y,w,240,id);SendMessageW(c,CB_SETITEMHEIGHT,WPARAM(-1),px(26));SendMessageW(c,CB_SETITEMHEIGHT,0,px(26));for(auto v:values)SendMessageW(c,CB_ADDSTRING,0,(LPARAM)v);SetWindowSubclass(c,ui::comboBorder,1,0);ui::themeCombo(c);}
+void combo(int id,int x,int y,int w,std::initializer_list<const wchar_t*> values){HWND c=control(L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,x,y,w,240,id);SendMessageW(c,CB_SETITEMHEIGHT,WPARAM(-1),px(26));SendMessageW(c,CB_SETITEMHEIGHT,0,px(26));for(auto v:values)ui::appendComboChoice(c,v);SetWindowSubclass(c,ui::comboBorder,1,0);ui::themeCombo(c);}
 // Called on the UI thread with stateMutex held. Hidden surfaces reveal Explorer's
 // existing wallpaper; no Windows wallpaper settings are changed.
 void syncSurfaceVisibility(){
@@ -140,6 +161,8 @@ void syncSurfaceVisibility(){
 }
 void syncControls(){
  std::lock_guard lock(stateMutex);syncSurfaceVisibility();if(!library)return;
+ std::wstring statusError=lastError;if(!settingsError.empty()){if(!statusError.empty())statusError+=L" | ";statusError+=settingsError;}
+ if(!renderSetupError.empty()){if(!statusError.empty())statusError+=L" | ";statusError+=renderSetupError;}
  auto retry=GetDlgItem(library,retryId);
  setControlText(retry,previewMode?L"Use on desktop":L"Retry now");
  outputPresentationProblem=!surfaces.empty()&&selectedSurface().outputFallback;
@@ -148,7 +171,7 @@ void syncControls(){
   if(!showRetry&&GetFocus()==retry)SetFocus(GetDlgItem(library,pauseId));
   ShowWindow(retry,showRetry?SW_SHOWNA:SW_HIDE);
  }
- if(surfaces.empty()){setControlText(statusLabel,lastError.empty()?L"No display is available.":lastError);return;}
+ if(surfaces.empty()){setControlText(statusLabel,statusError.empty()?L"No display is available.":statusError);return;}
  auto& a=selected();
  // Planet Worlds reuse saved parameters with scene-specific, meaningful labels.
  const wchar_t* uranusNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Band contrast",L"Cloud drift",L"Atmosphere",L"Audio strength"};
@@ -177,13 +200,13 @@ void syncControls(){
  wchar_t firstPalette[80]{};SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(firstPalette));
  if(wcscmp(firstPalette,palettes[0])!=0){
   SendDlgItemMessageW(library,paletteId,CB_RESETCONTENT,0,0);
-  for(int i=0;i<4;i++)SendDlgItemMessageW(library,paletteId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(palettes[i]));
+  for(int i=0;i<4;i++)ui::appendComboChoice(GetDlgItem(library,paletteId),palettes[i]);
  }
  // Native setters can erase and synchronously repaint even an unchanged value.
  setControlText(GetDlgItem(library,pauseId),pauseState.manual?L"Resume":L"Pause");
  setComboSelection(outputId,int(a.output));setComboSelection(reactionId,int(a.reaction));setComboSelection(qualityId,int(a.performance.quality));setComboSelection(fpsId,int(a.performance.frameLimit));setComboSelection(paletteId,a.params.palette);
  int check=settings.pauseBattery?BST_CHECKED:BST_UNCHECKED;if(SendDlgItemMessageW(library,batteryId,BM_GETCHECK,0,0)!=check)SendDlgItemMessageW(library,batteryId,BM_SETCHECK,check,0);
- float values[]={a.params.brightness,a.params.movement,a.params.detail,a.params.flow,a.params.turbulence,a.params.density,a.params.strength};for(int i=0;i<7;i++)if(SendDlgItemMessageW(library,200+i,TBM_GETPOS,0,0)!=int(values[i]*100))SendDlgItemMessageW(library,200+i,TBM_SETPOS,TRUE,int(values[i]*100));
+ float values[]={a.params.brightness,a.params.movement,a.params.detail,a.params.flow,a.params.turbulence,a.params.density,a.params.strength};for(int i=0;i<7;i++){int position=int(std::lround(values[i]*100));if(SendDlgItemMessageW(library,200+i,TBM_GETPOS,0,0)!=position)SendDlgItemMessageW(library,200+i,TBM_SETPOS,TRUE,position);}
  int dev=0;for(size_t i=0;i<audioDevices.size();i++)if(audioDevices[i].first==settings.audioDevice)dev=int(i)+1;setComboSelection(deviceId,dev);
  auto speed=selectedSurface().pendingVideoSpeed.value_or(a.videoSettings.speed);auto speedIt=std::find_if(videoSpeeds.begin(),videoSpeeds.end(),[&](double r){return std::abs(r-speed)<1e-6;});setComboSelection(videoSpeedId,int(speedIt-videoSpeeds.begin()));
  for(auto pair:std::array<std::pair<int,double>,2>{{{videoXId,a.videoSettings.positionX},{videoYId,a.videoSettings.positionY}}})if(SendDlgItemMessageW(library,pair.first,TBM_GETPOS,0,0)!=int(std::lround(pair.second*100)))SendDlgItemMessageW(library,pair.first,TBM_SETPOS,TRUE,int(std::lround(pair.second*100)));
@@ -191,13 +214,13 @@ void syncControls(){
  EnableWindow(GetDlgItem(library,videoSpeedId),a.scene==Scene::Video);
  setComboSelection(videoFitId,a.fit?1:0);EnableWindow(GetDlgItem(library,videoFitId),a.scene==Scene::Video);
  EnableWindow(GetDlgItem(library,reactionId),a.scene!=Scene::Video&&a.scene!=Scene::Off);EnableWindow(GetDlgItem(library,paletteId),a.scene!=Scene::Video&&a.scene!=Scene::Off);for(int id=200;id<207;id++)EnableWindow(GetDlgItem(library,id),a.scene!=Scene::Video&&a.scene!=Scene::Off);
- auto scene=wide(sceneName(a.scene));if(a.random)scene=(a.randomPool==RandomPool::SolarSystem?L"Random Solar System \u00b7 ":L"Random \u00b7 ")+scene;std::wstring text=previewMode?L"Preview mode · ":L"Desktop · ";text+=scene;text+=L"   |   Audio ";text+=a.reaction==Reaction::Off?L"off":a.reaction==Reaction::Gentle?L"gentle":L"expressive";if(pauseState.manual)text+=L"   |   Paused";if(!lastError.empty())text+=L"   |   "+lastError;
+ auto scene=wide(sceneName(a.scene));if(a.random)scene=(a.randomPool==RandomPool::SolarSystem?L"Random Solar System \u00b7 ":L"Random \u00b7 ")+scene;std::wstring text=previewMode?L"Preview mode · ":L"Desktop · ";text+=scene;text+=L"   |   Audio ";text+=(a.scene==Scene::Video||a.scene==Scene::Off||a.reaction==Reaction::Off)?L"off":a.reaction==Reaction::Gentle?L"gentle":L"expressive";if(pauseState.manual)text+=L"   |   Paused";if(!statusError.empty())text+=L"   |   "+statusError;
  if(!selectedSurface().videoMessage.empty())text+=L" | "+selectedSurface().videoMessage;
  setControlText(statusLabel,text);
  setControlText(GetDlgItem(library,performanceStatusId),selectedSurface().performanceStatus.empty()?L"Performance will appear during playback.":selectedSurface().performanceStatus);
  int videoChoice=int(std::size(visualizations))-1;
  auto count=SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0);
- if(!a.video.empty()&&count==videoChoice)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(visualizations[videoChoice].name));
+ if(!a.video.empty()&&count==videoChoice)ui::appendComboChoice(GetDlgItem(library,visualizationId),visualizations[videoChoice].name);
  else if(a.video.empty()&&count>videoChoice)SendDlgItemMessageW(library,visualizationId,CB_DELETESTRING,videoChoice,0);
  int choice=-1;for(size_t i=0;i<std::size(visualizations);i++)if(!isRandomChoice(int(i))&&visualizations[i].scene==a.scene)choice=int(i);
  if(a.random)choice=randomChoiceFor(a);
@@ -280,9 +303,11 @@ std::array<unsigned,4> desktopOverlayInsets(HMONITOR monitor){
 }
 void startRendering(){
  renderingProblem=false;renderSetupFailed=false;auto generation=++renderGeneration;
- renderThread=std::jthread([generation](std::stop_token stop){
-  CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+ {std::lock_guard lock(stateMutex);renderSetupError.clear();}
+ try{renderThread=std::jthread([generation](std::stop_token stop){
+  auto initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   try{
+   if(FAILED(initialized))throw std::runtime_error("Cannot initialize rendering coordinator.");
    struct Group{std::shared_ptr<GpuContext> context;std::vector<size_t> indices;};std::vector<Group> groups;
    for(size_t i=0;i<surfaces.size();i++){
     auto context=GpuContext::acquire(surfaces[i].monitor.adapter);
@@ -291,8 +316,14 @@ void startRendering(){
    }
    std::vector<std::jthread> workers;
    for(auto& group:groups)workers.emplace_back([generation,indices=group.indices,context=group.context](std::stop_token token)mutable{
-    CoInitializeEx(nullptr,COINIT_MULTITHREADED);
-    HANDLE wakeTimer=CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_ALL_ACCESS);
+    struct Runtime {
+     HRESULT initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+     HANDLE timer=CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_ALL_ACCESS);
+     ~Runtime(){if(timer)CloseHandle(timer);if(SUCCEEDED(initialized))CoUninitialize();}
+    } runtime;
+    auto wakeTimer=runtime.timer;
+    try{
+    if(FAILED(runtime.initialized))throw std::runtime_error("Cannot initialize graphics worker.");
     {
      std::vector<std::unique_ptr<Renderer>> renderers(indices.size());std::vector<PerformanceState> performance(indices.size());
      std::vector<double> clocks(indices.size(),0),previous(indices.size(),0),retryAt(indices.size(),0),insetAt(indices.size(),0),outputAt(indices.size(),0);
@@ -304,7 +335,7 @@ void startRendering(){
      auto seconds=[](){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();};
      adapter.lastEvaluation=seconds();
      auto publish=[&](size_t index,bool failed,const std::wstring& errorText){
-      bool any;{std::lock_guard lock(stateMutex);surfaces[index].renderingFailed=failed;any=std::any_of(surfaces.begin(),surfaces.end(),[](const auto& s){return s.renderingFailed;});if(failed)lastError=errorText;else if(!any)lastError.clear();}
+      bool any;{std::lock_guard lock(stateMutex);auto& surface=surfaces[index];surface.renderingFailed=failed;surface.renderingError=failed?errorText:L"";auto failure=std::find_if(surfaces.begin(),surfaces.end(),[](const auto& s){return s.renderingFailed;});any=failure!=surfaces.end();lastError=any?failure->renderingError:L"";}
       if(any!=reported){reported=any;PostMessageW(controller,renderStatusMessage,any,generation);}
      };
      while(!token.stop_requested()){
@@ -348,7 +379,7 @@ void startRendering(){
          recoveredFailure=surfaces[i].renderingFailed;}
         if(recoveredFailure)publish(i,false,{});retryAt[n]=0;
        }catch(const std::exception& error){
-        bool removed=context&&context->removed();renderers[n].reset();retryAt[n]=now+5;failedScenes[n]=a.scene;failedVideos[n]=a.video;perf.restart(now);publish(i,true,wide(error.what()));
+        bool removed=context&&context->removed();renderers[n].reset();retryAt[n]=now+5;failedScenes[n]=a.scene;failedVideos[n]=a.video;perf.restart(now);publish(i,true,describeError(error));
         if(removed){for(size_t k=0;k<renderers.size();k++){renderers[k].reset();retryAt[k]=now+5;failedScenes[k]=performance[k].scene;performance[k].restart(now);publish(indices[k],true,L"Graphics device unavailable. Retrying automatically.");}context.reset();}
        }
       }
@@ -367,7 +398,10 @@ void startRendering(){
       if(wakeTimer&&SetWaitableTimer(wakeTimer,&due,0,nullptr,nullptr,FALSE))WaitForSingleObject(wakeTimer,60);else std::this_thread::sleep_for(std::chrono::milliseconds(1));
      }
     }
-    if(wakeTimer)CloseHandle(wakeTimer);CoUninitialize();
+    }catch(const std::exception& e){
+     {std::lock_guard lock(stateMutex);renderSetupFailed=true;renderSetupError=describeError(e);}
+     PostMessageW(controller,renderStatusMessage,TRUE,generation);
+    }
    });
    groups.clear(); // Only the adapter worker may retain its current device.
    while(!stop.stop_requested()){
@@ -376,35 +410,51 @@ void startRendering(){
     audio.configure(listen,device);std::this_thread::sleep_for(std::chrono::milliseconds(20));
    }
    for(auto& worker:workers)worker.request_stop();for(auto& worker:workers)worker.join();
-  }catch(const std::exception& e){{std::lock_guard lock(stateMutex);renderSetupFailed=true;lastError=wide(e.what());}PostMessageW(controller,renderStatusMessage,TRUE,generation);}
-  audio.configure(false,{});CoUninitialize();
- });
+  }catch(const std::exception& e){{std::lock_guard lock(stateMutex);renderSetupFailed=true;renderSetupError=describeError(e);}PostMessageW(controller,renderStatusMessage,TRUE,generation);}
+  audio.configure(false,{});if(SUCCEEDED(initialized))CoUninitialize();
+ });}catch(...){renderSetupFailed=true;renderingProblem=true;throw;}
 }
 
 LRESULT CALLBACK wallpaperProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){if(msg==WM_MOUSEACTIVATE)return MA_NOACTIVATE;if(msg==WM_NCHITTEST&&!previewMode)return HTTRANSPARENT;if(msg==WM_CLOSE){ShowWindow(hwnd,SW_HIDE);return 0;}return DefWindowProcW(hwnd,msg,w,l);}
 void createSurfaces(){
  nextDesktopRetry=GetTickCount64()+5000;
- renderThread.request_stop();if(renderThread.joinable())renderThread.join();for(auto& s:surfaces)DestroyWindow(s.hwnd);surfaces.clear();auto monitors=enumerateMonitors();HWND parent=previewMode?nullptr:findWallpaperParent();
+ int previousChoice=int(SendDlgItemMessageW(library,monitorId,CB_GETCURSEL,0,0));
+ if(previousChoice>=0&&size_t(previousChoice)<surfaces.size())selectedMonitorId=surfaces[previousChoice].monitor.id;
+ renderThread.request_stop();if(renderThread.joinable())renderThread.join();for(auto& s:surfaces)DestroyWindow(s.hwnd);surfaces.clear();
  if(library)SendDlgItemMessageW(library,monitorId,CB_RESETCONTENT,0,0);
+ try{
+ auto monitors=enumerateMonitors();HWND parent=previewMode?nullptr:findWallpaperParent();
  if(monitors.empty()||(!previewMode&&!parent)){
   desktopConnectionProblem=true;
   {std::lock_guard lock(stateMutex);lastError=L"Desktop unavailable. Retrying automatically; your ordinary wallpaper is unchanged.";}
   syncControls();return;
  }
- try{
- for(auto& m:monitors){auto hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,L"VolturaWorldSurface",L"Voltura Worlds — native preview",previewMode?WS_OVERLAPPEDWINDOW:WS_POPUP,previewMode?CW_USEDEFAULT:m.rect.left,previewMode?CW_USEDEFAULT:m.rect.top,previewMode?960:m.rect.right-m.rect.left,previewMode?540:m.rect.bottom-m.rect.top,nullptr,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create wallpaper surface");
-  bool visible=assignmentFor(settings,m.id).scene!=Scene::Off;
-  if(!previewMode&&!attachWallpaper(hwnd,m,parent,visible)){DestroyWindow(hwnd);throw std::runtime_error("Cannot attach desktop surface");}surfaces.push_back({hwnd,m,false});if(visible)ShowWindow(hwnd,previewMode?SW_SHOWNOACTIVATE:SW_SHOWNA);if(previewMode)break;
+ // Retain disconnected-monitor preferences until the persisted 32-entry cache
+ // needs room. Reserve space for every connected display before UI/import
+ // paths lazily add its assignment, keeping new monitors saveable.
+ std::set<std::wstring> connectedIds;for(const auto& monitor:monitors)connectedIds.insert(monitor.id);
+ {
+  std::lock_guard lock(stateMutex);
+  auto missing=std::count_if(connectedIds.begin(),connectedIds.end(),[](const auto& id){return std::none_of(settings.displays.begin(),settings.displays.end(),[&](const auto& entry){return entry.first==id;});});
+  bool trimmed=false;
+  for(auto entry=settings.displays.begin();entry!=settings.displays.end()&&settings.displays.size()+size_t(missing)>32;){
+   if(!connectedIds.contains(entry->first)){entry=settings.displays.erase(entry);trimmed=true;}else ++entry;
+  }
+  if(trimmed)requestSave();
+ }
+ for(auto& m:monitors){auto assignment=assignmentFor(settings,m.id);bool visible=assignment.scene!=Scene::Off;auto hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,L"VolturaWorldSurface",L"Voltura Worlds — native preview",previewMode?WS_OVERLAPPEDWINDOW:WS_POPUP,previewMode?CW_USEDEFAULT:m.rect.left,previewMode?CW_USEDEFAULT:m.rect.top,previewMode?960:m.rect.right-m.rect.left,previewMode?540:m.rect.bottom-m.rect.top,nullptr,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create wallpaper surface");
+  // Recover the current Random World for a full interval instead of immediately shuffling.
+  if(!previewMode&&!attachWallpaper(hwnd,m,parent,visible)){DestroyWindow(hwnd);throw std::runtime_error("Cannot attach desktop surface");}try{surfaces.push_back({hwnd,m,false});}catch(...){DestroyWindow(hwnd);throw;}if(assignment.random)surfaces.back().randomCycle.reset(true,assignment.randomPool);if(visible)ShowWindow(hwnd,previewMode?SW_SHOWNOACTIVATE:SW_SHOWNA);if(previewMode)break;
  }
  }catch(const std::exception& e){
   for(auto& s:surfaces)DestroyWindow(s.hwnd);surfaces.clear();
   desktopConnectionProblem=true;
-  {std::lock_guard lock(stateMutex);lastError=wide(e.what())+L". Retrying automatically.";}
+  {std::lock_guard lock(stateMutex);lastError=describeError(e)+L". Retrying automatically.";}
   syncControls();return;
  }
  desktopConnectionProblem=false;
  {std::lock_guard lock(stateMutex);lastError.clear();}
- startRendering();if(library){SendDlgItemMessageW(library,monitorId,CB_RESETCONTENT,0,0);for(auto& s:surfaces)SendDlgItemMessageW(library,monitorId,CB_ADDSTRING,0,(LPARAM)s.monitor.name.c_str());SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,0,0);syncControls();}
+ startRendering();if(library){SendDlgItemMessageW(library,monitorId,CB_RESETCONTENT,0,0);int choice=0;for(size_t i=0;i<surfaces.size();i++){auto& s=surfaces[i];ui::appendComboChoice(GetDlgItem(library,monitorId),s.monitor.name.c_str());if(s.monitor.id==selectedMonitorId)choice=int(i);}selectedMonitorId=surfaces[choice].monitor.id;SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,choice,0);syncControls();}
 }
 void showLibrary();
 void revealDesktopForSettings(){
@@ -438,9 +488,12 @@ PresetUiContext presetContext(){
     auto value=preset.displays[i].assignment;bool found=false;for(auto& entry:next.displays)if(entry.first==monitor.id){entry.second=value;found=true;break;}if(!found)next.displays.emplace_back(monitor.id,value);
    }
    if(used.empty())throw std::runtime_error("Choose at least one destination.");settings=std::move(next);
-   for(auto target:used)for(auto& surface:surfaces)if(surface.monitor.id==monitors[target].id){auto value=assignmentFor(settings,surface.monitor.id);surface.randomCycle.reset(true,value.randomPool);surface.pendingVideoSpeed.reset();surface.videoMessage.clear();}
+   for(auto target:used)for(auto& surface:surfaces)if(surface.monitor.id==monitors[target].id){auto entry=std::find_if(settings.displays.begin(),settings.displays.end(),[&](const auto& value){return value.first==surface.monitor.id;});surface.randomCycle.reset(true,entry->second.randomPool);surface.pendingVideoSpeed.reset();surface.videoMessage.clear();}
    requestSave();
-  }syncControls();
+  }
+  // Once settings are committed, an allocation/painting failure must not tell
+  // the importer to roll back media now referenced by the active desktop.
+  PostMessageW(controller,errorMessage,0,0);
  };return context;
 }
 void importWorld(const std::filesystem::path& file,bool personalVideo=false){
@@ -448,7 +501,9 @@ void importWorld(const std::filesystem::path& file,bool personalVideo=false){
  showLibrary();auto displays=enumerateMonitors();if(displays.empty())throw std::runtime_error("Connect a display before applying a World.");
  int index=int(SendDlgItemMessageW(library,monitorId,CB_GETCURSEL,0,0));
  Monitor target=(!surfaces.empty()&&index>=0&&index<int(surfaces.size()))?surfaces[index].monitor:displays.front();
- showWorldImport(controller,file,profile/L"library",target.name,[id=target.id](const Assignment& imported){
+ showWorldImport(controller,file,profile/L"library",target.name,[id=target.id,adapter=target.adapter](const Assignment& imported){
+  auto current=enumerateMonitors();
+  if(std::none_of(current.begin(),current.end(),[&](const Monitor& monitor){return monitor.id==id&&monitor.adapter.HighPart==adapter.HighPart&&monitor.adapter.LowPart==adapter.LowPart;}))throw std::runtime_error("The destination display changed during import. Choose the display and import again.");
   {std::lock_guard lock(stateMutex);bool found=false;for(auto& [key,value]:settings.displays)if(key==id){value=importForDisplay(imported,value);for(auto& surface:surfaces)if(surface.monitor.id==id){surface.pendingVideoSpeed.reset();surface.videoMessage.clear();}found=true;break;}
    if(!found)settings.displays.emplace_back(id,imported);requestSave();}
   syncControls();
@@ -460,12 +515,12 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  if(msg==WM_SIZE){layoutLibrary();return 0;}
  if(msg==WM_VSCROLL||msg==WM_MOUSEWHEEL){
   SCROLLINFO si{sizeof(si),SIF_ALL};GetScrollInfo(hwnd,SB_VERT,&si);
-  if(msg==WM_MOUSEWHEEL)scrollOffset-=GET_WHEEL_DELTA_WPARAM(w)*px(48)/WHEEL_DELTA;
+  if(msg==WM_MOUSEWHEEL){int movement=GET_WHEEL_DELTA_WPARAM(w)*px(48)+wheelRemainder;scrollOffset-=movement/WHEEL_DELTA;wheelRemainder=movement%WHEEL_DELTA;}
   else switch(LOWORD(w)){case SB_LINEUP:scrollOffset-=px(32);break;case SB_LINEDOWN:scrollOffset+=px(32);break;case SB_PAGEUP:scrollOffset-=si.nPage;break;case SB_PAGEDOWN:scrollOffset+=si.nPage;break;case SB_THUMBTRACK:scrollOffset=si.nTrackPos;break;}
   layoutLibrary();return 0;
  }
- if(msg==WM_DPICHANGED){uiDpi=HIWORD(w);updateUiFonts();auto r=reinterpret_cast<RECT*>(l);SetWindowPos(hwnd,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);layoutLibrary();return 0;}
- if(msg==WM_SETTINGCHANGE||msg==WM_THEMECHANGED){ui::refresh(hwnd);for(auto& item:layoutItems){wchar_t name[32]{};GetClassNameW(item.hwnd,name,32);if(!wcscmp(name,L"ComboBox"))ui::themeCombo(item.hwnd);else SetWindowTheme(item.hwnd,ui::dark?L"DarkMode_Explorer":L"Explorer",nullptr);}return 0;}
+ if(msg==WM_DPICHANGED){auto dpi=HIWORD(w);scrollOffset=MulDiv(scrollOffset,dpi,uiDpi);uiDpi=dpi;updateUiFonts();auto r=reinterpret_cast<RECT*>(l);SetWindowPos(hwnd,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);resizeLibrary();return 0;}
+ if(msg==WM_SETTINGCHANGE||msg==WM_THEMECHANGED){ui::refresh(hwnd);for(auto& item:layoutItems){wchar_t name[32]{};GetClassNameW(item.hwnd,name,32);if(!wcscmp(name,L"ComboBox"))ui::themeCombo(item.hwnd);else SetWindowTheme(item.hwnd,ui::dark?L"DarkMode_Explorer":L"Explorer",nullptr);}if(msg==WM_SETTINGCHANGE&&w==SPI_SETWORKAREA)resizeLibrary();return 0;}
  if(msg==WM_ERASEBKGND){RECT r;GetClientRect(hwnd,&r);FillRect((HDC)w,&r,ui::backgroundBrush);return 1;}
  if(msg==WM_CTLCOLORSTATIC||msg==WM_CTLCOLORBTN||msg==WM_CTLCOLORLISTBOX){SetTextColor((HDC)w,ui::foreground);SetBkColor((HDC)w,msg==WM_CTLCOLORLISTBOX?ui::surface:ui::background);return (LRESULT)(msg==WM_CTLCOLORLISTBOX?ui::surfaceBrush:ui::backgroundBrush);}
  if(msg==WM_NOTIFY){auto custom=reinterpret_cast<NMCUSTOMDRAW*>(l);if((custom->hdr.idFrom==batteryId||custom->hdr.idFrom==bodyStatisticsId)&&custom->hdr.code==NM_CUSTOMDRAW&&custom->dwDrawStage==CDDS_PREPAINT){
@@ -479,6 +534,7 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  if(msg==WM_DRAWITEM){ui::draw(*reinterpret_cast<DRAWITEMSTRUCT*>(l),font,false,uiDpi);return TRUE;}
 
  if(msg==WM_COMMAND){int id=LOWORD(w),event=HIWORD(w);
+  if(id==deviceId&&event==CBN_DROPDOWN){refreshAudioDeviceChoices();return 0;}
   // Focus/open/close notifications must not reset a combo while its mouse
   // selection is in progress. Only committed selection changes update state.
   bool dropdown=id==videoSpeedId||id==outputId||id==randomIntervalId||id==visualizationId||id==monitorId||id==reactionId||id==qualityId||id==fpsId||id==paletteId||id==deviceId||id==videoFitId;
@@ -498,8 +554,8 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
    syncControls();return 0;
   }
   if(id==presetsId){showSavedPresets(hwnd,presetContext());return 0;}
-  if(id==videoSpeedId){std::lock_guard lock(stateMutex);int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(value>=0&&value<int(videoSpeeds.size())){selectedSurface().pendingVideoSpeed=videoSpeeds[value];selectedSurface().videoMessage.clear();}return 0;}
-  if(id==videoCenterId){{std::lock_guard lock(stateMutex);auto& a=selected();a.videoSettings.positionX=a.videoSettings.positionY=.5;requestSave();}syncControls();return 0;}
+  if(id==videoSpeedId){std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(value>=0&&value<int(videoSpeeds.size())){selectedSurface().pendingVideoSpeed=videoSpeeds[value];selectedSurface().videoMessage.clear();}return 0;}
+  if(id==videoCenterId){{std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;auto& a=selected();a.videoSettings.positionX=a.videoSettings.positionY=.5;requestSave();}syncControls();return 0;}
   if(id==videoImportId){
    wchar_t file[32768]{};OPENFILENAMEW dialog{sizeof(dialog)};dialog.hwndOwner=hwnd;dialog.lpstrFilter=L"Video files\0*.mp4;*.m4v;*.mov;*.mkv;*.webm;*.wmv;*.avi\0All files\0*.*\0";dialog.lpstrFile=file;dialog.nMaxFile=32768;dialog.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;dialog.lpstrTitle=L"Import video";
    if(GetOpenFileNameW(&dialog))importWorld(file,true);return 0;
@@ -510,14 +566,14 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(id==retryId){{std::lock_guard lock(stateMutex);previewMode=false;}createSurfaces();syncControls();return 0;}
   if(id==pauseId){{std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}syncControls();return 0;}
   {std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;auto& a=selected();
-   if(id==applyAllId){auto copy=a;for(auto& s:surfaces){bool found=false;for(auto& [key,entry]:settings.displays)if(key==s.monitor.id){entry=copyForDisplay(copy,entry,s.monitor.refreshHz);found=true;break;}if(!found)settings.displays.emplace_back(s.monitor.id,copyForDisplay(copy,Assignment{},s.monitor.refreshHz));s.randomCycle.reset(true,copy.randomPool);}}
-   else if(event==CBN_SELCHANGE){int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(id==randomIntervalId&&value>=0&&value<int(randomIntervals.size())){a.randomInterval=randomIntervals[value];selectedSurface().randomCycle.reset(true,a.randomPool);}if(id==reactionId)a.reaction=Reaction(value);if(id==outputId)a.output=OutputPreference(value);if(id==qualityId)a.performance.quality=Quality(value);if(id==fpsId)a.performance.frameLimit=FrameLimit(value);if(id==paletteId)a.params.palette=value;if(id==videoFitId)a.fit=value==1;if(id==deviceId)settings.audioDevice=value>0?audioDevices.at(value-1).first:L"";}
+   if(id==applyAllId){auto copy=a;auto pendingSpeed=copy.scene==Scene::Video?selectedSurface().pendingVideoSpeed:std::nullopt;for(auto& s:surfaces){bool found=false;for(auto& [key,entry]:settings.displays)if(key==s.monitor.id){entry=copyForDisplay(copy,entry,s.monitor.refreshHz);found=true;break;}if(!found)settings.displays.emplace_back(s.monitor.id,copyForDisplay(copy,Assignment{},s.monitor.refreshHz));s.randomCycle.reset(true,copy.randomPool);s.pendingVideoSpeed=pendingSpeed;s.videoMessage.clear();}}
+   else if(event==CBN_SELCHANGE){int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(value<0)return 0;if(id==randomIntervalId&&value<int(randomIntervals.size())){a.randomInterval=randomIntervals[value];selectedSurface().randomCycle.reset(true,a.randomPool);}if(id==reactionId)a.reaction=Reaction(value);if(id==outputId)a.output=OutputPreference(value);if(id==qualityId)a.performance.quality=Quality(value);if(id==fpsId)a.performance.frameLimit=FrameLimit(value);if(id==paletteId)a.params.palette=value;if(id==videoFitId)a.fit=value==1;if(id==deviceId)settings.audioDevice=value>0?audioDevices.at(value-1).first:L"";}
    else if(id==bodyStatisticsId)a.showBodyStatistics=SendDlgItemMessageW(hwnd,id,BM_GETCHECK,0,0)==BST_CHECKED;
    else if(id==batteryId)settings.pauseBattery=SendDlgItemMessageW(hwnd,id,BM_GETCHECK,0,0)==BST_CHECKED;
    requestSave();}
   syncControls();return 0;
  }
- if(msg==WM_HSCROLL&&(GetDlgCtrlID((HWND)l)==videoXId||GetDlgCtrlID((HWND)l)==videoYId)){std::lock_guard lock(stateMutex);auto& a=selected();double value=double(SendMessageW((HWND)l,TBM_GETPOS,0,0))/100;if(GetDlgCtrlID((HWND)l)==videoXId)a.videoSettings.positionX=value;else a.videoSettings.positionY=value;requestSave();return 0;}
+ if(msg==WM_HSCROLL&&(GetDlgCtrlID((HWND)l)==videoXId||GetDlgCtrlID((HWND)l)==videoYId)){std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;auto& a=selected();double value=double(SendMessageW((HWND)l,TBM_GETPOS,0,0))/100;if(GetDlgCtrlID((HWND)l)==videoXId)a.videoSettings.positionX=value;else a.videoSettings.positionY=value;requestSave();return 0;}
  if(msg==WM_HSCROLL){int id=GetDlgCtrlID((HWND)l);if(id>=200&&id<207){std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;auto& p=selected().params;float* values[]={&p.brightness,&p.movement,&p.detail,&p.flow,&p.turbulence,&p.density,&p.strength};*values[id-200]=float(SendMessageW((HWND)l,TBM_GETPOS,0,0))/100;requestSave();}return 0;}
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
@@ -525,10 +581,12 @@ void showLibrary(){
  if(library){ShowWindow(library,SW_RESTORE);SetForegroundWindow(library);return;}
  uiDpi=GetDpiForSystem();
  library=CreateWindowExW(WS_EX_APPWINDOW|WS_EX_COMPOSITED,L"VolturaWorldLibrary",L"Voltura Worlds",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_VSCROLL|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,px(780),px(500),nullptr,nullptr,instance,nullptr);
+ if(!library)throw std::runtime_error("Cannot open Worlds library.");
+ try{
  uiDpi=GetDpiForWindow(library);updateUiFonts();ui::refresh(library);
- HWND title=control(L"STATIC",L"Your desktop, alive.",0,28,20,700,42,0);SendMessageW(title,WM_SETFONT,(WPARAM)headingFont,TRUE);label(L"Choose a World. Make it yours.",30,65,690);
- label(L"Display",30,108,110);combo(monitorId,150,102,570,{});for(auto& s:surfaces)SendDlgItemMessageW(library,monitorId,CB_ADDSTRING,0,(LPARAM)s.monitor.name.c_str());SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,0,0);
- label(L"Visualization",30,158,120);combo(visualizationId,155,152,345,{});for(auto& v:visualizations)if(v.scene!=Scene::Video)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(v.name));
+ HWND title=control(L"STATIC",L"Your desktop, alive.",0,30,20,690,42,0);SendMessageW(title,WM_SETFONT,(WPARAM)headingFont,TRUE);label(L"Choose a World. Make it yours.",30,65,690);
+ label(L"Display",30,108,110);combo(monitorId,150,102,570,{});for(auto& s:surfaces)ui::appendComboChoice(GetDlgItem(library,monitorId),s.monitor.name.c_str());SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,0,0);
+ label(L"Visualization",30,158,120);combo(visualizationId,155,152,345,{});for(auto& v:visualizations)if(v.scene!=Scene::Video)ui::appendComboChoice(GetDlgItem(library,visualizationId),v.name);
  combo(randomIntervalId,515,152,205,{L"Every 30 seconds",L"Every 1 minute",L"Every 2 minutes",L"Every 5 minutes",L"Every 10 minutes",L"Every 15 minutes",L"Every 30 minutes"});
  control(L"BUTTON",L"Show body statistics",BS_AUTOCHECKBOX|WS_TABSTOP,155,190,345,28,bodyStatisticsId);
  label(L"Audio reaction",30,232,120);combo(reactionId,155,226,170,{L"Off",L"Gentle",L"Expressive"});label(L"Palette",355,232,80);combo(paletteId,435,226,285,{L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"});
@@ -543,13 +601,14 @@ void showLibrary(){
  for(int id:{videoXId,videoYId}){auto slider=control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS|WS_TABSTOP,id==videoXId?30:380,574,335,28,id);SendMessageW(slider,TBM_SETRANGE,TRUE,MAKELPARAM(0,100));}
  control(L"STATIC",L"Video speed",0,30,621,110,24,242);combo(videoSpeedId,145,615,220,{L"0.25x",L"0.5x",L"0.75x",L"1x",L"1.25x",L"1.5x",L"2x"});control(L"BUTTON",L"Center",WS_TABSTOP,495,615,220,32,videoCenterId);
  label(L"Quality",30,546,110);combo(qualityId,145,540,220,{L"Eco",L"Auto",L"High"});label(L"Frame limit",380,546,115);combo(fpsId,495,540,220,{L"Auto",L"30 FPS",L"60 FPS"});
- label(L"Audio output",30,591,115);combo(deviceId,145,585,570,{L"Follow system output"});audioDevices=AudioCapture::devices();for(auto& d:audioDevices)SendDlgItemMessageW(library,deviceId,CB_ADDSTRING,0,(LPARAM)d.second.c_str());
+ label(L"Audio output",30,591,115);combo(deviceId,145,585,570,{L"Follow system output"});refreshAudioDeviceChoices();
  label(L"Output",380,637,110);combo(outputId,495,631,220,{L"Auto",L"SDR"});
  control(L"BUTTON",L"Pause on battery",BS_AUTOCHECKBOX|WS_TABSTOP,30,631,230,28,batteryId);
  control(L"STATIC",L"Performance will appear during playback.",SS_NOPREFIX,30,668,690,48,performanceStatusId);
  addingAdvanced=false;addingFooter=true;
  control(L"BUTTON",L"Apply to all displays",WS_TABSTOP,30,330,170,36,applyAllId);control(L"BUTTON",L"Pause",WS_TABSTOP,210,330,130,36,pauseId);control(L"BUTTON",L"Retry now",WS_TABSTOP,350,330,190,36,retryId);control(L"BUTTON",L"Exit Worlds",WS_TABSTOP,550,330,170,36,communityId);
  statusLabel=control(L"STATIC",L"",0,30,386,690,55,0);addingFooter=false;syncControls();resizeLibrary();ShowWindow(library,SW_SHOW);SetForegroundWindow(library);
+ }catch(...){DestroyWindow(library);library=statusLabel=nullptr;layoutItems.clear();addingAdvanced=addingFooter=layingOut=false;audioDevices.clear();throw;}
 }
 HICON createTrayIcon(){
  // The notification area needs a full-size mark without the app icon's padded tile.
@@ -592,7 +651,7 @@ HICON createTrayIcon(){
  Gdiplus::GdiplusShutdown(token);
  return icon;
 }
-void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,L"Voltura Worlds");Shell_NotifyIconW(NIM_ADD,&n);n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
+void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,L"Voltura Worlds");trayRegistered=Shell_NotifyIconW(NIM_ADD,&n)||Shell_NotifyIconW(NIM_MODIFY,&n);if(trayRegistered){n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);}if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
 void prepareTrayMenu(HWND owner,POINT point){
  // Windows scales native menus using their owner. Keep the hidden controller
  // on the invocation monitor, including after HDMI reconnects or scale changes.
@@ -622,26 +681,32 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  case WM_TIMER:{
   if(w==2){bool changed=false;bool promoted=ui::promoteTray(executable().wstring(),changed);if(promoted||++promotionAttempts>=20)KillTimer(hwnd,2);if(changed){NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);addTray(false);}return 0;}
 
+  if(!trayRegistered)addTray(false);
   if(automaticUpdates&&!sessionEnding&&GetTickCount64()>=nextUpdateCheck){nextUpdateCheck=GetTickCount64()+3600000;updates.check();}
   bool reconnect=renderSetupFailed;
   if(!previewMode)reconnect|=surfaces.empty()||std::any_of(surfaces.begin(),surfaces.end(),[](const Surface& s){return !wallpaperAttached(s.hwnd);});
   if(GetTickCount64()>=nextDesktopRetry&&reconnect)createSurfaces();
-  static ULONGLONG previousRandomTick=GetTickCount64();auto now=GetTickCount64();auto elapsed=now-previousRandomTick;previousRandomTick=now;
-  SYSTEM_POWER_STATUS power{};GetSystemPowerStatus(&power);std::vector<bool> covered;for(auto& s:surfaces)covered.push_back(!previewMode&&monitorCovered(s.monitor,GetCurrentProcessId()));{std::lock_guard lock(stateMutex);pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}advanceRandomVisualizations(elapsed);syncControls();}return 0;
- case WM_WTSSESSION_CHANGE:{std::lock_guard lock(stateMutex);if(w==WTS_SESSION_LOCK)pauseState.locked=true;if(w==WTS_SESSION_UNLOCK)pauseState.locked=false;}return 0;
- case WM_POWERBROADCAST:{std::lock_guard lock(stateMutex);if(w==PBT_APMSUSPEND)pauseState.suspended=true;if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND){pauseState.suspended=false;++outputRevision;}if(w==PBT_POWERSETTINGCHANGE){auto p=reinterpret_cast<POWERBROADCAST_SETTING*>(l);if(p->PowerSetting==GUID_CONSOLE_DISPLAY_STATE&&p->DataLength==sizeof(DWORD)){DWORD state;memcpy(&state,p->Data,sizeof(state));pauseState.asleep=state==0;}}}return TRUE;
+  auto now=GetTickCount64();auto elapsed=previousRandomTick?now-previousRandomTick:0;previousRandomTick=now;
+  SYSTEM_POWER_STATUS power{};bool powerKnown=GetSystemPowerStatus(&power)!=FALSE;std::vector<bool> covered;for(auto& s:surfaces)covered.push_back(!previewMode&&monitorCovered(s.monitor,GetCurrentProcessId()));{std::lock_guard lock(stateMutex);if(powerKnown)pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}advanceRandomVisualizations(elapsed);syncControls();}return 0;
+ case WM_WTSSESSION_CHANGE:{std::lock_guard lock(stateMutex);if(w==WTS_SESSION_LOCK)pauseState.locked=true;if(w==WTS_SESSION_UNLOCK){pauseState.locked=false;previousRandomTick=GetTickCount64();}}return 0;
+ case WM_POWERBROADCAST:{std::lock_guard lock(stateMutex);if(w==PBT_APMSUSPEND)pauseState.suspended=true;if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND){pauseState.suspended=false;previousRandomTick=GetTickCount64();++outputRevision;}if(w==PBT_POWERSETTINGCHANGE){auto p=reinterpret_cast<POWERBROADCAST_SETTING*>(l);if(p->PowerSetting==GUID_CONSOLE_DISPLAY_STATE&&p->DataLength==sizeof(DWORD)){DWORD state;memcpy(&state,p->Data,sizeof(state));pauseState.asleep=state==0;if(!pauseState.asleep)previousRandomTick=GetTickCount64();}}}return TRUE;
  case WM_DISPLAYCHANGE:{
-  auto monitors=enumerateMonitors();bool same;
+  std::vector<Monitor> monitors;
+  try{monitors=enumerateMonitors();}catch(const std::exception& e){
+   {std::lock_guard lock(stateMutex);renderSetupFailed=true;renderSetupError=describeError(e);}
+   renderingProblem=true;nextDesktopRetry=GetTickCount64()+5000;syncControls();return 0;
+  }
+  bool same;
   {std::lock_guard lock(stateMutex);same=monitors.size()==surfaces.size();
    for(const auto& surface:surfaces)if(std::none_of(monitors.begin(),monitors.end(),[&](const Monitor& m){return sameOutputSurface(surface.monitor,m);}))same=false;
    if(same)for(auto& surface:surfaces)surface.monitor=*std::find_if(monitors.begin(),monitors.end(),[&](const Monitor& m){return m.id==surface.monitor.id;});
   }
-  ++outputRevision;if(!same)createSurfaces();return 0;
+  ++outputRevision;if(!same)createSurfaces();if(library)resizeLibrary();return 0;
  }
  case WM_QUERYENDSESSION:sessionEnding=true;updates.sessionEnd();return TRUE;
- case WM_ENDSESSION:sessionEnding=true;updates.sessionEnd();if(w)DestroyWindow(hwnd);return 0;
+ case WM_ENDSESSION:sessionEnding=w!=FALSE;if(w){updates.sessionEnd();DestroyWindow(hwnd);}else{updates.cancel();nextUpdateCheck=GetTickCount64()+5000;}return 0;
  case WM_CLOSE:DestroyWindow(hwnd);return 0;
- case WM_DESTROY:{updates.close(automaticUpdates&&!sessionEnding,restartForUpdate);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);running=false;saveCv.notify_all();PostQuitMessage(0);}return 0;
+ case WM_DESTROY:{updates.close(automaticUpdates&&!sessionEnding,restartForUpdate);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);PostQuitMessage(0);}return 0;
  }
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
@@ -846,7 +911,7 @@ int captureMode(const std::vector<std::wstring>& args){
 int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
  instance=h;CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);int result=0;
  try{
-  exeDir=executable().parent_path();int argc{};LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);int helperResult=wu::updateHelper(argc,argv);if(helperResult>=0){LocalFree(argv);CoUninitialize();return helperResult;}std::vector<std::wstring> args(argv+1,argv+argc);LocalFree(argv);
+  exeDir=executable().parent_path();int argc{};LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);if(!argv||argc<1)throw std::runtime_error("Cannot read launch arguments.");int helperResult=wu::updateHelper(argc,argv);if(helperResult>=0){LocalFree(argv);CoUninitialize();return helperResult;}std::vector<std::wstring> args(argv+1,argv+argc);LocalFree(argv);
   // A single token avoids pixtool's multi-argument command-line parser limitations.
   if(args.size()==1&&args[0].starts_with(L"profile-")){
    auto scene=args[0].substr(8);parseScene(utf8(scene));
@@ -877,7 +942,7 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
    }
   }
   if(anotherInstance){
-   if(std::find(args.begin(),args.end(),L"--wallpaper")==args.end()){
+   if(!importFile.empty()||std::find(args.begin(),args.end(),L"--wallpaper")==args.end()){
     if(existing){DWORD owner{};GetWindowThreadProcessId(existing,&owner);AllowSetForegroundWindow(owner);
      if(!importFile.empty()){
       auto path=importFile.wstring();COPYDATASTRUCT copy{0x574F524C,DWORD((path.size()+1)*sizeof(wchar_t)),path.data()};DWORD_PTR accepted{};
@@ -888,20 +953,48 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
    if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return 0;
   }
   automaticUpdates=wu::enabled();nextUpdateCheck=GetTickCount64()+5000;
-  profile=profilePath();try{settings=loadSettings(profile);}catch(const std::exception& e){error(e);settings={};}
+  profile=profilePath();try{settings=loadSettings(profile);}catch(const std::exception& e){
+   auto original=profile/L"settings.json";
+   if(std::filesystem::exists(original)){
+    auto recovery=profile/(L"settings-recovery-"+wide(newPresetId())+L".json");
+    if(!MoveFileExW(original.c_str(),recovery.c_str(),MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Cannot preserve unreadable settings. Startup stopped to protect the original file.");
+   }
+   error(e);settings={};
+  }
   INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES|ICC_BAR_CLASSES};InitCommonControlsEx(&controls);uiDpi=GetDpiForSystem();updateUiFonts();
   ui::refresh();WNDCLASSW cls{};cls.hIcon=LoadIconW(h,MAKEINTRESOURCEW(101));cls.hInstance=h;cls.lpfnWndProc=controllerProc;cls.lpszClassName=L"VolturaWorldController";RegisterClassW(&cls);cls.lpfnWndProc=libraryProc;cls.lpszClassName=L"VolturaWorldLibrary";cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&cls);
-  controller=CreateWindowW(L"VolturaWorldController",L"Voltura Worlds",WS_OVERLAPPED,0,0,0,0,nullptr,nullptr,h,nullptr);taskbarCreated=RegisterWindowMessageW(L"TaskbarCreated");addTray();WTSRegisterSessionNotification(controller,NOTIFY_FOR_THIS_SESSION);HPOWERNOTIFY powerNotify=RegisterPowerSettingNotification(controller,&GUID_CONSOLE_DISPLAY_STATE,DEVICE_NOTIFY_WINDOW_HANDLE);SetTimer(controller,1,1000,nullptr);
+  controller=CreateWindowW(L"VolturaWorldController",L"Voltura Worlds",WS_OVERLAPPED,0,0,0,0,nullptr,nullptr,h,nullptr);if(!controller)throw std::runtime_error("Cannot create Worlds controller.");taskbarCreated=RegisterWindowMessageW(L"TaskbarCreated");addTray();WTSRegisterSessionNotification(controller,NOTIFY_FOR_THIS_SESSION);HPOWERNOTIFY powerNotify=RegisterPowerSettingNotification(controller,&GUID_CONSOLE_DISPLAY_STATE,DEVICE_NOTIFY_WINDOW_HANDLE);SetTimer(controller,1,1000,nullptr);
   // Claim foreground activation while this user launch still owns it, before
   // wallpaper-host discovery and renderer setup can hand focus back to Explorer.
   // Windows startup uses --wallpaper and must never open the library by itself.
   bool backgroundLaunch=std::find(args.begin(),args.end(),L"--wallpaper")!=args.end();
   if(!backgroundLaunch||!importFile.empty())showLibrary();
   previewMode=std::find(args.begin(),args.end(),L"--preview")!=args.end();createSurfaces();
-  saveThread=std::jthread([](std::stop_token stop){while(!stop.stop_requested()){Settings snapshot;{std::unique_lock lock(stateMutex);saveCv.wait_for(lock,std::chrono::milliseconds(300),[&]{return savePending||!running;});if(!savePending){if(!running)break;continue;}snapshot=settings;savePending=false;}try{saveSettings(profile,snapshot);}catch(const std::exception& e){{std::lock_guard lock(stateMutex);lastError=wide(e.what());}PostMessageW(controller,errorMessage,0,0);}if(!running)break;}});
+  saveThread=std::jthread([](std::stop_token stop){
+   while(!stop.stop_requested()){
+    try{
+    Settings snapshot;
+    {
+     std::unique_lock lock(stateMutex);
+     saveCv.wait_for(lock,std::chrono::milliseconds(300),[&]{return savePending||!running;});
+     if(!savePending){if(!running)break;continue;}
+     snapshot=settings;savePending=false;
+    }
+     saveSettings(profile,snapshot);bool cleared=false;
+     {std::lock_guard lock(stateMutex);cleared=!settingsError.empty();settingsError.clear();}
+     if(cleared)PostMessageW(controller,errorMessage,0,0);
+    }catch(const std::exception& e){
+     auto message=describeError(e);
+     {std::lock_guard lock(stateMutex);settingsError=std::move(message);savePending=running;}
+     PostMessageW(controller,errorMessage,0,0);
+     std::unique_lock retryLock(stateMutex);
+     saveCv.wait_for(retryLock,std::chrono::seconds(1),[&]{return !running;});
+    }
+   }
+  });
   if(!importFile.empty())importWorld(importFile);
   MSG msg;while(GetMessageW(&msg,nullptr,0,0)>0){HWND root=GetAncestor(msg.hwnd,GA_ROOT);wchar_t name[64]{};GetClassNameW(root,name,64);if((!wcscmp(name,L"VolturaWorldImport")||!wcscmp(name,L"VolturaSavedPresets"))&&IsDialogMessageW(root,&msg))continue;if(library&&IsDialogMessageW(library,&msg))continue;TranslateMessage(&msg);DispatchMessageW(&msg);}if(powerNotify)UnregisterPowerSettingNotification(powerNotify);
  }catch(const std::exception& e){error(e);result=1;}
- renderThread.request_stop();if(renderThread.joinable())renderThread.join();running=false;saveCv.notify_all();if(saveThread.joinable())saveThread.join();audio.configure(false,{});for(auto& s:surfaces)if(IsWindow(s.hwnd))DestroyWindow(s.hwnd);if(library&&IsWindow(library))DestroyWindow(library);if(font)DeleteObject(font);if(headingFont)DeleteObject(headingFont);if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return result;
+ renderThread.request_stop();if(renderThread.joinable())renderThread.join();running=false;saveCv.notify_all();if(saveThread.joinable())saveThread.join();closeWorldImports();audio.configure(false,{});for(auto& s:surfaces)if(IsWindow(s.hwnd))DestroyWindow(s.hwnd);if(library&&IsWindow(library))DestroyWindow(library);if(font)DeleteObject(font);if(headingFont)DeleteObject(headingFont);if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return result;
 }
 
