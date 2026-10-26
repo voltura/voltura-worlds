@@ -1,16 +1,18 @@
-# Voltura Worlds 0.1.7 for Windows
+# Voltura Worlds 0.1.8 for Windows
 
-The current source build is a per-user Windows 11 x64 desktop application with sixteen built-in Worlds: **Aurora**, **Orbit**, **Mars**, **Earth**, **Moon**, **Jupiter**, **Saturn**, **Smoke**, **Bloom**, **Silk**, **Eclipse**, **Lattice**, **Drift**, **Contour**, **Mercury**, and **Ripples**. C++20, Direct3D 12, HLSL. MIT licensed.
+The per-user Windows 11 x64 app includes **22 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Mars, Earth, Moon, Jupiter and Saturn are local development additions. The published 0.1.7 installer contains the preceding eleven Worlds.
+Updating from 0.1.7 or earlier requires one manual installer download because the Solar System textures exceed the old updater’s size limit. Settings, imports and startup preferences are retained.
 
 ## Install and try it
 
-Run `dist/VolturaWorlds-Setup-0.1.7-win-x64.exe`. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
+Run `dist/VolturaWorlds-Setup-0.1.8-win-x64.exe`. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 
 Choose **Random** to shuffle through all built-in Worlds, showing each once before reshuffling. The interval beside the visualization selector defaults to **Every 5 minutes**, with choices from 30 seconds to 30 minutes. Each display saves its own Random mode and interval. The countdown pauses with playback. Selecting a specific World, Off, or an imported video stops the shuffle.
+
+Choose **Random Solar System** to cycle through the eight planets, Moon, Pluto and Sun. Enable **Body statistics** for palette-matched facts in the lower-right corner, saved per display. See [statistics and sources](body-statistics.md).
 
 Closing the library leaves the background running. Reopen it through the notification-area icon or the Start-menu shortcut. Use **Pause**, **Resume**, or **Exit Worlds** to control playback. Exit reveals your ordinary Windows wallpaper; Worlds does not overwrite it.
 
@@ -28,13 +30,13 @@ Bloom is an original animated folded-sheet World inspired by the blue Windows 11
 
 **Ripples** shows calm reflective water from above, with scattered drops producing expanding concentric waves that overlap and interfere. Overlaps share one displaced surface: crests reinforce, opposite phases cancel, and reflections and refraction follow the combined shape. Gentle wind produces drifting patches of small, curved ripples between the drops, while clouds move across the reflections and softly shade the water. A sandy, pebbled bottom slopes from clear foreground shallows into deeper tinted water; surface motion refracts its fixed features, and depth gradually reduces their visibility. Density adjusts drop frequency, Flow controls wave and wind speed, Detail controls drop-wave fineness, and Turbulence adjusts the wind disturbance. Movement at zero freezes the water and clouds together. It supports the shared palettes, quality settings, and optional audio reaction. Higher quality refines the surface intersection as well as the small water texture.
 
-Version 0.1.5 adds Silk's translucent flowing ribbons, Eclipse's glowing corona, Lattice's porous rotating sculpture, Drift's bioluminescent currents, Contour's living topography, and Mercury's merging metallic forms. Each supports the existing palettes, brightness, movement, detail, flow, turbulence, density, and optional audio reaction with Audio strength. Quality adjusts rendering detail; Frame limit controls the shared 30/60 FPS cadence. Movement at zero freezes procedural motion. Lattice and Mercury use bounded mathematical surfaces rather than physical material simulation.
+Version 0.1.5 adds Silk's translucent flowing ribbons, Eclipse's glowing corona, Lattice's porous rotating sculpture, Drift's bioluminescent currents, Contour's living topography, and Plastic metal's merging metallic forms. Each supports the existing palettes, brightness, movement, detail, flow, turbulence, density, and optional audio reaction with Audio strength. Quality adjusts rendering detail; Frame limit controls the shared 30/60 FPS cadence. Movement at zero freezes procedural motion. Lattice and Plastic metal use bounded mathematical surfaces rather than physical material simulation.
 
 Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
 
 ## Build
 
-Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK, PowerShell, Python 3.10 or newer with pip, and NSIS are required for development. Install the Python test and capture tools before building. Application dependencies are packaged locally; Python and build tools are not needed by users.
+Windows 11 x64, Visual Studio 2026 C++ desktop tools, Windows SDK, PowerShell, Python 3.12 or newer with pip, and NSIS are required for development. Install the Python test and capture tools before building. Application dependencies are packaged locally; Python and build tools are not needed by users.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
@@ -54,7 +56,7 @@ Native rendering diagnostics and historical visual experiments are documented in
 
 **Saturn** shows a muted gold cloud globe with translucent rings, fine radial bands, the Cassini Division and shadows in both directions. The complete tilted ring system remains inside the frame on portrait and landscape displays. A full rotation takes 15 minutes at Movement 1. Cloud detail, Camera drift, Cloud drift and Atmosphere adjust cloud contrast, bounded framing drift, subtle cloud motion and haze. Its four palettes start with Natural Saturn. Audio gently changes planet/ring illumination while stars remain stationary; Movement zero freezes motion and audio. See [Saturn imagery, ring model and attribution](../assets/saturn/ATTRIBUTION.md).
 
-Earth, Mars, Moon, Jupiter and Saturn include a restrained NASA catalog-star foreground. Stars stay fixed while Earth, Mars, Jupiter and Saturn rotate; the Moon�s stars follow its orbiting camera. The shared layer adds no extra runtime sky texture allocation.
+Earth, Mars, Moon, Jupiter and Saturn include a restrained NASA catalog-star foreground. Stars stay fixed while Earth, Mars, Jupiter and Saturn rotate; the Moon’s stars follow its orbiting camera. The shared layer adds no extra runtime sky texture allocation.
 
 ## Pluto
 

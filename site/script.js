@@ -11,7 +11,18 @@
     drift: ['08', 'Drift', 'Small lights. Gentle currents.'],
     contour: ['09', 'Contour', 'Imaginary landscapes. Lines that keep moving.'],
     plastic_metal: ['10', 'Plastic metal', 'Liquid forms. Reflections in motion.'],
-    ripples: ['11', 'Ripples', 'Drops meet. Clouds drift. A quieter moment by the water.']
+    ripples: ['11', 'Ripples', 'Drops meet. Clouds drift. A quieter moment by the water.'],
+    mercury: ['12', 'Mercury', 'Sunlit craters. A world of extremes.'],
+    venus: ['13', 'Venus', 'Golden clouds. A hidden world.'],
+    earth: ['14', 'Earth', 'Blue oceans. Clouds in motion. Home.'],
+    mars: ['15', 'Mars', 'Red deserts. A different horizon.'],
+    jupiter: ['16', 'Jupiter', 'Cloud belts. A storm that keeps turning.'],
+    saturn: ['17', 'Saturn', 'Golden light. Rings full of detail.'],
+    uranus: ['18', 'Uranus', 'Pale cyan. A world on its side.'],
+    neptune: ['19', 'Neptune', 'Blue winds. White clouds. A distant storm.'],
+    moon: ['20', 'Moon', 'Cratered light. A tour of the near and far sides.'],
+    pluto: ['21', 'Pluto', 'A bright heart. At the edge of the familiar.'],
+    sun: ['22', 'Sun', 'Ultraviolet light. Plasma in motion.']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');
@@ -19,7 +30,7 @@
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let wantsMotion = !reducedMotion.matches;
   let inView = false;
-  let selected = 'aurora';
+  let selected = 'earth';
   const syncButton = () => {
     const label = video.paused ? 'Play animation' : 'Pause animation';
     toggle.textContent = label + (video.paused ? ' ▷' : ' Ⅱ');
@@ -52,9 +63,9 @@
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();
-      video.poster = `assets/${name}.jpg`;
+      video.poster = `assets/${name}.jpg?v=0.1.8`;
       video.setAttribute('aria-label', `${title}: native animated wallpaper`);
-      video.querySelector('source').src = `assets/${name}.mp4`;
+      video.querySelector('source').src = `assets/${name}.mp4?v=0.1.8`;
       video.load();
       play();
     });

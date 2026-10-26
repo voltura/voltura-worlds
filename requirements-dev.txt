@@ -1,3 +1,4 @@
 # Native image regression tests and product-site/cinematic media capture.
 Pillow==12.3.0
+numpy==2.5.4
 imageio-ffmpeg==0.6.0

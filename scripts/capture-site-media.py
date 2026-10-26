@@ -14,7 +14,8 @@ import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SCENES = ('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse',
-          'lattice', 'drift', 'contour', 'plastic_metal', 'ripples')
+          'lattice', 'drift', 'contour', 'plastic_metal', 'ripples',
+          'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon', 'pluto', 'sun')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--scenes', nargs='+', choices=SCENES, default=list(SCENES),
                     help='Capture only these Worlds, retaining existing media for the others.')
@@ -53,14 +54,13 @@ def font(size, bold=False):
     return ImageFont.truetype(str(font_dir / ('segoeuib.ttf' if bold else 'segoeui.ttf')), size)
 draw.text((28, 19), 'voltura worlds', font=font(25), fill='#b5c2cc')
 draw.text((26, 58), 'Your desktop, alive.', font=font(67), fill='#f1f4f7')
-draw.text((30, 153), 'Eleven native animated Worlds. Windows 11.', font=font(25), fill='#98eddc')
-# Feature Ripples, retaining the complete native frame.
-with Image.open(destination / 'ripples.jpg') as source:
+draw.text((30, 153), '22 animated Worlds. A whole Solar System to explore.', font=font(25), fill='#98eddc')
+# Eleven new native scenes, with Earth as the full-frame feature.
+with Image.open(destination / 'earth.jpg') as source:
     tile = ImageOps.contain(source.convert('RGB'), (584, 329), Image.Resampling.LANCZOS)
     preview.paste(tile, (28, 220))
-draw.text((28, 566), 'Ripples', font=font(28), fill='#f1f4f7')
-draw.text((150, 574), 'A moment by the water.', font=font(20), fill='#98eddc')
-for index, scene in enumerate(scene for scene in SCENES if scene != 'ripples'):
+draw.text((28, 566), 'Your world. And beyond.', font=font(28), fill='#f1f4f7')
+for index, scene in enumerate(('mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon', 'pluto', 'sun')):
     x = 644 + (index % 2) * 268
     y = 207 + (index // 2) * 79
     with Image.open(destination / f'{scene}.jpg') as source:
@@ -68,4 +68,4 @@ for index, scene in enumerate(scene for scene in SCENES if scene != 'ripples'):
         preview.paste(tile, (x, y))
     draw.text((x + 117, y + 17), scene.capitalize(), font=font(19), fill='#d5dce0')
 preview.save(destination / 'social-preview.jpg', quality=93, subsampling=0)
-print('Updated social-preview.jpg: 1200 x 630, eleven native-rendered Worlds.', flush=True)
+print('Updated social-preview.jpg: 1200 x 630, native Solar System scenes.', flush=True)

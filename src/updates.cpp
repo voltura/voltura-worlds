@@ -449,7 +449,7 @@ void active(const std::atomic_bool &cancel, ULONGLONG deadline) {
 }
 using Sink = std::function<void(const char *, size_t)>;
 void download(std::wstring url, size_t limit, const std::atomic_bool &cancel, const Sink &sink) {
-    auto deadline = GetTickCount64() + 120000;
+    auto deadline = GetTickCount64() + 600000;
     Internet session(
         WinHttpOpen(L"VolturaWorlds-Updater", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0));
     need(WinHttpSetTimeouts(session, 3000, 5000, 5000, 5000) != FALSE);
@@ -980,7 +980,7 @@ void Updates::check() {
                     {
                         std::ofstream out(partial, std::ios::binary | std::ios::trunc);
                         need((bool)out);
-                        download(url + wide(release.asset), 64 * 1024 * 1024, work->cancel,
+                        download(url + wide(release.asset), 512 * 1024 * 1024, work->cancel,
                                  [&](const char *p, size_t n) {
                                      out.write(p, n);
                                      need((bool)out);

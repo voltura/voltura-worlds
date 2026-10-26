@@ -4,7 +4,7 @@
 
 [Product site](https://worlds.voltura.se/) · [Releases](https://github.com/voltura/voltura-worlds/releases) · [Using Worlds](docs/USING.md)
 
-![Aurora rendered by Voltura Worlds](site/assets/aurora.jpg)
+![Earth rendered by Voltura Worlds](site/assets/earth.jpg)
 
 | Aurora | Orbit | Smoke | Bloom |
 | --- | --- | --- | --- |
@@ -26,9 +26,25 @@
 | Reflective water, intersecting drops, wind ripples and a translucent pebbled bottom |
 | [Watch](https://worlds.voltura.se/assets/ripples.mp4) |
 
+The eleven new Solar System Worlds each have an eight-second native preview:
+
+| World and preview | Explore |
+| --- | --- |
+| [Mercury](https://worlds.voltura.se/assets/mercury.mp4) | Sunlit craters. A world of extremes. |
+| [Venus](https://worlds.voltura.se/assets/venus.mp4) | Golden clouds. A hidden world. |
+| [Earth](https://worlds.voltura.se/assets/earth.mp4) | Blue oceans. Clouds in motion. Home. |
+| [Mars](https://worlds.voltura.se/assets/mars.mp4) | Red deserts. A different horizon. |
+| [Jupiter](https://worlds.voltura.se/assets/jupiter.mp4) | Cloud belts. A storm that keeps turning. |
+| [Saturn](https://worlds.voltura.se/assets/saturn.mp4) | Golden light. Rings full of detail. |
+| [Uranus](https://worlds.voltura.se/assets/uranus.mp4) | Pale cyan. A world on its side. |
+| [Neptune](https://worlds.voltura.se/assets/neptune.mp4) | Blue winds. White clouds. A distant storm. |
+| [Moon](https://worlds.voltura.se/assets/moon.mp4) | Cratered light. A tour of the near and far sides. |
+| [Pluto](https://worlds.voltura.se/assets/pluto.mp4) | A bright heart. At the edge of the familiar. |
+| [Sun](https://worlds.voltura.se/assets/sun.mp4) | Ultraviolet light. Plasma in motion. |
+
 The product site shows recordings from the native Direct3D renderer, at their original animation speed. 
 
-Sun adds an offline NASA/SDO ultraviolet observation with animated plasma, loops, and adjustable corona. See [Sun settings and source details](docs/sun.md).
+**Sun** adds an offline NASA/SDO ultraviolet observation with animated plasma, loops, and adjustable corona. See [Sun settings and source details](docs/sun.md).
 
 ## What it does
 
@@ -43,7 +59,7 @@ Sun adds an offline NASA/SDO ultraviolet observation with animated plasma, loops
 - Provides a themed Windows library, advanced controls and a notification-area menu.
 - Leaves your ordinary Windows wallpaper intact. Choose **Off** to reveal it, or **Exit Worlds** to stop the app.
 
-Current source builds add **Mars** beside Orbit: an 8K NASA/USGS globe with MOLA terrain relief, thin atmospheric scattering, distance-based sunlight and calm rotation. Its advanced controls adjust terrain relief, camera drift, dust and atmosphere, with natural color grades and subtle audio response. See [Mars imagery and controls](assets/mars/ATTRIBUTION.md).
+**Mars** adds an 8K NASA/USGS globe with MOLA terrain relief, thin atmospheric scattering, distance-based sunlight and calm rotation. Its advanced controls adjust terrain relief, camera drift, dust and atmosphere, with natural color grades and subtle audio response. See [Mars imagery and controls](assets/mars/ATTRIBUTION.md).
 
 **Earth** adds a separate realistic 8K globe with NASA Blue Marble geography, independent cloud motion and shadows, ocean glints, Black Marble night lights and blue atmospheric scattering. It shares Mars's calm 15-minute rotation and adds Earth-specific cloud, camera and atmosphere controls. See [Earth sources and rendering](assets/earth/ATTRIBUTION.md).
 
@@ -55,22 +71,28 @@ Current source builds add **Mars** beside Orbit: an 8K NASA/USGS globe with MOLA
 
 **Venus** shows opaque cream-and-gold cloud decks, slow retrograde atmospheric motion and a warm scattering limb against the shared stationary stars. Cloud detail, camera drift, cloud drift and atmosphere controls preserve its thick cloud cover. This is a procedural artistic reconstruction; see [Venus sources and rendering](docs/venus.md).
 
-**Uranus** shows a pale cyan, subtly banded cloud globe rotating around its 97.8� tilted axis, with fixed sunlight, a centered camera and stationary stars. Planet-specific palette, cloud, atmosphere and audio controls preserve the calm framing. See [Uranus sources and rendering](docs/uranus.md).
+**Uranus** shows a pale cyan, subtly banded cloud globe rotating around its 97.8° tilted axis, with fixed sunlight, a centered camera and stationary stars. Planet-specific palette, cloud, atmosphere and audio controls preserve the calm framing. See [Uranus sources and rendering](docs/uranus.md).
 
 **Neptune** shows a cinematic blue ice giant with fast white cloud streaks, latitude-dependent winds and a swirling dark storm. Four palettes include a natural blue-green interpretation. The opaque globe and narrow atmosphere sit against stationary stars; see [Neptune sources and rendering](docs/neptune.md).
 
+**Mercury** adds an 8K MESSENGER globe with measured terrain relief, a natural gray-brown surface, strong sunlight and no atmospheric halo. It rotates in 15 minutes and shares the stationary catalog-star sky. Controls adjust terrain relief, camera drift, Sun angle and surface contrast. The older metallic World is now **Plastic metal**. See [Mercury sources and rendering](assets/mercury/ATTRIBUTION.md).
+
+**Pluto** adds a New Horizons photographic globe with its bright heart initially facing the viewer, a restrained blue limb and stationary catalog stars. A rotation takes 15 minutes at default Movement. See [Pluto imagery and rendering limits](assets/pluto/ATTRIBUTION.md).
+
 ## Current release
 
-**Version 0.1.7** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.7/VolturaWorlds-Setup-0.1.7-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.7). Includes all eleven Worlds and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.1.8** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.1.8/VolturaWorlds-Setup-0.1.8-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.1.8). Includes all **22 Worlds** and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
 
-This release adds **Ripples**: reflective water with overlapping drop waves, gentle wind ripples, moving clouds, and a shallow-to-deep sandy bottom with varied pebbles. **Random** rotates through all eleven Worlds without immediate repeats, with a configurable interval for each display. The product site includes a native Ripples recording and an updated social preview.
+This release adds **Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun**, plus **Random Solar System**, optional body statistics and shared stationary catalog stars. The earlier metallic World is now named **Plastic metal**. The product site includes an eight-second native recording for every World and a refreshed social preview.
+
+**Upgrading from 0.1.7 or earlier:** download and run this installer manually. The larger texture collection exceeds those versions' 64 MiB automatic-update limit. Existing settings, imported videos and startup preferences are retained. Version 0.1.8 supports larger future update downloads.
 
 Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 
 
 ## Build and run
 
-Requires Windows 11 x64, Visual Studio 2026 C++ desktop tools, the Windows SDK, PowerShell and Python 3.10 or newer with pip. NSIS is needed for packaging. The bootstrap script downloads and checks the native dependencies; install the Python test and media tools before building.
+Requires Windows 11 x64, Visual Studio 2026 C++ desktop tools, the Windows SDK, PowerShell and Python 3.12 or newer with pip. NSIS is needed for packaging. The bootstrap script downloads and checks the native dependencies; install the Python test and media tools before building.
 
 ```powershell
 git clone https://github.com/voltura/voltura-worlds.git
@@ -97,7 +119,3 @@ See [website maintenance](docs/PAGES.md) for local preview, native media capture
 ## License and credits
 
 [MIT](LICENSE), copyright © 2026 Voltura AB. Third-party dependencies and artwork retain their [own licenses and credits](THIRD-PARTY-NOTICES.md), including [Orbit's source imagery](assets/orbit/ATTRIBUTION.md).
-
-**Mercury** adds an 8K MESSENGER globe with measured terrain relief, a natural gray-brown surface, strong sunlight and no atmospheric halo. It rotates in 15 minutes and shares the stationary catalog-star sky. Controls adjust terrain relief, camera drift, Sun angle and surface contrast. The older metallic World is now **Plastic metal**. See [Mercury sources and rendering](assets/mercury/ATTRIBUTION.md).
-
-**Pluto** adds a New Horizons photographic globe with its bright heart initially facing the viewer, a restrained blue limb and stationary catalog stars. A rotation takes 15 minutes at default Movement. See [Pluto imagery and rendering limits](assets/pluto/ATTRIBUTION.md).

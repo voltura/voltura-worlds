@@ -1,4 +1,4 @@
-param([string]$Installer = (Join-Path (Split-Path $PSScriptRoot) 'dist/VolturaWorlds-Setup-0.1.7-win-x64.exe'), [string]$UpgradeFrom = '', [string]$UpdateBaseline = '', [ValidatePattern('^VolturaWorlds-Test-[a-f0-9]{32}$')][string]$TestIdentity = '')
+param([string]$Installer = (Join-Path (Split-Path $PSScriptRoot) 'dist/VolturaWorlds-Setup-0.1.8-win-x64.exe'), [string]$UpgradeFrom = '', [string]$UpdateBaseline = '', [ValidatePattern('^VolturaWorlds-Test-[a-f0-9]{32}$')][string]$TestIdentity = '')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $reportDir = Join-Path $repo 'artifacts/installer-lifecycle'
@@ -72,7 +72,7 @@ try {
    if (!$helperProcess.WaitForExit(60000)) { $helperProcess.Kill(); throw 'Automatic installer helper timed out.' }
    if ($helperProcess.ExitCode -ne 0) { Get-Content (Join-Path (Split-Path (Split-Path $updateHelper)) 'updates.log'); throw 'Automatic installer helper failed.' }
    if ((Get-FileHash -LiteralPath $updateTarget).Hash -ne $expectedUpdateHash) { throw 'Automatic update did not install the exact signed application.' }
-   $results.automaticUpdate = 'passed; signed 0.1.3 baseline to signed 0.1.7 through the real NSIS installer and helper'
+   $results.automaticUpdate = 'passed; signed 0.1.3 baseline to signed 0.1.8 through the real NSIS installer and helper'
   } finally {
    if ($updateHelper) {
     $ownedCache = [IO.Path]::GetFullPath((Split-Path (Split-Path $updateHelper)))
@@ -124,11 +124,11 @@ try {
    if ((Get-FileHash (Join-Path $installDir $relative)).Hash -ne (Get-FileHash (Join-Path $repo $relative)).Hash) { throw "Packaged texture differs: $relative" }
   }
  }
- foreach ($scene in @('silk','eclipse','lattice','drift','contour','plastic_metal','ripples','mercury','pluto','sun')) {
+ foreach ($scene in @('aurora','bloom','smoke','silk','eclipse','lattice','drift','contour','plastic_metal','ripples','mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','moon','pluto','sun')) {
   & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir "installed-$scene") --scene $scene --width 640 --height 360 --frames 1 --start-time 8 --debug-gpu
   if ($LASTEXITCODE -ne 0) { throw "Installed $scene renderer validation failed." }
  }
- $results.installedNewWorlds = 'passed; all seven procedural Worlds and Mercury/Pluto/Sun rendered using packaged shaders with D3D12 debug validation'
+ $results.installedNewWorlds = 'passed; all 22 Worlds rendered using packaged shaders with D3D12 debug validation'
  & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir 'installed-video') --scene video --video-file (Join-Path $repo 'tests/fixtures/h264.mp4') --width 800 --height 800 --frames 120 --fit
  if ($LASTEXITCODE -ne 0) { throw 'Installed video renderer validation failed.' }
  $results.installedVideo = 'passed; native private-desktop video playback with packaged shader'

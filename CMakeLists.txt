@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(VolturaWorlds VERSION 0.1.7 LANGUAGES CXX RC)
+project(VolturaWorlds VERSION 0.1.8 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -197,8 +197,8 @@ add_test(NAME smoke_atlas_cached_half_contracts COMMAND worlds_smoke_atlas_gpu_t
 add_executable(worlds_tests tests/core_tests.cpp)
 target_link_libraries(worlds_tests PRIVATE worlds_core)
 add_test(NAME core_contracts COMMAND worlds_tests)
-find_package(Python3 3.10 COMPONENTS Interpreter REQUIRED)
-execute_process(COMMAND "${Python3_EXECUTABLE}" -c "from PIL import Image, ImageChops, ImageStat"
+find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+execute_process(COMMAND "${Python3_EXECUTABLE}" -c "import sys; sys.path.insert(0, r'${DEPS}/python'); from PIL import Image, ImageChops, ImageStat; import numpy"
  RESULT_VARIABLE WORLDS_PYTHON_IMAGE_RESULT OUTPUT_QUIET ERROR_QUIET)
 if(NOT WORLDS_PYTHON_IMAGE_RESULT EQUAL 0)
  message(FATAL_ERROR "Python image-test dependencies are missing. Run: \"${Python3_EXECUTABLE}\" -m pip install -r \"${CMAKE_SOURCE_DIR}/requirements-dev.txt\"")

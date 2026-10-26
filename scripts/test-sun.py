@@ -79,7 +79,7 @@ def main():
     for palette in (1,2,3):
         assert difference(base,capture('palette-'+str(palette),palette=palette))>.1,'Palette has no effect'
     for quality in ('eco','auto','high'):
-        image=capture('quality-'+quality)
+        image=capture('quality-'+quality,quality=quality)
         # Quality may simplify loops, but photographic structure remains.
         assert difference(base.crop((285,155,350,210)),image.crop((285,155,350,210)))<.1,'Quality changes source structure'
     # Independently predict the display of source samples away from added loops.
