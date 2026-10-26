@@ -1,0 +1,110 @@
+{
+  "surface.tif": {
+    "url": "https://planetarymaps.usgs.gov/mosaic/Mercury_MESSENGER_mosaic_global_250m_2013.tif",
+    "sha256": "720938d9a403803b016e88d22d58cddbbf4fe8cb99f652c90f19b5a1bc946c76",
+    "dimensions": [
+      61324,
+      30662
+    ],
+    "projection": {
+      "KeyDirectoryVersion": 1,
+      "KeyRevision": 1,
+      "KeyRevisionMinor": 0,
+      "GTModelTypeGeoKey": 1,
+      "GTRasterTypeGeoKey": 1,
+      "GTCitationGeoKey": "Equirectangular Mercury",
+      "GeographicTypeGeoKey": 32767,
+      "GeogCitationGeoKey": "GCS Name = GCS_Mercury|Datum = D_Mercury|Ellipsoid = Mercury_localRadius|Primem = Reference_Meridian|",
+      "GeogGeodeticDatumGeoKey": 32767,
+      "GeogAngularUnitsGeoKey": 9102,
+      "GeogEllipsoidGeoKey": 32767,
+      "GeogSemiMajorAxisGeoKey": 2440000.0,
+      "GeogSemiMinorAxisGeoKey": 2440000.0,
+      "GeogPrimeMeridianLongGeoKey": 0.0,
+      "ProjectedCSTypeGeoKey": 32767,
+      "ProjectionGeoKey": 32767,
+      "ProjCoordTransGeoKey": 17,
+      "ProjLinearUnitsGeoKey": 9001,
+      "ProjStdParallel1GeoKey": 0.0,
+      "ProjFalseEastingGeoKey": 0.0,
+      "ProjFalseNorthingGeoKey": 0.0,
+      "ProjCenterLongGeoKey": 0.0,
+      "ProjCenterLatGeoKey": 0.0,
+      "ModelPixelScale": [
+        249.99954584695,
+        249.99954584695,
+        0.0
+      ],
+      "ModelTiepoint": [
+        0.0,
+        0.0,
+        0.0,
+        -7665486.0747591,
+        3832743.0373795,
+        0.0
+      ]
+    },
+    "nodata": "0"
+  },
+  "elevation.tif": {
+    "url": "https://planetarymaps.usgs.gov/mosaic/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif",
+    "sha256": "defce776241dcaf44cb0f081ee508c17dbea28aa5a22880bf7a5e8c25f96cbea",
+    "dimensions": [
+      23040,
+      11520
+    ],
+    "projection": {
+      "KeyDirectoryVersion": 1,
+      "KeyRevision": 1,
+      "KeyRevisionMinor": 0,
+      "GTModelTypeGeoKey": 1,
+      "GTRasterTypeGeoKey": 1,
+      "GTCitationGeoKey": "Equirectangular Mercury",
+      "GeographicTypeGeoKey": 32767,
+      "GeogCitationGeoKey": "GCS Name = GCS_Mercury|Datum = D_Mercury|Ellipsoid = Mercury_localRadius|Primem = Reference_Meridian|",
+      "GeogGeodeticDatumGeoKey": 32767,
+      "GeogAngularUnitsGeoKey": 9102,
+      "GeogEllipsoidGeoKey": 32767,
+      "GeogSemiMajorAxisGeoKey": 2439400.0,
+      "GeogSemiMinorAxisGeoKey": 2439400.0,
+      "GeogPrimeMeridianLongGeoKey": 0.0,
+      "ProjectedCSTypeGeoKey": 32767,
+      "ProjectionGeoKey": 32767,
+      "ProjCoordTransGeoKey": 17,
+      "ProjLinearUnitsGeoKey": 9001,
+      "ProjStdParallel1GeoKey": 0.0,
+      "ProjFalseEastingGeoKey": 0.0,
+      "ProjFalseNorthingGeoKey": 0.0,
+      "ProjCenterLongGeoKey": 180.0,
+      "ProjCenterLatGeoKey": 0.0,
+      "ModelPixelScale": [
+        665.24315270546,
+        665.24315270546,
+        0.0
+      ],
+      "ModelTiepoint": [
+        0.0,
+        0.0,
+        0.0,
+        -7663601.1191669,
+        3831800.5595835,
+        0.0
+      ]
+    },
+    "nodata": "-32768"
+  },
+  "derivation": {
+    "version": 1,
+    "dimensions": [
+      8192,
+      4096
+    ],
+    "radiusMeters": 2439400.0,
+    "longitude": "-180..180 positive east, north up; DEM shifted 180 degrees to match surface",
+    "normalBasis": "east, north, outward; physical slopes; polar first/last two rows flattened",
+    "surface": "monochrome photographic mosaic, sRGB display interpretation, RGB tint [1.025,1,.97]; not calibrated albedo or measured true color",
+    "pillow": "12.3.0",
+    "numpy": "2.5.4",
+    "tifffile": "2026.10.15"
+  }
+}

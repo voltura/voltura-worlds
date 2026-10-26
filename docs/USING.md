@@ -55,3 +55,7 @@ Native rendering diagnostics and historical visual experiments are documented in
 **Saturn** shows a muted gold cloud globe with translucent rings, fine radial bands, the Cassini Division and shadows in both directions. The complete tilted ring system remains inside the frame on portrait and landscape displays. A full rotation takes 15 minutes at Movement 1. Cloud detail, Camera drift, Cloud drift and Atmosphere adjust cloud contrast, bounded framing drift, subtle cloud motion and haze. Its four palettes start with Natural Saturn. Audio gently changes planet/ring illumination while stars remain stationary; Movement zero freezes motion and audio. See [Saturn imagery, ring model and attribution](../assets/saturn/ATTRIBUTION.md).
 
 Earth, Mars, Moon, Jupiter and Saturn include a restrained NASA catalog-star foreground. Stars stay fixed while Earth, Mars, Jupiter and Saturn rotate; the Moon’s stars follow its orbiting camera. The shared layer adds no extra runtime sky texture allocation.
+
+## Pluto
+
+Pluto starts on its heart region and rotates over 15 minutes. Brightness, Movement, Surface detail, Camera drift, Sun angle, Atmosphere and Audio strength tune the view. Surface detail changes photographic contrast, without simulated terrain relief. Four palettes start with Natural Pluto. Movement zero freezes motion and audio. Select Pluto in the library or tray; per-display selection, Apply to all, Random and World import/export work as for the other planets. See [Pluto sources and coverage limits](../assets/pluto/ATTRIBUTION.md).

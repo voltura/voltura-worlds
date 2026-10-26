@@ -14,7 +14,7 @@ from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENES = ('aurora', 'orbit', 'mars', 'smoke', 'bloom', 'silk', 'eclipse',
-          'lattice', 'drift', 'contour', 'mercury')
+          'lattice', 'drift', 'contour', 'plastic_metal')
 
 
 def main():

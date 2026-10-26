@@ -1,0 +1,43 @@
+{
+  "observationUTC": "2026-09-24T00:06:10Z",
+  "instrument": "NASA/SDO AIA",
+  "wavelengthAngstrom": 171,
+  "url": "https://sdo.gsfc.nasa.gov/assets/img/browse/2026/09/24/20260924_000610_4096_0171.jpg",
+  "sha256": "aa16f6ec5d4f82dba42259a57f80668a85214f32abdf79f23f2602b232fba47a",
+  "prominence": {
+    "url": "https://svs.gsfc.nasa.gov/vis/a010000/a010600/a010610/AIA_red_2_full_disk_4Kx3K_00069.jpg",
+    "sha256": "e626b5576b255a3dc08b6bec7f32c40c9be320227c69398d8fe7246c27e58cee",
+    "page": "https://svs.gsfc.nasa.gov/10610/",
+    "observationDateUTC": "2010-03-30",
+    "wavelengthAngstrom": 304,
+    "sourceDimensions": [
+      4096,
+      3112
+    ],
+    "centerPixels": [
+      2048,
+      1556
+    ],
+    "diskRadiusPixels": 1450,
+    "processing": "Bicubic affine image alignment to 4096 square; linear-light smooth radial mask .89\u20131.02 and outer fade 1.41\u20131.48 disk radii; BC7 sRGB mip chain. Artistic composite with 2026 AIA171 disk, not simultaneous observations."
+  },
+  "sourceDimensions": [
+    4096,
+    4096
+  ],
+  "derivation": {
+    "dimensions": [
+      4096,
+      4096
+    ],
+    "centerPixels": [
+      2047.5,
+      2047.5
+    ],
+    "diskRadiusPixels": 1605,
+    "mapping": "front-facing image, north up; not equirectangular",
+    "processing": "sRGB decode; radial fade 1.19\u20131.25 disk radii; bottom caption fade rows 3820\u20133900; sRGB encode; full mip chain BC7 sRGB",
+    "pillow": "12.3.0",
+    "numpy": "2.5.4"
+  }
+}

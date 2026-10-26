@@ -30,7 +30,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  ComPtr<IDXGISwapChain1> sw;check(factory_->CreateSwapChainForHwnd(queue_.Get(),hwnd,&sd,nullptr,nullptr,&sw),"Create wallpaper swap chain");check(sw.As(&swap_),"Query swap chain");factory_->MakeWindowAssociation(hwnd,DXGI_MWA_NO_ALT_ENTER);
  D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=6;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_DSV;hd.NumDescriptors=2;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&dsv_)),"Create depth views");
- hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=408;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
+ hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=417;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  check(device_->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence_)),"Create fence");event_=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!event_)throw std::runtime_error("Cannot create GPU wait event");
  for(auto& f:frames_)check(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&f.allocator)),"Create frame allocator");
  check(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,frames_[0].allocator.Get(),nullptr,IID_PPV_ARGS(&list_)),"Create command list");list_->Close();
@@ -60,13 +60,19 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  // add no edge information. Keep the exact same HDR format and shader shading.
  pipeline(L"earth.cso",false,true,earth_);pipeline(L"earth_space.cso",false,false,earthSpace_);
  pipeline(L"saturn.cso",false,false,saturn_);
+ pipeline(L"uranus.cso",false,true,uranus_);pipeline(L"uranus_space.cso",false,false,uranusSpace_);
+ pipeline(L"neptune.cso",false,true,neptune_);pipeline(L"neptune_space.cso",false,false,neptuneSpace_);
+ pipeline(L"venus.cso",false,true,venus_);pipeline(L"venus_space.cso",false,false,venusSpace_);
  pipeline(L"jupiter.cso",false,true,jupiter_);pipeline(L"jupiter_space.cso",false,false,jupiterSpace_);
  pipeline(L"moon.cso",false,true,moon_);pipeline(L"moon_space.cso",false,false,moonSpace_);
+ pipeline(L"sun.cso",false,false,sun_);
+ pipeline(L"pluto.cso",false,true,pluto_);pipeline(L"pluto_space.cso",false,false,plutoSpace_);
+ pipeline(L"mercury.cso",false,true,mercuryPlanet_);pipeline(L"mercury_space.cso",false,false,mercurySpace_);
  pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);
  pipeline(L"video.cso",false,false,videoPipeline_,true);
  pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);
  pipeline(L"aurora.cso",false,false,aurora_);pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);pipeline(L"smoke.cso",false,false,smoke_);pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);
- const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"mercury.cso",L"ripples.cso"};
+ const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"plastic_metal.cso",L"ripples.cso"};
  for(unsigned i=0;i<proceduralWorlds_.size();i++)pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);
  auto cs=shader(dir,L"fluid.cso");D3D12_COMPUTE_PIPELINE_STATE_DESC cd{};cd.pRootSignature=root_.Get();cd.CS={cs.data(),cs.size()};check(device_->CreateComputePipelineState(&cd,IID_PPV_ARGS(&fluid_)),"Create fluid pipeline");
  auto coordinateCode=shader(dir,L"smoke_coordinates.cso");cd.CS={coordinateCode.data(),coordinateCode.size()};check(device_->CreateComputePipelineState(&cd,IID_PPV_ARGS(&coordinatePipeline_)),"Create detail coordinate pipeline");
@@ -156,6 +162,30 @@ void Renderer::loadMoon(){
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-color.dds",moonColor_,399);
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-normal.dds",moonNormal_,400);
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-earth.dds",moonEarth_,401);
+}
+void Renderer::loadSun(){
+ if(sunImage_&&sunProminence_)return;
+ // Dedicated three-SRV table following Pluto; no star texture is needed.
+ loadDds(assetDirectory_/L"sun"/L"runtime"/L"sun-aia171.dds",sunImage_,414);
+ loadDds(assetDirectory_/L"sun"/L"runtime"/L"sun-prominence.dds",sunProminence_,415);
+ D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&empty,cpu(416));
+}
+void Renderer::loadPluto(){
+ if(plutoColor_)return;
+ loadStars(true);
+ // Three contiguous SRVs match the shared root table; unused entries are null.
+ loadDds(assetDirectory_/L"pluto"/L"runtime"/L"pluto-color.dds",plutoColor_,411);
+ D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&empty,cpu(412));device_->CreateShaderResourceView(nullptr,&empty,cpu(413));
+}
+void Renderer::loadMercury(){
+ if(mercuryColor_&&mercuryNormal_)return;
+ loadStars(true);
+ loadDds(assetDirectory_/L"mercury"/L"runtime"/L"mercury-color.dds",mercuryColor_,408);
+ loadDds(assetDirectory_/L"mercury"/L"runtime"/L"mercury-normal.dds",mercuryNormal_,409);
+ D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&empty,cpu(410));
 }
 void Renderer::loadMars(){
  if(marsColor_&&marsNormal_)return;
@@ -676,7 +706,7 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
- if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn)){
+ if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn||lastScene_==Scene::Mercury||lastScene_==Scene::Neptune||lastScene_==Scene::Venus||lastScene_==Scene::Uranus||lastScene_==Scene::Pluto||lastScene_==Scene::Sun)){
   idle();
   auto releaseTexture=[&](ComPtr<ID3D12Resource>& texture){
    if(!texture)return;
@@ -685,17 +715,24 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   if(lastScene_==Scene::Orbit){releaseTexture(planetTexture_);releaseTexture(cloudTexture_);releaseTexture(nightTexture_);}
   if(lastScene_==Scene::Mars){releaseTexture(marsColor_);releaseTexture(marsNormal_);}
   if(lastScene_==Scene::Saturn)releaseTexture(saturnColor_);
+  if(lastScene_==Scene::Pluto)releaseTexture(plutoColor_);
+  if(lastScene_==Scene::Sun){releaseTexture(sunImage_);releaseTexture(sunProminence_);}
+  if(lastScene_==Scene::Mercury){releaseTexture(mercuryColor_);releaseTexture(mercuryNormal_);}
   if(lastScene_==Scene::Jupiter){releaseTexture(jupiterColor_);releaseTexture(jupiterAtmosphere_);}
   if(lastScene_==Scene::Moon){releaseTexture(moonColor_);releaseTexture(moonNormal_);releaseTexture(moonEarth_);}
   if(lastScene_==Scene::Earth){releaseTexture(earthColor_);releaseTexture(earthClouds_);releaseTexture(earthMaterial_);}
-  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars&&assignment.scene!=Scene::Earth&&assignment.scene!=Scene::Moon&&assignment.scene!=Scene::Jupiter&&assignment.scene!=Scene::Saturn)releaseTexture(starTexture_);
+  if(assignment.scene!=Scene::Orbit&&assignment.scene!=Scene::Mars&&assignment.scene!=Scene::Earth&&assignment.scene!=Scene::Moon&&assignment.scene!=Scene::Jupiter&&assignment.scene!=Scene::Saturn&&assignment.scene!=Scene::Mercury&&assignment.scene!=Scene::Neptune&&assignment.scene!=Scene::Venus&&assignment.scene!=Scene::Uranus&&assignment.scene!=Scene::Pluto)releaseTexture(starTexture_);
  }
  // Only mesh geometry needs depth. With MSAA its dedicated depth target is
  // sufficient; allocate single-sample depth only for the hardware fallback.
  bool geometry=assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom;
  if(geometry&&orbitSamples_==1)makeDepthTarget();
  else if(depth_){idle();depth_.Reset();depthTargetBytes_=0;}
+ if(assignment.scene==Scene::Neptune||assignment.scene==Scene::Venus||assignment.scene==Scene::Uranus)loadStars(true);
  if(assignment.scene==Scene::Saturn)loadSaturn();
+ if(assignment.scene==Scene::Pluto)loadPluto();
+ if(assignment.scene==Scene::Sun)loadSun();
+ if(assignment.scene==Scene::Mercury)loadMercury();
  if(assignment.scene==Scene::Jupiter)loadJupiter();
  if(assignment.scene==Scene::Moon)loadMoon();
  if(assignment.scene==Scene::Earth)loadEarth();
@@ -728,6 +765,12 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
+ else if(assignment.scene==Scene::Uranus){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(uranusSpace_.Get(),0,3);draw(uranus_.Get(),0,3);}
+ else if(assignment.scene==Scene::Neptune){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(neptuneSpace_.Get(),0,3);draw(neptune_.Get(),0,3);}
+ else if(assignment.scene==Scene::Venus){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(venusSpace_.Get(),0,3);draw(venus_.Get(),0,3);}
+ else if(assignment.scene==Scene::Sun){list_->SetGraphicsRootDescriptorTable(2,gpu(414));draw(sun_.Get(),0,3);}
+ else if(assignment.scene==Scene::Pluto){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(plutoSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(411));draw(pluto_.Get(),0,3);}
+ else if(assignment.scene==Scene::Mercury){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(mercurySpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(408));draw(mercuryPlanet_.Get(),0,3);}
  else if(assignment.scene==Scene::Saturn){list_->SetGraphicsRootDescriptorTable(2,gpu(405));draw(saturn_.Get(),0,3);}
  else if(assignment.scene==Scene::Jupiter){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(jupiterSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(402));draw(jupiter_.Get(),0,3);}
  else if(assignment.scene==Scene::Moon){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(moonSpace_.Get(),0,3);list_->SetGraphicsRootDescriptorTable(2,gpu(399));draw(moon_.Get(),0,3);}

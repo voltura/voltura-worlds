@@ -116,13 +116,19 @@ try {
  $results.textureMigration = 'passed; compressed assets installed and obsolete texture copies removed'
 
  & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir 'installed-runtime') --scene orbit --width 1280 --height 720 --frames 60 --grid 64 --validate-lifecycle
- if ($LASTEXITCODE -ne 0) { throw 'Installed renderer validation failed.' }
+ if ($LASTEXITCODE -ne 0) { Get-Content (Join-Path $installDir 'capture-error.txt') -ErrorAction SilentlyContinue; throw 'Installed renderer validation failed.' }
  $results.installedRuntime = 'passed; native private-desktop scene/resize lifecycle'
- foreach ($scene in @('silk','eclipse','lattice','drift','contour','mercury','ripples')) {
+ foreach ($planet in @('mercury','saturn','pluto','sun')) {
+  foreach ($texture in $(if ($planet -eq 'mercury') {@('color','normal')} elseif ($planet -eq 'sun') {@('aia171','prominence')} else {@('color')})) {
+   $relative = "assets/$planet/runtime/$planet-$texture.dds"
+   if ((Get-FileHash (Join-Path $installDir $relative)).Hash -ne (Get-FileHash (Join-Path $repo $relative)).Hash) { throw "Packaged texture differs: $relative" }
+  }
+ }
+ foreach ($scene in @('silk','eclipse','lattice','drift','contour','plastic_metal','ripples','mercury','pluto','sun')) {
   & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir "installed-$scene") --scene $scene --width 640 --height 360 --frames 1 --start-time 8 --debug-gpu
   if ($LASTEXITCODE -ne 0) { throw "Installed $scene renderer validation failed." }
  }
- $results.installedNewWorlds = 'passed; all seven procedural Worlds rendered using packaged shaders with D3D12 debug validation'
+ $results.installedNewWorlds = 'passed; all seven procedural Worlds and Mercury/Pluto/Sun rendered using packaged shaders with D3D12 debug validation'
  & python (Join-Path $PSScriptRoot 'test_desktop.py') -- (Join-Path $installDir 'VolturaWorlds.exe') --capture-dir (Join-Path $reportDir 'installed-video') --scene video --video-file (Join-Path $repo 'tests/fixtures/h264.mp4') --width 800 --height 800 --frames 120 --fit
  if ($LASTEXITCODE -ne 0) { throw 'Installed video renderer validation failed.' }
  $results.installedVideo = 'passed; native private-desktop video playback with packaged shader'
@@ -130,6 +136,10 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'Installed desktop host recovery validation failed.' }
  $results.hostRecovery = 'passed; installed application delayed-host attach, host destruction/recovery and clean exit on a private synthetic desktop'
 } finally {
+ $captureError = Join-Path $installDir 'capture-error.txt'
+ if (Test-Path -LiteralPath $captureError) {
+  Move-Item -LiteralPath $captureError -Destination (Join-Path $reportDir 'installed-capture-error.txt') -Force
+ }
  $uninstaller = Join-Path $installDir 'Uninstall.exe'
  # Fixed, preflight-checked path beneath the current user's Programs folder.
  if (Test-Path -LiteralPath $uninstaller) {

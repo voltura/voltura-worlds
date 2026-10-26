@@ -16,10 +16,10 @@
 | Translucent flowing ribbons | A slowly evolving solar corona | A rotating porous sculpture |
 | [Watch](https://worlds.voltura.se/assets/silk.mp4) | [Watch](https://worlds.voltura.se/assets/eclipse.mp4) | [Watch](https://worlds.voltura.se/assets/lattice.mp4) |
 
-| Drift | Contour | Mercury |
+| Drift | Contour | Plastic metal |
 | --- | --- | --- |
 | Bioluminescent currents | Living topographic lines | Merging metallic forms |
-| [Watch](https://worlds.voltura.se/assets/drift.mp4) | [Watch](https://worlds.voltura.se/assets/contour.mp4) | [Watch](https://worlds.voltura.se/assets/mercury.mp4) |
+| [Watch](https://worlds.voltura.se/assets/drift.mp4) | [Watch](https://worlds.voltura.se/assets/contour.mp4) | [Watch](https://worlds.voltura.se/assets/plastic_metal.mp4) |
 
 | Ripples |
 | --- |
@@ -28,11 +28,13 @@
 
 The product site shows recordings from the native Direct3D renderer, at their original animation speed. 
 
+Sun adds an offline NASA/SDO ultraviolet observation with animated plasma, loops, and adjustable corona. See [Sun settings and source details](docs/sun.md).
+
 ## What it does
 
 - Animates behind your desktop icons, with a World and settings for each display.
-- Shuffles all sixteen Worlds with **Random**, with a saved interval for each display.
-- Gives Earth, Mars, Moon, Jupiter and Saturn a shared NASA catalog-star background, with no extra resident sky texture memory.
+- Shuffles all built-in Worlds with **Random**, with a saved interval for each display.
+- Gives Earth, Mars, Moon, Jupiter, Saturn, Mercury, Venus, Uranus and Neptune a shared NASA catalog-star background, with no extra resident sky texture memory.
 - Offers optional Gentle or Expressive audio reaction using local playback analysis. Audio is not recorded or uploaded.
 - Pauses on battery by default, and for fully covered displays, lock, sleep and remote sessions.
 - Imports personal SDR H.264 MP4 videos and data-only `.world` packages.
@@ -48,6 +50,12 @@ Current source builds add **Mars** beside Orbit: an 8K NASA/USGS globe with MOLA
 **Jupiter** uses NASA/ESA Hubble OPAL December 2025 cloud imagery, matched methane-band atmospheric data and estimated zonal winds. Its oblate globe rotates calmly, with flowing cloud belts, a gently swirling Red Spot and a thin neutral haze. Compressed 4K maps preserve the source detail efficiently. See [Jupiter sources and rendering](assets/jupiter/ATTRIBUTION.md).
 
 **Saturn** combines a flattened gold cloud globe with translucent, finely banded rings, mutual shadows and the shared stationary star background. Its full ring system stays within the frame on landscape and portrait displays. Rotation takes 15 minutes at default Movement. See [Saturn sources and rendering](assets/saturn/ATTRIBUTION.md).
+
+**Venus** shows opaque cream-and-gold cloud decks, slow retrograde atmospheric motion and a warm scattering limb against the shared stationary stars. Cloud detail, camera drift, cloud drift and atmosphere controls preserve its thick cloud cover. This is a procedural artistic reconstruction; see [Venus sources and rendering](docs/venus.md).
+
+**Uranus** shows a pale cyan, subtly banded cloud globe rotating around its 97.8° tilted axis, with fixed sunlight, a centered camera and stationary stars. Planet-specific palette, cloud, atmosphere and audio controls preserve the calm framing. See [Uranus sources and rendering](docs/uranus.md).
+
+**Neptune** shows a cinematic blue ice giant with fast white cloud streaks, latitude-dependent winds and a swirling dark storm. Four palettes include a natural blue-green interpretation. The opaque globe and narrow atmosphere sit against stationary stars; see [Neptune sources and rendering](docs/neptune.md).
 
 ## Current release
 
@@ -87,3 +95,7 @@ See [website maintenance](docs/PAGES.md) for local preview, native media capture
 ## License and credits
 
 [MIT](LICENSE), copyright Â© 2026 Voltura AB. Third-party dependencies and artwork retain their [own licenses and credits](THIRD-PARTY-NOTICES.md), including [Orbit's source imagery](assets/orbit/ATTRIBUTION.md).
+
+**Mercury** adds an 8K MESSENGER globe with measured terrain relief, a natural gray-brown surface, strong sunlight and no atmospheric halo. It rotates in 15 minutes and shares the stationary catalog-star sky. Controls adjust terrain relief, camera drift, Sun angle and surface contrast. The older metallic World is now **Plastic metal**. See [Mercury sources and rendering](assets/mercury/ATTRIBUTION.md).
+
+**Pluto** adds a New Horizons photographic globe with its bright heart initially facing the viewer, a restrained blue limb and stationary catalog stars. A rotation takes 15 minutes at default Movement. See [Pluto imagery and rendering limits](assets/pluto/ATTRIBUTION.md).

@@ -194,11 +194,52 @@ int wmain(int argc,wchar_t** argv){
   GetDlgItemTextW(library,214,marsLabel,80);requireUi(wcscmp(marsLabel,L"Cloud drift")==0,"Saturn cloud drift label");
   SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Natural Saturn")==0,"Saturn natural palette");
   SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Saturn,"Apply to all copies Saturn");
-  requireUi(selectVisualization(7)&&selected().scene==Scene::Smoke,"Quick switch updates selected display");
+  requireUi(selectVisualization(7)&&selected().scene==Scene::Mercury,"Mercury follows Saturn in the catalog");
+  GetDlgItemTextW(library,214,marsLabel,80);requireUi(wcscmp(marsLabel,L"Sun angle")==0,"Mercury Sun angle label");
+  GetDlgItemTextW(library,215,marsLabel,80);requireUi(wcscmp(marsLabel,L"Surface contrast")==0,"Mercury surface contrast label");
+  SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Natural Mercury")==0,"Mercury natural palette");
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Mercury,"Apply to all copies Mercury");
+  requireUi(selectVisualization(8)&&selected().scene==Scene::Venus,"Venus follows Mercury in the catalog");
+  GetDlgItemTextW(library,212,marsLabel,80);requireUi(wcscmp(marsLabel,L"Cloud detail")==0,"Venus cloud detail label");
+  SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Natural Venus")==0,"Venus natural palette");
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Venus,"Apply to all copies Venus");
+  HMENU venusMenu=visualizationMenu();requireUi(GetMenuState(venusMenu,visualizationMenuBase+8,MF_BYCOMMAND)&MF_CHECKED,"Tray marks Venus");DestroyMenu(venusMenu);
+  auto sceneChoice=[](Scene scene){for(int i=0;i<int(std::size(visualizations));++i)if(visualizations[i].scene==scene)return i;return -1;};
+  requireUi(sceneChoice(Scene::Neptune)==9&&selectVisualization(sceneChoice(Scene::Neptune))&&selected().scene==Scene::Neptune,"Neptune can be selected");
+  GetDlgItemTextW(library,213,marsLabel,80);requireUi(wcscmp(marsLabel,L"Camera drift")==0,"Neptune camera control label");
+  SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Cinematic blue")==0,"Neptune cinematic palette");
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Neptune,"Apply to all copies Neptune");
+  HMENU neptuneMenu=visualizationMenu();requireUi(GetMenuState(neptuneMenu,visualizationMenuBase+sceneChoice(Scene::Neptune),MF_BYCOMMAND)&MF_CHECKED,"Tray marks Neptune");DestroyMenu(neptuneMenu);
+  requireUi(sceneChoice(Scene::Uranus)==10&&selectVisualization(sceneChoice(Scene::Uranus))&&selected().scene==Scene::Uranus,"Uranus follows Neptune");
+  GetDlgItemTextW(library,213,marsLabel,80);requireUi(wcscmp(marsLabel,L"Band contrast")==0,"Uranus fixed-camera control label");
+  SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,L"Natural Uranus")==0,"Uranus natural palette");
+  requireUi(IsWindowEnabled(GetDlgItem(library,reactionId))&&IsWindowEnabled(GetDlgItem(library,206)),"Uranus audio controls enabled");
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Uranus,"Apply to all copies Uranus");
+  HMENU uranusMenu=visualizationMenu();requireUi(GetMenuState(uranusMenu,visualizationMenuBase+sceneChoice(Scene::Uranus),MF_BYCOMMAND)&MF_CHECKED,"Tray marks Uranus");DestroyMenu(uranusMenu);
+  requireUi(sceneChoice(Scene::Pluto)==11&&selectVisualization(sceneChoice(Scene::Pluto))&&selected().scene==Scene::Pluto,"Pluto follows Uranus");
+  const wchar_t* plutoLabels[]={L"Surface detail",L"Camera drift",L"Sun angle",L"Atmosphere"};
+  for(int i=0;i<4;i++){GetDlgItemTextW(library,212+i,marsLabel,80);requireUi(wcscmp(marsLabel,plutoLabels[i])==0,"Pluto adjustment labels");}
+  const wchar_t* plutoPalettes[]={L"Natural Pluto",L"Warm ice",L"Cool ice",L"Neutral survey"};
+  for(int i=0;i<4;i++){SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,i,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,plutoPalettes[i])==0,"Pluto palettes");}
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Pluto,"Apply to all copies Pluto");
+  HMENU plutoMenu=visualizationMenu();requireUi(GetMenuState(plutoMenu,visualizationMenuBase+sceneChoice(Scene::Pluto),MF_BYCOMMAND)&MF_CHECKED,"Tray marks Pluto");DestroyMenu(plutoMenu);
+  requireUi(sceneChoice(Scene::Sun)==12&&selectVisualization(sceneChoice(Scene::Sun))&&selected().scene==Scene::Sun,"Sun follows Pluto");
+  const wchar_t* sunLabels[]={L"Surface detail",L"Camera drift",L"Solar activity",L"Corona"};
+  for(int i=0;i<4;i++){GetDlgItemTextW(library,212+i,marsLabel,80);requireUi(wcscmp(marsLabel,sunLabels[i])==0,"Sun adjustment labels");}
+  const wchar_t* expectedSunPalettes[]={L"SDO orange (false color)",L"Golden corona (false color)",L"Deep amber (false color)",L"Neutral intensity (false color)"};
+  for(int i=0;i<4;i++){SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,i,reinterpret_cast<LPARAM>(marsLabel));requireUi(wcscmp(marsLabel,expectedSunPalettes[i])==0,"Sun false-color palettes");}
+  requireUi(IsWindowEnabled(GetDlgItem(library,reactionId))&&IsWindowEnabled(GetDlgItem(library,206)),"Sun audio controls enabled");
+  selected().params.turbulence=1.6f;selected().params.density=.4f;
+  SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();auto sunAll=assignmentFor(settings,surfaces[1].monitor.id);requireUi(sunAll.scene==Scene::Sun&&sunAll.params.turbulence==1.6f&&sunAll.params.density==.4f,"Apply to all copies Sun settings");
+  HMENU sunMenu=visualizationMenu();requireUi(GetMenuState(sunMenu,visualizationMenuBase+sceneChoice(Scene::Sun),MF_BYCOMMAND)&MF_CHECKED,"Tray marks Sun");DestroyMenu(sunMenu);
+  selectVisualization(7);
+  HMENU mercuryMenu=visualizationMenu();requireUi(GetMenuState(mercuryMenu,visualizationMenuBase+7,MF_BYCOMMAND)&MF_CHECKED,"Tray marks planet Mercury");DestroyMenu(mercuryMenu);
+  requireUi(wcscmp(visualizations[sceneChoice(Scene::PlasticMetal)].name,L"Plastic metal")==0,"Metallic scene is named Plastic metal");
+  requireUi(selectVisualization(sceneChoice(Scene::Smoke))&&selected().scene==Scene::Smoke,"Quick switch updates selected display");
   GetDlgItemTextW(library,212,marsLabel,80);requireUi(wcscmp(marsLabel,L"Detail")==0,"Leaving Mars restores regular adjustment labels");
-  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==7,"Quick switch synchronizes dropdown");
-  requireUi(selectVisualization(8)&&selected().scene==Scene::Bloom,"Bloom can be selected from the catalog");
-  for(int i=9;i<randomChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
+  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==sceneChoice(Scene::Smoke),"Quick switch synchronizes dropdown");
+  requireUi(selectVisualization(sceneChoice(Scene::Bloom))&&selected().scene==Scene::Bloom,"Bloom can be selected from the catalog");
+  for(int i=sceneChoice(Scene::Silk);i<randomChoice;i++)requireUi(selectVisualization(i)&&selected().scene==visualizations[i].scene,"New World can be selected from the catalog");
   requireUi(!selectVisualization(videoChoice)&&!selectVisualization(-1),"Unavailable video and invalid selections leave scene intact");
   // Real native surfaces on the test desktop prove that Off reveals the desktop
   // and affects only the selected display, including Apply to all displays.

@@ -10,7 +10,7 @@
     lattice: ['07', 'Lattice', 'An open sculpture. A new angle in every turn.'],
     drift: ['08', 'Drift', 'Small lights. Gentle currents.'],
     contour: ['09', 'Contour', 'Imaginary landscapes. Lines that keep moving.'],
-    mercury: ['10', 'Mercury', 'Liquid forms. Reflections in motion.'],
+    plastic_metal: ['10', 'Plastic metal', 'Liquid forms. Reflections in motion.'],
     ripples: ['11', 'Ripples', 'Drops meet. Clouds drift. A quieter moment by the water.']
   };
   const video = document.querySelector('#world-video');

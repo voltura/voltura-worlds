@@ -1,0 +1,25 @@
+{
+  "sources": {
+    "PIA11707": {
+      "url": "https://d2pn8kiwq2w21t.cloudfront.net/original_images/jpegPIA11707.jpg",
+      "page": "https://www.jpl.nasa.gov/images/pia11707-pluto-color-map/",
+      "sha256": "e36f3daa1b3b0e911418ff830ddccf8b63e10a082c6ccc96eb7d8170991962d6",
+      "dimensions": [
+        5926,
+        2963
+      ]
+    }
+  },
+  "derivation": {
+    "version": 1,
+    "dimensions": [
+      5920,
+      2960
+    ],
+    "mapping": "north up, equirectangular; map center faces viewer at startup; 25 degree north observer",
+    "surface": "Published MVIC photographic color mosaic interpreted as sRGB; not calibrated albedo or measured elevation. Unequal spatial resolution retained.",
+    "unobserved": "Only pixels south of each source coverage boundary are reconstructed by reflecting observed rows at native pixel scale. No blur or smoothing of observed pixels. Final 16 polar rows converge to mean ice color. Synthetic continuation, not observed terrain.",
+    "pillow": "12.3.0",
+    "numpy": "2.5.4"
+  }
+}

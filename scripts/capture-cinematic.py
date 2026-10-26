@@ -18,7 +18,7 @@ import imageio_ffmpeg
 from PIL import Image, ImageChops, ImageStat
 
 SCENES = ('aurora', 'orbit', 'mars', 'smoke', 'bloom', 'silk', 'eclipse',
-          'lattice', 'drift', 'contour', 'mercury')
+          'lattice', 'drift', 'contour', 'plastic_metal', 'sun')
 
 
 def main():

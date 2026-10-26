@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scenes', nargs='+', required=True,
-                        choices=('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse', 'lattice', 'drift', 'contour', 'mercury'))
+                        choices=('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse', 'lattice', 'drift', 'contour', 'plastic_metal', 'sun'))
     parser.add_argument('--qualities', nargs='+', choices=('eco', 'auto', 'high'), default=('eco', 'auto', 'high'))
     parser.add_argument('--output', type=Path, default=ROOT/'artifacts/cinematic')
     parser.add_argument('--frames', type=int, default=1200)

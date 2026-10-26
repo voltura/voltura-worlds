@@ -115,10 +115,16 @@ private:
  ComPtr<ID3D12Resource> depth_,hdr_,planetTexture_,cloudTexture_,nightTexture_,starTexture_,auroraArtwork_;ComPtr<ID3D12RootSignature> root_;
  ComPtr<ID3D12Resource> saturnColor_;
  ComPtr<ID3D12PipelineState> saturn_;
+ ComPtr<ID3D12PipelineState> neptune_,neptuneSpace_,venus_,venusSpace_,uranus_,uranusSpace_;
  ComPtr<ID3D12Resource> jupiterColor_,jupiterAtmosphere_;
  ComPtr<ID3D12PipelineState> jupiter_,jupiterSpace_;
  ComPtr<ID3D12Resource> moonColor_,moonNormal_,moonEarth_;
  ComPtr<ID3D12PipelineState> moon_,moonSpace_;
+ ComPtr<ID3D12Resource> sunImage_,sunProminence_,plutoColor_;
+ ComPtr<ID3D12PipelineState> sun_;
+ ComPtr<ID3D12PipelineState> pluto_,plutoSpace_;
+ ComPtr<ID3D12Resource> mercuryColor_,mercuryNormal_;
+ ComPtr<ID3D12PipelineState> mercuryPlanet_,mercurySpace_;
  ComPtr<ID3D12Resource> marsColor_,marsNormal_;
  ComPtr<ID3D12Resource> earthColor_,earthClouds_,earthMaterial_;
  ComPtr<ID3D12PipelineState> earth_,earthSpace_;
@@ -134,7 +140,7 @@ private:
  unsigned v_=0,d_=0,p_=0;bool fluidReady_=false;Scene lastScene_=Scene::Aurora;
  ComPtr<ID3D12QueryHeap> query_;ComPtr<ID3D12Resource> queryReadback_;UINT64 frequency_=0;
  double gpuMs_=0;uint64_t allocationBytes_=0,fluidBytes_=0;
- void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
+ void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadMercury();void loadSun();void loadPluto();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
  static constexpr unsigned QueryStride=66;
  bool stageProfiling_=false;
  std::array<unsigned,2> stageCount_{};

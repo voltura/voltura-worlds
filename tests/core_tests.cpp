@@ -22,6 +22,12 @@ int main(){try{
  put(32,DXGI_FORMAT_BC4_UNORM);dds.resize(148+3*8);require(parseDds(dds).mips.back().rowBytes==8,"BC4 mip tail layout");
  PauseState p;require(!shouldPause(p,true),"Active desktop paused");p.battery=true;require(shouldPause(p,true),"Battery policy ignored");require(!shouldPause(p,false),"Battery override ignored");p.locked=true;require(shouldPause(p,false),"Lock policy ignored");
  require(boundedDelta(100)==.05f,"Resume timestep unbounded");require(boundedDelta(std::numeric_limits<float>::quiet_NaN())==0,"Nonfinite timestep");
+ require(parseScene("plastic_metal")==Scene::PlasticMetal&&sceneName(Scene::PlasticMetal)=="plastic_metal","Plastic metal identity");
+ require(parseScene("mercury")==Scene::Mercury&&!isProceduralWorld(Scene::Mercury),"Distinct planet identity");
+ require(parseScene("sun")==Scene::Sun&&!isProceduralWorld(Scene::Sun),"Sun identity");
+ require(std::find(randomScenes.begin(),randomScenes.end(),Scene::Sun)!=randomScenes.end(),"Sun is eligible for Random");
+ require(parseScene("pluto")==Scene::Pluto&&!isProceduralWorld(Scene::Pluto),"Pluto planet identity");
+ require(std::find(randomScenes.begin(),randomScenes.end(),Scene::Pluto)!=randomScenes.end(),"Pluto is eligible for Random");
  Parameters v;require(valid(v),"Default parameters invalid");v.brightness=std::numeric_limits<float>::infinity();require(!valid(v),"Infinite parameter accepted");rejects([]{parseScene("../evil");});
  auto dir=std::filesystem::temp_directory_path()/(L"VolturaWorlds-tests-"+std::to_wstring(GetCurrentProcessId()));std::filesystem::create_directories(dir);
  {
@@ -36,6 +42,8 @@ int main(){try{
    require(random.scene!=previous&&random.scene!=Scene::Off&&random.scene!=Scene::Video,"Random excludes Off, video and consecutive repeats");previous=random.scene;
    visited.insert(random.scene);if(i%randomScenes.size()==randomScenes.size()-1){require(visited.size()==randomScenes.size(),"Complete shuffle has no repeats");visited.clear();}
   }
+  require(visited.empty()&&std::find(randomScenes.begin(),randomScenes.end(),Scene::Uranus)!=randomScenes.end(),"Uranus is eligible for Random");
+  require(std::find(randomScenes.begin(),randomScenes.end(),Scene::Neptune)!=randomScenes.end(),"Neptune is eligible for Random");
   Settings shuffle;shuffle.displays.emplace_back(L"random-monitor",random);saveSettings(dir,shuffle);
   auto loadedRandom=assignmentFor(loadSettings(dir),L"random-monitor");require(loadedRandom.random&&loadedRandom.randomInterval==30,"Random settings persist");
   random.random=false;require(!cycle.advance(random,999999,true),"Manual mode stops cycle");
@@ -44,8 +52,8 @@ int main(){try{
  require(parseScene("off")==Scene::Off&&sceneName(Scene::Off)=="off","Off scene identity failed");
  {Settings off;Assignment a;a.scene=Scene::Off;a.video=L"retained.mp4";off.displays.emplace_back(L"off-monitor",a);saveSettings(dir,off);auto restored=assignmentFor(loadSettings(dir),L"off-monitor");require(restored.scene==Scene::Off&&restored.video==a.video,"Off settings roundtrip preserves video");}
  require(parseScene("bloom")==Scene::Bloom&&sceneName(Scene::Bloom)=="bloom","Bloom scene identity failed");
- for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Saturn}){
-  require(parseScene(sceneName(scene))==scene&&(isProceduralWorld(scene)||scene==Scene::Mars||scene==Scene::Earth||scene==Scene::Moon||scene==Scene::Jupiter||scene==Scene::Saturn),"Procedural World scene identity failed");
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::PlasticMetal,Scene::Ripples,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Saturn,Scene::Mercury,Scene::Venus,Scene::Neptune,Scene::Uranus,Scene::Pluto,Scene::Sun}){
+  require(parseScene(sceneName(scene))==scene&&(isProceduralWorld(scene)||scene==Scene::Mars||scene==Scene::Earth||scene==Scene::Moon||scene==Scene::Jupiter||scene==Scene::Saturn||scene==Scene::Mercury||scene==Scene::Neptune||scene==Scene::Venus||scene==Scene::Uranus||scene==Scene::Pluto||scene==Scene::Sun),"Procedural World scene identity failed");
   Settings settings;Assignment world;world.scene=scene;world.params.palette=2;world.params.strength=.7f;world.reaction=Reaction::Gentle;settings.displays.emplace_back(L"world-monitor",world);saveSettings(dir,settings);
   auto restoredWorld=assignmentFor(loadSettings(dir),L"world-monitor");require(restoredWorld.scene==scene&&restoredWorld.params.palette==2&&restoredWorld.params.strength==.7f&&restoredWorld.reaction==Reaction::Gentle,"Procedural World settings roundtrip failed");
  }
@@ -55,7 +63,7 @@ int main(){try{
  {std::ofstream out(dir/L"settings.json");out<<"{\"version\":999}";}rejects([&]{loadSettings(dir);});
  WorldPackage package;package.title="Test";package.assignment=a;package.preview={137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,2,0,0,0,2,8,6,0,0,0,114,182,13,36,0,0,0,21,73,68,65,84,120,156,99,100,104,248,255,159,129,129,129,129,9,68,128,48,0,37,25,2,130,143,80,141,6,0,0,0,0,73,69,78,68,174,66,96,130};
  {auto folded=package;folded.assignment.scene=Scene::Bloom;auto bloomFile=dir/L"bloom.world";writePackage(bloomFile,folded);require(readPackage(bloomFile).assignment.scene==Scene::Bloom,"Bloom package roundtrip failed");}
- for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::Mercury,Scene::Ripples,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Saturn}){auto world=package;world.assignment.scene=scene;auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");}
+ for(auto scene:{Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::PlasticMetal,Scene::Ripples,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Saturn,Scene::Mercury,Scene::Venus,Scene::Neptune,Scene::Uranus,Scene::Pluto,Scene::Sun}){auto world=package;world.assignment.scene=scene;if(scene==Scene::Sun){world.assignment.params={.8f,.6f,1.4f,.2f,1.7f,.3f,.9f,3};world.assignment.reaction=Reaction::Expressive;}auto worldFile=dir/(wide(sceneName(scene))+L".world");writePackage(worldFile,world);require(readPackage(worldFile).assignment.scene==scene,"Procedural World package roundtrip failed");if(scene==Scene::Sun){auto roundtrip=readPackage(worldFile).assignment;auto& p=roundtrip.params;require(p.brightness==.8f&&p.movement==.6f&&p.detail==1.4f&&p.flow==.2f&&p.turbulence==1.7f&&p.density==.3f&&p.strength==.9f&&p.palette==3&&roundtrip.reaction==Reaction::Expressive,"Sun package retains every setting");Settings solar;solar.displays.emplace_back(L"solar-monitor",roundtrip);saveSettings(dir,solar);auto saved=assignmentFor(loadSettings(dir),L"solar-monitor");auto& v=saved.params;require(saved.scene==Scene::Sun&&v.brightness==p.brightness&&v.movement==p.movement&&v.detail==p.detail&&v.flow==p.flow&&v.turbulence==p.turbulence&&v.density==p.density&&v.strength==p.strength&&v.palette==p.palette&&saved.reaction==roundtrip.reaction,"Sun settings retain every control");}}
  auto file=dir/L"test.world";writePackage(file,package);auto loaded=readPackage(file);require(loaded.title=="Test"&&loaded.assignment.scene==Scene::Smoke,"Package roundtrip failed");
  {std::fstream out(file,std::ios::binary|std::ios::in|std::ios::out);out.seekp(50);out.put('!');}rejects([&]{readPackage(file);});
  writePackage(file,package);

@@ -25,7 +25,7 @@ def main():
     with Image.open(new) as sky:
         alpha = sky.convert('RGBA').getchannel('A')
         assert alpha.getextrema()[1] > 240,'Catalog stars missing from packed alpha'
-    for scene in ('earth','mars','moon','jupiter','saturn'):
+    for scene in ('earth','mars','moon','jupiter','saturn','mercury','venus','neptune','uranus','pluto'):
         def capture(name,**options):
             folder = args.output/scene/name;folder.mkdir(parents=True,exist_ok=True)
             command = [sys.executable,str(ROOT/'scripts/test_desktop.py'),'--',str(args.executable.resolve()),

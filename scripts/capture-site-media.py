@@ -14,7 +14,7 @@ import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SCENES = ('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse',
-          'lattice', 'drift', 'contour', 'mercury', 'ripples')
+          'lattice', 'drift', 'contour', 'plastic_metal', 'ripples')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--scenes', nargs='+', choices=SCENES, default=list(SCENES),
                     help='Capture only these Worlds, retaining existing media for the others.')

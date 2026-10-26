@@ -6,7 +6,7 @@ import sys
 import tempfile
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 
-SCENES = ('silk', 'eclipse', 'lattice', 'drift', 'contour', 'mercury', 'ripples')
+SCENES = ('silk', 'eclipse', 'lattice', 'drift', 'contour', 'plastic_metal', 'ripples')
 SCRIPTS = Path(__file__).resolve().parent
 
 def difference(a, b):
