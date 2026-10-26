@@ -56,6 +56,7 @@ The product site shows recordings from the native Direct3D renderer, at their or
 - Offers optional Gentle or Expressive audio reaction using local playback analysis. Audio is not recorded or uploaded.
 - Pauses on battery by default, and for fully covered displays, lock, sleep and remote sessions.
 - Imports personal SDR H.264 MP4 videos and data-only `.world` packages.
+- Saves named whole-desktop presets, with display mapping and portable `.world` export including videos. See [saved presets](docs/PRESETS.md).
 - Provides a themed Windows library, advanced controls and a notification-area menu.
 - Leaves your ordinary Windows wallpaper intact. Choose **Off** to reveal it, or **Exit Worlds** to stop the app.
 

@@ -1,4 +1,5 @@
 #include "common.hlsli"
+cbuffer OutputData:register(b1){float outputHdr,whiteScale,peakRatio,outputReserved;};
 Texture2D<float4> scene:register(t0);Texture2D<float4> bloom:register(t1);
 SamplerState linearClamp:register(s0);
 // Orbit opaque HDR alpha stores normalized near-field blur radius.
@@ -44,6 +45,7 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
   c+=float3(1,.57,.23)*(halo+core+streak)*brightness;
  }
  c=max(c,0);
+ if(outputHdr>.5)c=float3(isfinite(c.r)?min(c.r,65504):0,isfinite(c.g)?min(c.g,65504):0,isfinite(c.b)?min(c.b,65504):0);
  // Blend a shared RGB gain into the shoulder to retain saturated light while
  // allowing the hottest intersections to approach white. Keep the old toe.
  float peak=max(c.r,max(c.g,c.b));
@@ -51,6 +53,12 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  if(pass>.5){
   float3 exposed=max(c,0)*.85;
   mapped=(exposed*(2.51*exposed+.03))/(exposed*(2.43*exposed+.59)+.14);
+ }
+ if(outputHdr>.5){
+  float H=max(peakRatio-1,0),e=max(peak-1,0);
+  float h=H>0?H*(1-exp(-(e*e)/(H*(1+e)))):0;
+  float3 result=(saturate(mapped)+h*c/max(peak,1e-5))*whiteScale;
+  return float4(min(max(result,0),whiteScale*peakRatio),1);
  }
  float3 encoded=pow(saturate(mapped),1/2.2);
  // Static sub-code-value dither prevents banding without temporal grain.

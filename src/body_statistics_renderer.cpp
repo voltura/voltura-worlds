@@ -97,6 +97,6 @@ void Renderer::prepareBodyStatistics(const Assignment& assignment,int palette){
 void Renderer::drawBodyStatistics(const Assignment& assignment){
  if(!assignment.showBodyStatistics||!bodyFacts(assignment.scene)||!bodyStatisticsTexture_)return;
  D3D12_VIEWPORT viewport{bodyStatisticsX_,bodyStatisticsY_,float(bodyStatisticsWidth_),float(bodyStatisticsHeight_),0,1};list_->RSSetViewports(1,&viewport);
- list_->SetGraphicsRootDescriptorTable(3,gpu(417));list_->SetPipelineState(bodyStatisticsPipeline_.Get());list_->DrawInstanced(3,1,0,0);
+ list_->SetGraphicsRootDescriptorTable(3,gpu(417));outputConstants();list_->SetPipelineState(output_.hdr?bodyStatisticsHdr_.Get():bodyStatisticsPipeline_.Get());list_->DrawInstanced(3,1,0,0);
 }
 }

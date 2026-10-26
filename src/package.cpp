@@ -1,4 +1,5 @@
 #include "package.h"
+#include "video_format.h"
 #include "json.hpp"
 #include <fstream>
 #include <map>
@@ -16,7 +17,7 @@ static uint32_t u32(const Bytes& b,size_t i){return uint32_t(u16(b,i))|(uint32_t
 static void put16(Bytes& b,uint16_t v){b.push_back((unsigned char)v);b.push_back((unsigned char)(v>>8));}
 static void put32(Bytes& b,uint32_t v){put16(b,uint16_t(v));put16(b,uint16_t(v>>16));}
 static Bytes read(const std::filesystem::path& f){auto n=std::filesystem::file_size(f);if(n>limit)throw std::runtime_error("World package exceeds 100 MiB");Bytes b((size_t)n);std::ifstream s(f,std::ios::binary);if(!s.read(reinterpret_cast<char*>(b.data()),(std::streamsize)n))throw std::runtime_error("Cannot read World package");return b;}
-static void validatePreview(const Bytes& b){
+void validateWorldPreview(const Bytes& b){
  static const unsigned char magic[]={137,80,78,71,13,10,26,10};
  if(b.size()<33||b.size()>8*1024*1024||memcmp(b.data(),magic,8))throw std::runtime_error("Preview must be a PNG under 8 MiB");
  auto be=[&](size_t i){return (uint32_t(b[i])<<24)|(uint32_t(b[i+1])<<16)|(uint32_t(b[i+2])<<8)|b[i+3];};
@@ -47,7 +48,7 @@ static void validatePreview(const Bytes& b){
 }
 static void validate(const WorldPackage& p){
  if(p.title.empty()||p.title.size()>120||p.description.size()>4000||p.attribution.size()>2000||!valid(p.assignment.params))throw std::runtime_error("Invalid World metadata");
- validatePreview(p.preview);if(p.assignment.scene==Scene::Video){if(p.video.size()<16||memcmp(p.video.data()+4,"ftyp",4))throw std::runtime_error("Video must be an MP4");}else if(!p.video.empty())throw std::runtime_error("Preset cannot contain video");
+ validateWorldPreview(p.preview);if(p.assignment.scene==Scene::Video){if(!legacyAvcMp4(p.video))throw std::runtime_error("World version 1 video must be an H.264 MP4.");}else if(!p.video.empty())throw std::runtime_error("Preset cannot contain video");
  if(int(p.assignment.reaction)<0||int(p.assignment.reaction)>2)throw std::runtime_error("Invalid reaction");
 }
 WorldPackage readPackage(const std::filesystem::path& file){
@@ -73,6 +74,8 @@ WorldPackage readPackage(const std::filesystem::path& file){
  p.preview=std::move(files.at("preview.png"));if(files.contains("video.mp4"))p.video=std::move(files.at("video.mp4"));validate(p);return p;
 }
 void writePackage(const std::filesystem::path& file,const WorldPackage& p){
+ if(p.assignment.scene==Scene::Video&&p.assignment.videoSettings!=VideoSettings{})throw std::runtime_error("Video positioning and speed require World package version 2.");
+ if(p.assignment.scene==Scene::Video&&!legacyAvcMp4(p.video))throw std::runtime_error("World version 1 supports only SDR H.264 MP4 video.");
  validate(p);const auto& a=p.assignment;const auto& v=a.params;nlohmann::json j={{"format","voltura-world"},{"version",1},{"title",p.title},{"description",p.description},{"attribution",p.attribution},{"scene",sceneName(a.scene)},{"reaction",int(a.reaction)},{"fit",a.fit},{"parameters",{{"brightness",v.brightness},{"movement",v.movement},{"detail",v.detail},{"flow",v.flow},{"turbulence",v.turbulence},{"density",v.density},{"strength",v.strength},{"palette",v.palette}}}};
  auto text=j.dump(2);std::map<std::string,Bytes> files{{"manifest.json",Bytes(text.begin(),text.end())},{"preview.png",p.preview}};if(a.scene==Scene::Video)files["video.mp4"]=p.video;
  Bytes b,central;for(auto& [name,data]:files){uint32_t offset=(uint32_t)b.size(),size=(uint32_t)data.size(),checksum=crc(data);

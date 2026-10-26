@@ -30,8 +30,8 @@ inline void chevron(HDC dc,int x,int y,int span,bool up,COLORREF color){
  auto pen=CreatePen(PS_SOLID,1,color);auto old=SelectObject(dc,pen);int direction=up?-1:1;
  MoveToEx(dc,x-span,y-direction*span/2,nullptr);LineTo(dc,x,y+direction*span/2);LineTo(dc,x+span,y-direction*span/2);SelectObject(dc,old);DeleteObject(pen);
 }
-inline void listFrame(HWND hwnd,HDC supplied=nullptr){
- HDC dc=supplied?supplied:GetWindowDC(hwnd);RECT window{};GetWindowRect(hwnd,&window);RECT r{0,0,window.right-window.left,window.bottom-window.top};frame(dc,r,border);
+inline void listFrame(HWND hwnd,HDC supplied=nullptr,bool drawBorder=true){
+ HDC dc=supplied?supplied:GetWindowDC(hwnd);RECT window{};GetWindowRect(hwnd,&window);RECT r{0,0,window.right-window.left,window.bottom-window.top};if(drawBorder)frame(dc,r,border);
  SCROLLBARINFO info{sizeof(info)};
  if(GetScrollBarInfo(hwnd,OBJID_VSCROLL,&info)&&!(info.rgstate[0]&STATE_SYSTEM_INVISIBLE)){
   auto bar=info.rcScrollBar;OffsetRect(&bar,-window.left,-window.top);FillRect(dc,&bar,surfaceBrush);
@@ -46,6 +46,18 @@ inline LRESULT CALLBACK comboList(HWND hwnd,UINT msg,WPARAM w,LPARAM l,UINT_PTR,
  if(msg==WM_NCPAINT||msg==WM_PAINT)listFrame(hwnd);
  if(msg==WM_PRINT&&(l&PRF_NONCLIENT))listFrame(hwnd,reinterpret_cast<HDC>(w));
  if(msg==WM_NCDESTROY)RemoveWindowSubclass(hwnd,comboList,1);return result;
+}
+// Keep native text editing, selection, accessibility and scrolling, but use the
+// same flat surface, border and focus accent as the library's combo fields.
+inline LRESULT CALLBACK fieldChrome(HWND hwnd,UINT msg,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR){
+ auto result=DefSubclassProc(hwnd,msg,w,l);
+ if(msg==WM_NCPAINT||msg==WM_PAINT||(msg==WM_PRINT&&(l&PRF_NONCLIENT))){
+  HDC dc=msg==WM_PRINT?reinterpret_cast<HDC>(w):GetWindowDC(hwnd);listFrame(hwnd,dc);
+  RECT window{};GetWindowRect(hwnd,&window);RECT edge{0,0,window.right-window.left,window.bottom-window.top};frame(dc,edge,GetFocus()==hwnd&&IsWindowEnabled(hwnd)?accent:border);
+  if(msg!=WM_PRINT)ReleaseDC(hwnd,dc);
+ }
+ if(msg==WM_SETFOCUS||msg==WM_KILLFOCUS||msg==WM_ENABLE)RedrawWindow(hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME);
+ if(msg==WM_NCDESTROY)RemoveWindowSubclass(hwnd,fieldChrome,1);return result;
 }
 inline void themeCombo(HWND hwnd){
  // Disable native chrome; keep the native control's input and accessibility.
@@ -83,7 +95,7 @@ inline void refresh(HWND window=nullptr,int darkOverride=-1){
  if(window){BOOL enabled=dark;DwmSetWindowAttribute(window,20,&enabled,sizeof(enabled));EnumChildWindows(window,[](HWND child,LPARAM)->BOOL{wchar_t name[32]{};GetClassNameW(child,name,32);if(!wcscmp(name,L"ComboBox"))themeCombo(child);return TRUE;},0);RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_ERASE);}
 }
 inline void draw(DRAWITEMSTRUCT& d,HFONT font,bool selected=false,UINT dpi=96){
- bool menu=d.CtlType==ODT_MENU,combo=d.CtlType==ODT_COMBOBOX;
+ bool menu=d.CtlType==ODT_MENU,combo=d.CtlType==ODT_COMBOBOX,list=d.CtlType==ODT_LISTBOX;
  bool hot=(d.itemState&ODS_SELECTED)!=0,disabled=(d.itemState&ODS_DISABLED)!=0;
  COLORREF fill=hot?(dark?RGB(47,73,91):RGB(218,237,243)):surface;
  HBRUSH brush=CreateSolidBrush(fill);FillRect(d.hDC,&d.rcItem,brush);DeleteObject(brush);
@@ -103,12 +115,13 @@ inline void draw(DRAWITEMSTRUCT& d,HFONT font,bool selected=false,UINT dpi=96){
  std::wstring text;
  if(menu){auto value=reinterpret_cast<const wchar_t*>(d.itemData);if(value)text=value;}
  else if(combo){if(d.itemID!=UINT(-1)){auto length=SendMessageW(d.hwndItem,CB_GETLBTEXTLEN,d.itemID,0);if(length>=0&&length<32768){text.resize(size_t(length)+1);SendMessageW(d.hwndItem,CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(text.data()));}}}
+ else if(list){if(d.itemID!=UINT(-1)){auto length=SendMessageW(d.hwndItem,LB_GETTEXTLEN,d.itemID,0);if(length>=0&&length<32768){text.resize(size_t(length)+1);SendMessageW(d.hwndItem,LB_GETTEXT,d.itemID,reinterpret_cast<LPARAM>(text.data()));}}}
  else {text.resize(size_t(GetWindowTextLengthW(d.hwndItem))+1);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));}
  RECT r=d.rcItem;r.left+=menu?MulDiv(40,dpi,96):12;r.right-=menu?MulDiv(28,dpi,96):12;
  if(menu&&(d.itemState&ODS_CHECKED)){RECT mark=d.rcItem;mark.left+=MulDiv(10,dpi,96);mark.right=mark.left+MulDiv(18,dpi,96);DrawTextW(d.hDC,L"✓",-1,&mark,DT_VCENTER|DT_SINGLELINE|DT_CENTER);}
- DrawTextW(d.hDC,text.c_str(),-1,&r,DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|(combo||menu?DT_LEFT:DT_CENTER));SelectObject(d.hDC,old);
+ DrawTextW(d.hDC,text.c_str(),-1,&r,DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|(combo||menu||list?DT_LEFT:DT_CENTER));SelectObject(d.hDC,old);
  if(popupFont)DeleteObject(popupFont);
- if(!menu&&!combo){
+ if(!menu&&!combo&&!list){
   // Use the control's edge for focus, keeping the label free of inner outlines.
   bool focused=!disabled&&(d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT);
   int width=std::max(1,MulDiv(selected||focused?2:1,dpi,96)),inset=width/2;

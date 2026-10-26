@@ -21,9 +21,13 @@ Settings loadSettings(const std::filesystem::path& dir) {
  s.quality=Quality(q);s.fps=fps;s.pauseBattery=j.at("pauseBattery");s.audioDevice=wide(j.value("audioDevice",std::string{}));
  if(j.at("displays").size()>32)throw std::runtime_error("Too many monitor assignments");
  for(auto& item:j.at("displays")){
-  Assignment a;a.scene=parseScene(item.at("scene"));int r=item.at("reaction");if(r<0||r>2)throw std::runtime_error("Invalid audio reaction");a.reaction=Reaction(r);
+  Assignment a;a.performance={s.quality,s.fps==30?FrameLimit::Fps30:FrameLimit::Fps60};
+  if(item.contains("performance")){auto perf=item.at("performance");int quality=perf.at("quality"),limit=perf.at("frameLimit");if(quality<0||quality>2||limit<0||limit>2)throw std::runtime_error("Invalid display performance");a.performance={Quality(quality),FrameLimit(limit)};}
+  auto output=item.value("output",std::string("auto"));if(output!="auto"&&output!="sdr")throw std::runtime_error("Invalid display output");a.output=output=="sdr"?OutputPreference::Sdr:OutputPreference::Auto;
+  a.scene=parseScene(item.at("scene"));int r=item.at("reaction");if(r<0||r>2)throw std::runtime_error("Invalid audio reaction");a.reaction=Reaction(r);
   auto p=item.at("parameters");a.params={p.at("brightness"),p.at("movement"),p.at("detail"),p.at("flow"),p.at("turbulence"),p.at("density"),p.at("strength"),p.at("palette")};
   if(!valid(a.params))throw std::runtime_error("Invalid scene parameters");a.video=wide(item.value("video",std::string{}));a.fit=item.value("fit",false);
+  if(item.contains("videoSettings")){const auto& v=item.at("videoSettings");if(!v.is_object())throw std::runtime_error("Invalid video settings");a.videoSettings={v.value("positionX",.5),v.value("positionY",.5),v.value("speed",1.)};if(!validVideoSettings(a.videoSettings))throw std::runtime_error("Invalid video settings");a.videoSettings.speed=canonicalVideoSpeed(a.videoSettings.speed);}
   a.showBodyStatistics=item.value("showBodyStatistics",false);
   auto pool=item.value("randomPool",std::string("all"));if(pool!="all"&&pool!="solarSystem")throw std::runtime_error("Invalid random pool");a.randomPool=pool=="solarSystem"?RandomPool::SolarSystem:RandomPool::All;
   a.random=item.value("random",false);a.randomInterval=item.value("randomInterval",300);
@@ -33,8 +37,8 @@ Settings loadSettings(const std::filesystem::path& dir) {
 }
 void saveSettings(const std::filesystem::path& dir,const Settings& s){
  nlohmann::json j={{"version",1},{"quality",int(s.quality)},{"fps",s.fps},{"pauseBattery",s.pauseBattery},{"audioDevice",utf8(s.audioDevice)},{"displays",nlohmann::json::array()}};
- for(auto& [id,a]:s.displays){if(!valid(a.params)||!validRandomInterval(a.randomInterval)||(a.randomPool!=RandomPool::All&&a.randomPool!=RandomPool::SolarSystem))throw std::runtime_error("Invalid parameters");auto& p=a.params;
-  j["displays"].push_back({{"id",utf8(id)},{"scene",sceneName(a.scene)},{"reaction",int(a.reaction)},{"video",utf8(a.video)},{"fit",a.fit},{"parameters",{{"brightness",p.brightness},{"movement",p.movement},{"detail",p.detail},{"flow",p.flow},{"turbulence",p.turbulence},{"density",p.density},{"strength",p.strength},{"palette",p.palette}}}});
+ for(auto& [id,a]:s.displays){if(a.output!=OutputPreference::Auto&&a.output!=OutputPreference::Sdr)throw std::runtime_error("Invalid display output");if(int(a.performance.quality)<0||int(a.performance.quality)>2||int(a.performance.frameLimit)<0||int(a.performance.frameLimit)>2)throw std::runtime_error("Invalid display performance");if(!validVideoSettings(a.videoSettings)||!valid(a.params)||!validRandomInterval(a.randomInterval)||(a.randomPool!=RandomPool::All&&a.randomPool!=RandomPool::SolarSystem))throw std::runtime_error("Invalid parameters");auto& p=a.params;
+  j["displays"].push_back({{"id",utf8(id)},{"output",a.output==OutputPreference::Sdr?"sdr":"auto"},{"performance",{{"quality",int(a.performance.quality)},{"frameLimit",int(a.performance.frameLimit)}}},{"scene",sceneName(a.scene)},{"reaction",int(a.reaction)},{"video",utf8(a.video)},{"fit",a.fit},{"videoSettings",{{"positionX",a.videoSettings.positionX},{"positionY",a.videoSettings.positionY},{"speed",a.videoSettings.speed}}},{"parameters",{{"brightness",p.brightness},{"movement",p.movement},{"detail",p.detail},{"flow",p.flow},{"turbulence",p.turbulence},{"density",p.density},{"strength",p.strength},{"palette",p.palette}}}});
  }
  for(size_t i=0;i<s.displays.size();i++){j["displays"][i]["showBodyStatistics"]=s.displays[i].second.showBodyStatistics;j["displays"][i]["randomPool"]=s.displays[i].second.randomPool==RandomPool::SolarSystem?"solarSystem":"all";j["displays"][i]["random"]=s.displays[i].second.random;j["displays"][i]["randomInterval"]=s.displays[i].second.randomInterval;}
  std::filesystem::create_directories(dir);auto pending=dir/L"settings.pending",dest=dir/L"settings.json";

@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include "video_settings.h"
 #include <array>
 #include <string>
 #include <filesystem>
@@ -9,7 +10,14 @@
 #include <chrono>
 namespace worlds {
 enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, PlasticMetal, Ripples, Mars, Earth, Moon, Jupiter, Saturn, Mercury, Venus, Uranus, Neptune, Pluto, Sun };
+enum class OutputPreference { Auto, Sdr };
 enum class Quality { Eco, Auto, High };
+enum class FrameLimit { Auto, Fps30, Fps60 };
+struct DisplayPerformance {
+    Quality quality=Quality::Auto;
+    FrameLimit frameLimit=FrameLimit::Auto;
+    bool operator==(const DisplayPerformance&)const=default;
+};
 enum class Reaction { Off, Gentle, Expressive };
 enum class RandomPool { All, SolarSystem };
 struct Parameters {
@@ -17,11 +25,14 @@ struct Parameters {
     int palette=0;
 };
 struct Assignment {
+    DisplayPerformance performance;
+    OutputPreference output=OutputPreference::Auto;
     Scene scene=Scene::Aurora;
     Parameters params;
     Reaction reaction=Reaction::Off;
     std::wstring video;
     bool fit=false;
+    VideoSettings videoSettings;
     bool random=false;
     int randomInterval=300;
     RandomPool randomPool=RandomPool::All;
@@ -34,7 +45,7 @@ struct Settings {
     std::wstring audioDevice;
     std::vector<std::pair<std::wstring,Assignment>> displays;
 };
-struct Monitor { HMONITOR handle{}; RECT rect{}; std::wstring id,name; };
+struct Monitor { HMONITOR handle{}; RECT rect{}; std::wstring id,name; double refreshHz=60; LUID adapter{}; };
 struct AudioFeatures { float bass=0,mid=0,treble=0,energy=0,transient=0; };
 struct PauseState { bool manual=false,locked=false,asleep=false,suspended=false,remote=false,battery=false,covered=false; };
 bool shouldPause(const PauseState&,bool pauseBattery);

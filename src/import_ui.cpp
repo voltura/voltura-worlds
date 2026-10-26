@@ -14,7 +14,7 @@ UINT_PTR nextImportIdentity=0;
 struct Import {
  UINT_PTR identity=++nextImportIdentity;
  HWND window{},image{},title{},description{},status{},button{},cancel{};HFONT font{};HBITMAP bitmap{},displayBitmap{};
- std::filesystem::path file,library,temporaryVideo;std::wstring destination,error;bool personalVideo=false;
+ std::filesystem::path file,library,temporaryVideo;std::wstring destination,error;bool personalVideo=false;LUID adapter{};
  std::function<void(const Assignment&)> apply;
  WorldPackage package;Assignment installed;std::jthread worker;bool installing=false;
  ~Import(){worker.request_stop();if(worker.joinable())worker.join();if(!temporaryVideo.empty()){std::error_code cleanupError;std::filesystem::remove(temporaryVideo,cleanupError);}if(displayBitmap&&displayBitmap!=bitmap)DeleteObject(displayBitmap);if(bitmap)DeleteObject(bitmap);if(font)DeleteObject(font);}
@@ -66,18 +66,18 @@ void work(Import& state){
   try{
    if(FAILED(initialized))throw std::runtime_error("Cannot initialize import worker");
    if(state.installing){
-    if(state.personalVideo){state.installed=state.package.assignment;state.installed.video=copyVideoToLibrary(state.library,state.file,stop).wstring();}
+    if(state.personalVideo){state.installed=state.package.assignment;state.installed.video=copyVideoToLibrary(state.library,state.file,stop,state.adapter).wstring();}
     else state.installed=installPackage(state.library,state.package);
    }else{
     if(state.personalVideo){
-     state.package.preview=videoPreview(state.file);state.package.title=utf8(state.file.stem().wstring());if(state.package.title.size()>120)state.package.title="Personal video";
+     state.package.preview=videoPreview(state.file,stop,state.adapter);state.package.title=utf8(state.file.stem().wstring());if(state.package.title.size()>120)state.package.title="Personal video";
      state.package.description="Personal video. Muted, looping, and copied into your offline library.";state.package.assignment.scene=Scene::Video;
     }else{
      state.package=readPackage(state.file);
      if(state.package.assignment.scene==Scene::Video){
       GUID id{};checked(CoCreateGuid(&id));wchar_t name[40]{};StringFromGUID2(id,name,40);auto file=std::filesystem::temp_directory_path()/(L"Voltura-preview-"+std::wstring(name)+L".mp4");
       HANDLE output=CreateFileW(file.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_TEMPORARY,nullptr);if(output==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot validate video preview");state.temporaryVideo=file;
-      DWORD written{};BOOL saved=WriteFile(output,state.package.video.data(),DWORD(state.package.video.size()),&written,nullptr);CloseHandle(output);if(!saved||written!=state.package.video.size())throw std::runtime_error("Cannot stage video validation");inspectVideo(file);
+      DWORD written{};BOOL saved=WriteFile(output,state.package.video.data(),DWORD(state.package.video.size()),&written,nullptr);CloseHandle(output);if(!saved||written!=state.package.video.size())throw std::runtime_error("Cannot stage video validation");preflightVideo(file,stop,state.adapter);
      }
     }
     if(state.package.assignment.scene==Scene::Video)state.package.assignment.reaction=Reaction::Off;
@@ -128,11 +128,11 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
 }
 }
 void showWorldImport(HWND owner,const std::filesystem::path& file,const std::filesystem::path& library,
- const std::wstring& destination,std::function<void(const Assignment&)> apply,bool personalVideo){
+ const std::wstring& destination,std::function<void(const Assignment&)> apply,bool personalVideo,LUID adapter){
  if(IsWindow(activeImport)){SetForegroundWindow(activeImport);throw std::runtime_error("Finish or cancel the current import first.");}
  WNDCLASSW cls{};cls.lpfnWndProc=procedure;cls.hInstance=GetModuleHandleW(nullptr);cls.lpszClassName=L"VolturaWorldImport";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);RegisterClassW(&cls);
- auto state=std::make_unique<Import>();state->file=file;state->library=library;state->destination=destination;state->apply=std::move(apply);state->personalVideo=personalVideo;
- HWND hwnd=CreateWindowExW(WS_EX_DLGMODALFRAME,cls.lpszClassName,L"Import World",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,600,650,owner,nullptr,cls.hInstance,state.get());
+ auto state=std::make_unique<Import>();state->file=file;state->library=library;state->destination=destination;state->apply=std::move(apply);state->personalVideo=personalVideo;state->adapter=adapter;
+ HWND hwnd=CreateWindowExW(WS_EX_DLGMODALFRAME,cls.lpszClassName,personalVideo?L"Import video":L"Import preset",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU,CW_USEDEFAULT,CW_USEDEFAULT,600,650,owner,nullptr,cls.hInstance,state.get());
  if(!hwnd)throw std::runtime_error("Cannot open import preview");
  auto data=state.release();data->window=hwnd;activeImport=hwnd;SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(data));data->font=CreateFontW(-16,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
  auto control=[&](const wchar_t* type,const wchar_t* text,DWORD style,int x,int y,int width,int height,int id){if(!wcscmp(type,L"BUTTON"))style=(style&~DWORD(BS_TYPEMASK))|BS_OWNERDRAW;auto result=CreateWindowExW(0,type,text,WS_CHILD|WS_VISIBLE|style,x,y,width,height,hwnd,(HMENU)(INT_PTR)id,cls.hInstance,nullptr);SendMessageW(result,WM_SETFONT,(WPARAM)data->font,TRUE);return result;};

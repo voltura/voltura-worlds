@@ -26,7 +26,7 @@ static uint64_t pixels(ID3D12Device* device,ID3D12CommandQueue* queue,VideoPlaye
 }
 int wmain(int argc,wchar_t** argv){try{
  require(argc==3,"Provide H.264 and unsupported-codec MP4 fixtures");checked(CoInitializeEx(nullptr,COINIT_MULTITHREADED));
- auto info=inspectVideo(argv[1]);require(info.width==320&&info.height==180,"Video dimensions incorrect");bool rejected=false;try{inspectVideo(argv[2]);}catch(...){rejected=true;}require(rejected,"Unsupported codec accepted");
+ auto info=inspectVideo(argv[1]);require(info.width==320&&info.height==180,"Video dimensions incorrect");auto additional=inspectVideo(argv[2]);require(additional.width==320,"Additional native MP4 codec metadata failed");
  std::stop_source cancelled;cancelled.request_stop();bool copyCancelled=false;
  auto cancelledLibrary=std::filesystem::temp_directory_path()/(L"Voltura-cancelled-video-"+std::to_wstring(GetCurrentProcessId()));
  try{copyVideoToLibrary(cancelledLibrary,argv[1],cancelled.get_token());}catch(...){copyCancelled=true;}
@@ -48,5 +48,5 @@ int wmain(int argc,wchar_t** argv){try{
  }
  require(frames>=90&&hashes.size()>=5,"Video did not produce varied GPU frames");require(looped&&paused,"Loop or pause/resume did not complete");
  ComPtr<ID3D12InfoQueue> messages;if(SUCCEEDED(device.As(&messages)))for(UINT64 i=0;i<messages->GetNumStoredMessagesAllowedByRetrievalFilter();i++){SIZE_T bytes{};messages->GetMessage(i,nullptr,&bytes);std::vector<char> storage(bytes);auto message=reinterpret_cast<D3D12_MESSAGE*>(storage.data());messages->GetMessage(i,message,&bytes);if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)throw std::runtime_error(message->pDescription);}
- std::cout<<"PASS: H.264 validation, unsupported-codec rejection, "<<frames<<" GPU frames, "<<hashes.size()<<" distinct readbacks, loop boundary and pause/resume. D3D12 shared-resource checks; hardware decoder selection not measured.\n";CoUninitialize();return 0;
+ std::cout<<"PASS: H.264 validation, additional codec inspection, "<<frames<<" GPU frames, "<<hashes.size()<<" distinct readbacks, loop boundary and pause/resume. D3D12 shared-resource checks; hardware decoder selection not measured.\n";CoUninitialize();return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

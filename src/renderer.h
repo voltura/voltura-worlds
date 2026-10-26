@@ -1,5 +1,7 @@
 #pragma once
 #include "model.h"
+#include "output.h"
+#include "gpu_context.h"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -18,9 +20,22 @@ struct FrameData {
  float spare[12]{};
 };
 class Renderer {
+ friend struct HdrTestHarness;
 public:
- Renderer(HWND,unsigned,unsigned,const std::filesystem::path&,bool debug=false,bool forceSingleSample=false);
+ Renderer(HWND,unsigned,unsigned,const std::filesystem::path&,bool debug=false,bool forceSingleSample=false,std::shared_ptr<GpuContext> context={});
  ~Renderer();
+ bool configureOutput(const OutputConfig&,bool retry=false);
+ const OutputConfig& output()const{return output_;}
+ ID3D12PipelineState* outputPipelineIdentity()const{return output_.hdr?postHdr_.Get():post_.Get();}
+ void setNonblocking(bool enabled){nonblocking_=enabled;}
+ bool ready();
+ bool deviceRemoved()const{return context_->removed();}
+ std::shared_ptr<GpuContext> context()const{return context_;}
+ uint64_t mutableAllocations()const{return allocations()-assetBytes_;}
+ ID3D12Resource* textureIdentity(unsigned slot)const;
+ ID3D12Resource* simulationIdentity()const{return velocity_[0].resource.Get();}
+ ID3D12Resource* targetIdentity()const{return hdr_.Get();}
+ ID3D12PipelineState* pipelineIdentity()const{return earth_.Get();}
  void render(const Assignment&,FrameData,bool present=true);
  void resize(unsigned,unsigned);
  void setOverlayInsets(std::array<unsigned,4> insets){overlayInsets_=insets;}
@@ -31,13 +46,17 @@ public:
  void setPressureMultigrid(bool enabled){if(velocity_[0].resource||(enabled&&(grid_>128||(grid_&(grid_-1)))))throw std::runtime_error("Multigrid capture requires power-of-two grid32 to128 before initialization");pressureMultigrid_=enabled;}
  void setSmokeFilaments(bool enabled){smokeFilamentsEnabled_=enabled;}
  double videoPosition()const;
+ bool hasVideoFrame()const{return videoView_!=nullptr;}
+ bool videoRateKnown()const{return videoRateKnown_;}
+ double videoPlaybackRate()const{return acceptedVideoRate_;}
+ const std::wstring& videoRateMessage()const{return videoRateMessage_;}
  void validateDebugMessages();
  std::wstring adapterName()const{return adapterName_;}
  double gpuMs()const{return gpuMs_;}
  void setStageProfiling(bool enabled){stageProfiling_=enabled;}
  const std::array<double,14>& gpuStageMs()const{return gpuStageMs_;}
  uint64_t textureAllocations()const{return assetBytes_;}
- uint64_t allocations()const{return bodyStatisticsBytes_+uint64_t(width_)*height_*16+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
+ uint64_t allocations()const{return bodyStatisticsBytes_+uint64_t(width_)*height_*(output_.hdr?24:16)+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
  unsigned gridSize()const{return grid_;}
  unsigned densityGridSize()const{return referenceDensityGrid_?referenceDensityGrid_:(grid_>96?192:grid_*2);}
  std::array<unsigned,3> densityDimensions()const{return wideDensity_?std::array<unsigned,3>{grid_*6,((grid_*27/8+3)/4)*4,grid_}:std::array<unsigned,3>{densityGridSize(),densityGridSize(),densityGridSize()};}
@@ -117,6 +136,17 @@ private:
  void buildDetailField(FrameData&);
  void advectCoordinates(FrameData&,bool);
  struct Frame {ComPtr<ID3D12CommandAllocator> allocator;uint64_t fence=0;};
+ std::shared_ptr<GpuContext> context_;
+ std::map<ID3D12Resource*,std::shared_ptr<SharedTexture>> textureLeases_;
+ std::map<unsigned,ID3D12Resource*> assetSlots_;
+ bool cachedTexture(const std::wstring&,ComPtr<ID3D12Resource>&,unsigned);
+ void retainTexture(const std::wstring&,const ComPtr<ID3D12Resource>&,unsigned);
+ void releaseAsset(ComPtr<ID3D12Resource>&);
+ OutputConfig output_{},requestedOutput_{};bool outputConfigured_=false;
+ ComPtr<ID3D12PipelineState> postHdr_,bodyStatisticsHdr_;
+ void outputConstants();
+ bool nonblocking_=false,pendingPresent_=false;HANDLE latency_=nullptr;
+ bool tryPresent();
  HWND window_{};unsigned width_=0,height_=0,frameIndex_=0,rtvStride_=0,descriptorStride_=0,grid_=48;
  std::wstring adapterName_;
  ComPtr<IDXGIFactory6> factory_;ComPtr<ID3D12Device> device_;ComPtr<ID3D12CommandQueue> queue_;
@@ -145,6 +175,7 @@ private:
  std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;bool starForeground_=false;
  ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
  std::array<ComPtr<ID3D12PipelineState>,7> proceduralWorlds_;
+ bool videoRateKnown_=false;double requestedVideoRate_=-1,acceptedVideoRate_=1;std::wstring videoRateMessage_;
  std::unique_ptr<VideoPlayer> video_;std::filesystem::path videoPath_;ID3D12Resource* videoView_{};uint64_t videoBytes_{};
  void renderVideo(const Assignment&,FrameData,bool);
  std::array<Volume,2> velocity_,density_,pressure_;Volume divergence_,curl_;

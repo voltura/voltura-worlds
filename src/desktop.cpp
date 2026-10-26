@@ -7,7 +7,22 @@ std::vector<Monitor> enumerateMonitors(){
   MONITORINFOEXW info{};info.cbSize=sizeof(info);if(!GetMonitorInfoW(h,&info))return TRUE;
   DISPLAY_DEVICEW device{};device.cb=sizeof(device);std::wstring id=info.szDevice,name=info.szDevice;
   if(EnumDisplayDevicesW(info.szDevice,0,&device,EDD_GET_DEVICE_INTERFACE_NAME)){if(device.DeviceID[0])id=device.DeviceID;name=device.DeviceString;}
-  reinterpret_cast<std::vector<Monitor>*>(p)->push_back({h,info.rcMonitor,id,name});return TRUE;
+  Monitor monitor{h,info.rcMonitor,id,name};
+  UINT paths=0,modes=0;
+  if(GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,&paths,&modes)==ERROR_SUCCESS){
+   std::vector<DISPLAYCONFIG_PATH_INFO> path(paths);std::vector<DISPLAYCONFIG_MODE_INFO> mode(modes);
+   if(QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS,&paths,path.data(),&modes,mode.data(),nullptr)==ERROR_SUCCESS){
+    for(UINT i=0;i<paths;i++){
+     DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};source.header={DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,sizeof(source),path[i].sourceInfo.adapterId,path[i].sourceInfo.id};
+     if(DisplayConfigGetDeviceInfo(&source.header)==ERROR_SUCCESS&&!wcscmp(source.viewGdiDeviceName,info.szDevice)){
+      monitor.adapter=path[i].sourceInfo.adapterId;auto rate=path[i].targetInfo.refreshRate;
+      if(rate.Numerator&&rate.Denominator)monitor.refreshHz=double(rate.Numerator)/rate.Denominator;
+      break;
+     }
+    }
+   }
+  }
+  reinterpret_cast<std::vector<Monitor>*>(p)->push_back(monitor);return TRUE;
  },reinterpret_cast<LPARAM>(&monitors));return monitors;
 }
 HWND findWallpaperParent(){
