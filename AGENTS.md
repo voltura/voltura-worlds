@@ -24,6 +24,10 @@ Do not treat appearance or interaction as settled before the user has assessed i
 
 ## Release efficiently
 
+Never use computer use or desktop/UI automation for a release. Use scripts,
+command-line tools, process APIs, code review and compiler feedback. Leave visual
+assessment to the user; do not make automated UI interaction a release gate.
+
 Value the user's time. Review the changed code, use the smallest useful verification in the actual app, and stop when the evidence is sufficient. Do not turn visual verification into an exhaustive repeated checklist.
 
 Follow [the release checklist](docs/RELEASING.md). Build once and package once with `-SkipBuild`. Sign the app and installer. GitHub provides each uploaded asset's SHA-256 digest, which the updater validates automatically; do not create `SHA256SUMS.txt` or add separate download/hash comparison steps to the release procedure.

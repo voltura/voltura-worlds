@@ -4,7 +4,7 @@ Development uses code review, compiler feedback, the running app and the user's 
 
 ## 1. Review and visually confirm the change
 
-Compare the intended release against the previous published release, including pending changes. Review affected code and dependencies. Build the app and exercise the changed behavior through its normal UI entry point. Present visual/interaction changes early, incorporate the user's feedback and allow directional changes before polishing or packaging.
+Compare the intended release against the previous published release, including pending changes. Review affected code and dependencies and build the app. Never use computer use or desktop/UI automation for a release. Use scripts, command-line tools and process APIs for release operations. Visual assessment belongs to the user and is not an automated release gate; incorporate any feedback before publication.
 
 Use the smallest useful verification and stop when there is sufficient evidence. Do not add regression suites, test fixtures, screenshot assertion matrices or repeated exhaustive app walkthroughs. Existing visual acceptance remains useful when relevant behavior has not changed.
 

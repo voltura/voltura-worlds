@@ -152,7 +152,7 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM w,LPARAM l){
   }
   else{
    s->presets=std::move(s->refreshed);SendMessageW(s->list,LB_RESETCONTENT,0,0);
-   try{for(auto& p:s->presets){auto label=wide(p.preset.title)+(p.error.empty()?L" — "+std::to_wstring(p.preset.displays.size())+L" display(s)":L" — Unavailable");if(SendMessageW(s->list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()))<0)throw std::runtime_error("Cannot populate preset list.");}}
+   try{for(auto& p:s->presets){auto count=p.preset.displays.size();auto label=wide(p.preset.title)+(p.error.empty()?L" — "+std::to_wstring(count)+(count==1?L" display":L" displays"):L" — Unavailable");if(SendMessageW(s->list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()))<0)throw std::runtime_error("Cannot populate preset list.");}}
    catch(const std::exception& e){s->presets.clear();SendMessageW(s->list,LB_RESETCONTENT,0,0);auto statusText=s->notification;if(!statusText.empty())statusText+=L" ";statusText+=describeError(e)+L" Close and reopen Presets to reload the list.";SetWindowTextW(s->status,statusText.c_str());buttons(*s);return 0;}
    SetWindowTextW(s->status,s->notification.empty()?L"Ready. Save current captures connected displays and global audio/battery preferences.":s->notification.c_str());
   }buttons(*s);return 0;

@@ -13,6 +13,7 @@ video imports, audio, display recovery and the installer.
   graphics and tray recovery.
 - Improve DPI handling, scrolling, metadata editing and consistent outer spacing
   in the library and Presets windows. Show Audio off for video and Off.
+- Use “1 display” and “n displays” for saved preset display counts.
 - Recognize more valid QuickTime files, improve video metadata handling and bound
   thumbnails for extreme aspect ratios.
 - Preserve other applications' file associations during uninstall and prevent
