@@ -23,11 +23,14 @@
 using namespace worlds;
 namespace {
 constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3,renderStatusMessage=WM_APP+4;
-constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133,randomIntervalId=134;
+constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133,randomIntervalId=134,bodyStatisticsId=135;
 struct Visualization { Scene scene; const wchar_t* name; };
-constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Mars,L"Mars"},{Scene::Earth,L"Earth"},{Scene::Moon,L"Moon"},{Scene::Jupiter,L"Jupiter"},{Scene::Saturn,L"Saturn"},{Scene::Mercury,L"Mercury"},{Scene::Venus,L"Venus"},{Scene::Neptune,L"Neptune"},{Scene::Uranus,L"Uranus"},{Scene::Pluto,L"Pluto"},{Scene::Sun,L"Sun"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::PlasticMetal,L"Plastic metal"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
+constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Mars,L"Mars"},{Scene::Earth,L"Earth"},{Scene::Moon,L"Moon"},{Scene::Jupiter,L"Jupiter"},{Scene::Saturn,L"Saturn"},{Scene::Mercury,L"Mercury"},{Scene::Venus,L"Venus"},{Scene::Neptune,L"Neptune"},{Scene::Uranus,L"Uranus"},{Scene::Pluto,L"Pluto"},{Scene::Sun,L"Sun"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::PlasticMetal,L"Plastic metal"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Random Solar System"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
 constexpr int visualizationMenuBase=1000;
-constexpr int randomChoice=int(std::size(visualizations))-3;
+constexpr int randomChoice=int(std::size(visualizations))-4;
+constexpr int solarRandomChoice=randomChoice+1;
+bool isRandomChoice(int choice){return choice==randomChoice||choice==solarRandomChoice;}
+int randomChoiceFor(const Assignment& a){return a.randomPool==RandomPool::SolarSystem?solarRandomChoice:randomChoice;}
 struct Surface {HWND hwnd{};Monitor monitor;bool covered=false;RandomCycle randomCycle;};
 HWND controller{},library{},statusLabel{};HINSTANCE instance{};HFONT font{},headingFont{};
 HICON trayIcon{};
@@ -171,17 +174,19 @@ void syncControls(){
  int dev=0;for(size_t i=0;i<audioDevices.size();i++)if(audioDevices[i].first==settings.audioDevice)dev=int(i)+1;setComboSelection(deviceId,dev);
  setComboSelection(videoFitId,a.fit?1:0);EnableWindow(GetDlgItem(library,videoFitId),a.scene==Scene::Video);
  EnableWindow(GetDlgItem(library,reactionId),a.scene!=Scene::Video&&a.scene!=Scene::Off);EnableWindow(GetDlgItem(library,paletteId),a.scene!=Scene::Video&&a.scene!=Scene::Off);for(int id=200;id<207;id++)EnableWindow(GetDlgItem(library,id),a.scene!=Scene::Video&&a.scene!=Scene::Off);
- auto scene=wide(sceneName(a.scene));if(a.random)scene=L"Random · "+scene;std::wstring text=previewMode?L"Preview mode · ":L"Desktop · ";text+=scene;text+=L"   |   Audio ";text+=a.reaction==Reaction::Off?L"off":a.reaction==Reaction::Gentle?L"gentle":L"expressive";if(pauseState.manual)text+=L"   |   Paused";if(!lastError.empty())text+=L"   |   "+lastError;
+ auto scene=wide(sceneName(a.scene));if(a.random)scene=(a.randomPool==RandomPool::SolarSystem?L"Random Solar System \u00b7 ":L"Random \u00b7 ")+scene;std::wstring text=previewMode?L"Preview mode · ":L"Desktop · ";text+=scene;text+=L"   |   Audio ";text+=a.reaction==Reaction::Off?L"off":a.reaction==Reaction::Gentle?L"gentle":L"expressive";if(pauseState.manual)text+=L"   |   Paused";if(!lastError.empty())text+=L"   |   "+lastError;
  setControlText(statusLabel,text);
  int videoChoice=int(std::size(visualizations))-1;
  auto count=SendDlgItemMessageW(library,visualizationId,CB_GETCOUNT,0,0);
  if(!a.video.empty()&&count==videoChoice)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(visualizations[videoChoice].name));
  else if(a.video.empty()&&count>videoChoice)SendDlgItemMessageW(library,visualizationId,CB_DELETESTRING,videoChoice,0);
- int choice=-1;for(size_t i=0;i<std::size(visualizations);i++)if(int(i)!=randomChoice&&visualizations[i].scene==a.scene)choice=int(i);
- if(a.random)choice=randomChoice;
+ int choice=-1;for(size_t i=0;i<std::size(visualizations);i++)if(!isRandomChoice(int(i))&&visualizations[i].scene==a.scene)choice=int(i);
+ if(a.random)choice=randomChoiceFor(a);
  auto interval=std::find(randomIntervals.begin(),randomIntervals.end(),a.randomInterval);
  setComboSelection(randomIntervalId,int(interval-randomIntervals.begin()));EnableWindow(GetDlgItem(library,randomIntervalId),a.random);
  setComboSelection(visualizationId,choice);
+ SendDlgItemMessageW(library,bodyStatisticsId,BM_SETCHECK,a.showBodyStatistics?BST_CHECKED:BST_UNCHECKED,0);
+ EnableWindow(GetDlgItem(library,bodyStatisticsId),a.random||bodyFacts(a.scene)!=nullptr);
 } 
 // Both entry points share the catalog and keep imported video available to return to.
 bool selectVisualization(int choice){
@@ -189,7 +194,8 @@ bool selectVisualization(int choice){
   if(surfaces.empty()||choice<0||choice>=int(std::size(visualizations)))return false;
   auto& a=selected();auto scene=visualizations[choice].scene;
   if(scene==Scene::Video&&a.video.empty())return false;
-  a.random=choice==randomChoice;
+  a.random=isRandomChoice(choice);
+  if(a.random)a.randomPool=choice==solarRandomChoice?RandomPool::SolarSystem:RandomPool::All;
   if(!a.random)a.scene=scene;
   auto& cycle=selectedSurface().randomCycle;cycle.reset();if(a.random)cycle.advance(a,0,true);
   requestSave();
@@ -203,7 +209,7 @@ HMENU visualizationMenu(){
   auto scene=visualizations[i].scene;
   if(available&&scene==Scene::Video&&selected().video.empty())continue;
   UINT flags=MF_OWNERDRAW|(available?0:MF_GRAYED);
-  if(available&&(selected().random?int(i)==randomChoice:(int(i)!=randomChoice&&selected().scene==scene)))flags|=MF_CHECKED;
+  if(available&&(selected().random?int(i)==randomChoiceFor(selected()):(!isRandomChoice(int(i))&&selected().scene==scene)))flags|=MF_CHECKED;
   AppendMenuW(menu,flags,visualizationMenuBase+i,visualizations[i].name);
  }
  MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);return menu;
@@ -221,6 +227,22 @@ void advanceRandomVisualizations(uint64_t elapsed){
  }
  if(changed)syncControls();
 }
+// Respect each monitor's work area, including a taskbar that is auto-hidden.
+std::array<unsigned,4> desktopOverlayInsets(HMONITOR monitor){
+ MONITORINFO info{sizeof(info)};if(!GetMonitorInfoW(monitor,&info))return {};
+ std::array<unsigned,4> insets{unsigned(std::max(0L,info.rcWork.left-info.rcMonitor.left)),unsigned(std::max(0L,info.rcWork.top-info.rcMonitor.top)),unsigned(std::max(0L,info.rcMonitor.right-info.rcWork.right)),unsigned(std::max(0L,info.rcMonitor.bottom-info.rcWork.bottom))};
+ const UINT edges[]={ABE_LEFT,ABE_TOP,ABE_RIGHT,ABE_BOTTOM};
+ for(unsigned i=0;i<4;i++){
+  APPBARDATA bar{sizeof(bar)};bar.uEdge=edges[i];bar.rc=info.rcMonitor;
+  auto taskbar=reinterpret_cast<HWND>(SHAppBarMessage(ABM_GETAUTOHIDEBAREX,&bar));RECT bounds{};
+  if(taskbar&&GetWindowRect(taskbar,&bounds)){
+   unsigned thickness=unsigned(std::max(0L,(i==0||i==2)?bounds.right-bounds.left:bounds.bottom-bounds.top));
+   if(thickness<=3)thickness=MulDiv(48,GetDpiForWindow(taskbar),96);
+   insets[i]=std::max(insets[i],thickness);
+  }
+ }
+ return insets;
+}
 void startRendering(){
  renderingProblem=false;auto generation=++renderGeneration;
  renderThread=std::jthread([generation](std::stop_token stop){CoInitializeEx(nullptr,COINIT_MULTITHREADED);try{
@@ -228,6 +250,7 @@ void startRendering(){
   // Start Moon on its near side and Jupiter on its Great Red Spot, regardless
   // of how long a preceding World ran on this display.
   std::vector<float> tourClocks(surfaces.size(),0);std::vector<Scene> tourScenes(surfaces.size(),Scene::Off);
+  std::vector<std::array<unsigned,4>> desktopInsets(surfaces.size());std::vector<ULONGLONG> insetCheckAt(surfaces.size(),0);
   std::vector<ULONGLONG> retryAt(surfaces.size(),0);std::vector<Scene> failedScene(surfaces.size());std::vector<std::wstring> failedVideo(surfaces.size());bool reportedFailure=false;
   auto previous=std::chrono::steady_clock::now();
   while(!stop.stop_requested()){
@@ -245,7 +268,7 @@ void startRendering(){
     if(paused[i]){if(renderers[i])renderers[i]->setPaused(true);continue;}
     RECT rect{};GetClientRect(surfaces[i].hwnd,&rect);
     if(!renderers[i])renderers[i]=std::make_unique<Renderer>(surfaces[i].hwnd,std::max(1L,rect.right),std::max(1L,rect.bottom),exeDir/L"shaders");
-    auto& r=*renderers[i];r.setPaused(a.scene!=Scene::Video);r.resize(std::max(1L,rect.right),std::max(1L,rect.bottom));
+    auto& r=*renderers[i];if(!previewMode&&GetTickCount64()>=insetCheckAt[i]){desktopInsets[i]=desktopOverlayInsets(surfaces[i].monitor.handle);insetCheckAt[i]=GetTickCount64()+1000;}r.setOverlayInsets(desktopInsets[i]);r.setPaused(a.scene!=Scene::Video);r.resize(std::max(1L,rect.right),std::max(1L,rect.bottom));
     unsigned desired=config.quality==Quality::Eco?64:config.quality==Quality::High?96:80;
     if(config.quality==Quality::Auto&&a.scene==Scene::Smoke){
      if(overBudget[i]<=120){if(r.gpuMs()>8)++overBudget[i];else overBudget[i]=0;}
@@ -297,7 +320,7 @@ void importWorld(const std::filesystem::path& file,bool personalVideo=false){
  int index=int(SendDlgItemMessageW(library,monitorId,CB_GETCURSEL,0,0));
  Monitor target=(!surfaces.empty()&&index>=0&&index<int(surfaces.size()))?surfaces[index].monitor:displays.front();
  showWorldImport(controller,file,profile/L"library",target.name,[id=target.id](const Assignment& imported){
-  {std::lock_guard lock(stateMutex);bool found=false;for(auto& [key,value]:settings.displays)if(key==id){value=imported;found=true;break;}
+  {std::lock_guard lock(stateMutex);bool found=false;for(auto& [key,value]:settings.displays)if(key==id){bool showStatistics=value.showBodyStatistics;value=imported;value.showBodyStatistics=showStatistics;found=true;break;}
    if(!found)settings.displays.emplace_back(id,imported);requestSave();}
   syncControls();
  },personalVideo);
@@ -316,11 +339,11 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  if(msg==WM_SETTINGCHANGE||msg==WM_THEMECHANGED){ui::refresh(hwnd);for(auto& item:layoutItems){wchar_t name[32]{};GetClassNameW(item.hwnd,name,32);if(!wcscmp(name,L"ComboBox"))ui::themeCombo(item.hwnd);else SetWindowTheme(item.hwnd,ui::dark?L"DarkMode_Explorer":L"Explorer",nullptr);}return 0;}
  if(msg==WM_ERASEBKGND){RECT r;GetClientRect(hwnd,&r);FillRect((HDC)w,&r,ui::backgroundBrush);return 1;}
  if(msg==WM_CTLCOLORSTATIC||msg==WM_CTLCOLORBTN||msg==WM_CTLCOLORLISTBOX){SetTextColor((HDC)w,ui::foreground);SetBkColor((HDC)w,msg==WM_CTLCOLORLISTBOX?ui::surface:ui::background);return (LRESULT)(msg==WM_CTLCOLORLISTBOX?ui::surfaceBrush:ui::backgroundBrush);}
- if(msg==WM_NOTIFY){auto custom=reinterpret_cast<NMCUSTOMDRAW*>(l);if(custom->hdr.idFrom==batteryId&&custom->hdr.code==NM_CUSTOMDRAW&&custom->dwDrawStage==CDDS_PREPAINT){
+ if(msg==WM_NOTIFY){auto custom=reinterpret_cast<NMCUSTOMDRAW*>(l);if((custom->hdr.idFrom==batteryId||custom->hdr.idFrom==bodyStatisticsId)&&custom->hdr.code==NM_CUSTOMDRAW&&custom->dwDrawStage==CDDS_PREPAINT){
   auto dc=custom->hdc;RECT r=custom->rc;FillRect(dc,&r,ui::backgroundBrush);RECT check{r.left+px(2),r.top+px(5),r.left+px(20),r.top+px(23)};
   auto pen=CreatePen(PS_SOLID,px(1),ui::accent);auto oldPen=SelectObject(dc,pen);auto oldBrush=SelectObject(dc,ui::surfaceBrush);Rectangle(dc,check.left,check.top,check.right,check.bottom);
   if(SendMessageW(custom->hdr.hwndFrom,BM_GETCHECK,0,0)==BST_CHECKED){MoveToEx(dc,check.left+px(3),check.top+px(9),nullptr);LineTo(dc,check.left+px(7),check.top+px(13));LineTo(dc,check.left+px(15),check.top+px(4));}
-  SelectObject(dc,oldPen);SelectObject(dc,oldBrush);DeleteObject(pen);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,ui::foreground);auto oldFont=SelectObject(dc,font);r.left+=px(30);DrawTextW(dc,L"Pause on battery",-1,&r,DT_SINGLELINE|DT_VCENTER);SelectObject(dc,oldFont);
+  SelectObject(dc,oldPen);SelectObject(dc,oldBrush);DeleteObject(pen);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,ui::foreground);auto oldFont=SelectObject(dc,font);r.left+=px(30);wchar_t caption[96]{};GetWindowTextW(custom->hdr.hwndFrom,caption,96);DrawTextW(dc,caption,-1,&r,DT_SINGLELINE|DT_VCENTER);SelectObject(dc,oldFont);
   if((custom->uItemState&CDIS_FOCUS)&&!(custom->uItemState&CDIS_DISABLED)&&!(SendMessageW(custom->hdr.hwndFrom,WM_QUERYUISTATE,0,0)&UISF_HIDEFOCUS)){InflateRect(&check,px(3),px(3));ui::frame(dc,check,ui::accent);}return CDRF_SKIPDEFAULT;
  }}
  if(msg==WM_MEASUREITEM){auto d=reinterpret_cast<MEASUREITEMSTRUCT*>(l);d->itemHeight=px(26);return TRUE;}
@@ -341,7 +364,7 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
    SetWindowTextW(GetDlgItem(hwnd,advancedId),advancedOpen?L"−  Advanced settings":L"+  Advanced settings");scrollOffset=0;SendMessageW(hwnd,WM_SETREDRAW,TRUE,0);resizeLibrary();return 0;
   }
   if(id==resetId){
-   {std::lock_guard lock(stateMutex);if(!surfaces.empty()){auto& a=selected();a.params=Parameters{};a.reaction=Reaction::Off;a.fit=false;}Settings defaults;settings.quality=defaults.quality;settings.fps=defaults.fps;settings.pauseBattery=defaults.pauseBattery;settings.audioDevice.clear();requestSave();}
+   {std::lock_guard lock(stateMutex);if(!surfaces.empty()){auto& a=selected();a.params=Parameters{};a.reaction=Reaction::Off;a.fit=false;a.showBodyStatistics=false;}Settings defaults;settings.quality=defaults.quality;settings.fps=defaults.fps;settings.pauseBattery=defaults.pauseBattery;settings.audioDevice.clear();requestSave();}
    syncControls();return 0;
   }
   if(id==importId||id==videoImportId){
@@ -354,8 +377,9 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(id==retryId){previewMode=false;createSurfaces();syncControls();return 0;}
   if(id==pauseId){{std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}syncControls();return 0;}
   {std::lock_guard lock(stateMutex);if(surfaces.empty())return 0;auto& a=selected();
-   if(id==applyAllId){auto copy=a;for(auto& s:surfaces){bool found=false;for(auto& [key,entry]:settings.displays)if(key==s.monitor.id){entry=copy;found=true;break;}if(!found)settings.displays.emplace_back(s.monitor.id,copy);s.randomCycle.reset(true);}}
-   else if(event==CBN_SELCHANGE){int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(id==randomIntervalId&&value>=0&&value<int(randomIntervals.size())){a.randomInterval=randomIntervals[value];selectedSurface().randomCycle.reset(true);}if(id==reactionId)a.reaction=Reaction(value);if(id==qualityId)settings.quality=Quality(value);if(id==fpsId)settings.fps=value==0?30:60;if(id==paletteId)a.params.palette=value;if(id==videoFitId)a.fit=value==1;if(id==deviceId)settings.audioDevice=value>0?audioDevices.at(value-1).first:L"";}
+   if(id==applyAllId){auto copy=a;for(auto& s:surfaces){bool found=false;for(auto& [key,entry]:settings.displays)if(key==s.monitor.id){entry=copy;found=true;break;}if(!found)settings.displays.emplace_back(s.monitor.id,copy);s.randomCycle.reset(true,copy.randomPool);}}
+   else if(event==CBN_SELCHANGE){int value=int(SendDlgItemMessageW(hwnd,id,CB_GETCURSEL,0,0));if(id==randomIntervalId&&value>=0&&value<int(randomIntervals.size())){a.randomInterval=randomIntervals[value];selectedSurface().randomCycle.reset(true,a.randomPool);}if(id==reactionId)a.reaction=Reaction(value);if(id==qualityId)settings.quality=Quality(value);if(id==fpsId)settings.fps=value==0?30:60;if(id==paletteId)a.params.palette=value;if(id==videoFitId)a.fit=value==1;if(id==deviceId)settings.audioDevice=value>0?audioDevices.at(value-1).first:L"";}
+   else if(id==bodyStatisticsId)a.showBodyStatistics=SendDlgItemMessageW(hwnd,id,BM_GETCHECK,0,0)==BST_CHECKED;
    else if(id==batteryId)settings.pauseBattery=SendDlgItemMessageW(hwnd,id,BM_GETCHECK,0,0)==BST_CHECKED;
    requestSave();}
   syncControls();return 0;
@@ -372,6 +396,7 @@ void showLibrary(){
  label(L"Display",30,108,110);combo(monitorId,150,102,570,{});for(auto& s:surfaces)SendDlgItemMessageW(library,monitorId,CB_ADDSTRING,0,(LPARAM)s.monitor.name.c_str());SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,0,0);
  label(L"Visualization",30,158,120);combo(visualizationId,155,152,345,{});for(auto& v:visualizations)if(v.scene!=Scene::Video)SendDlgItemMessageW(library,visualizationId,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(v.name));
  combo(randomIntervalId,515,152,205,{L"Every 30 seconds",L"Every 1 minute",L"Every 2 minutes",L"Every 5 minutes",L"Every 10 minutes",L"Every 15 minutes",L"Every 30 minutes"});
+ control(L"BUTTON",L"Show body statistics",BS_AUTOCHECKBOX|WS_TABSTOP,155,190,345,28,bodyStatisticsId);
  label(L"Audio reaction",30,232,120);combo(reactionId,155,226,170,{L"Off",L"Gentle",L"Expressive"});label(L"Palette",355,232,80);combo(paletteId,435,226,285,{L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"});
  control(L"BUTTON",L"Import video…",WS_TABSTOP,30,273,165,34,videoImportId);control(L"BUTTON",L"Import World…",WS_TABSTOP,205,273,165,34,importId);
  control(L"BUTTON",L"+  Advanced settings",WS_TABSTOP,385,273,210,34,advancedId);control(L"BUTTON",L"Reset settings",WS_TABSTOP,605,273,115,34,resetId);
@@ -479,7 +504,7 @@ int captureMode(const std::vector<std::wstring>& args){
  auto out=std::filesystem::absolute(option(L"--capture-dir",L"artifacts/native"));std::filesystem::create_directories(out);Scene scene=parseScene(utf8(option(L"--scene",L"aurora")));unsigned width=std::stoul(option(L"--width",L"1280")),height=std::stoul(option(L"--height",L"720"));int frames=std::stoi(option(L"--frames",L"180")),record=std::stoi(option(L"--record",L"0"));if(width<64||height<64||width>7680||height>4320||frames<1||frames>36000||record<0||record>900)throw std::runtime_error("Invalid capture limits");
  HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,L"VolturaWorldSurface",L"Voltura Worlds native validation",WS_POPUP,0,0,width,height,nullptr,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create validation surface");
  if(presentFrames)ShowWindow(hwnd,SW_SHOWNOACTIVATE);
- {Renderer renderer(hwnd,width,height,exeDir/L"shaders",std::find(args.begin(),args.end(),L"--debug-gpu")!=args.end(),std::find(args.begin(),args.end(),L"--single-sample")!=args.end());renderer.setGrid(std::stoul(option(L"--grid",L"64")));Assignment a;a.scene=scene;if(scene==Scene::Video){a.video=option(L"--video-file",L"");if(a.video.empty())throw std::runtime_error("Video capture requires --video-file");a.fit=std::find(args.begin(),args.end(),L"--fit")!=args.end();}FrameData data;data.dt=1.f/60;std::vector<double> timings;auto started=std::chrono::steady_clock::now();
+ {Renderer renderer(hwnd,width,height,exeDir/L"shaders",std::find(args.begin(),args.end(),L"--debug-gpu")!=args.end(),std::find(args.begin(),args.end(),L"--single-sample")!=args.end());renderer.setGrid(std::stoul(option(L"--grid",L"64")));Assignment a;a.scene=scene;a.showBodyStatistics=std::find(args.begin(),args.end(),L"--show-body-statistics")!=args.end();if(scene==Scene::Video){a.video=option(L"--video-file",L"");if(a.video.empty())throw std::runtime_error("Video capture requires --video-file");a.fit=std::find(args.begin(),args.end(),L"--fit")!=args.end();}FrameData data;data.dt=1.f/60;std::vector<double> timings;auto started=std::chrono::steady_clock::now();
   if(validateStars){if(scene!=Scene::Aurora)throw std::runtime_error("Star-layer validation requires Aurora");data.spare[0]=1;}
   bool multigrid=std::find(args.begin(),args.end(),L"--smoke-multigrid")!=args.end();
   if(multigrid){
@@ -576,6 +601,12 @@ int captureMode(const std::vector<std::wstring>& args){
      a.scene=Scene::Orbit;renderer.render(a,data,false);a.scene=scene==Scene::Earth?Scene::Mars:Scene::Earth;renderer.render(a,data,false);a.scene=scene;renderer.render(a,data,false);
      renderer.resize(720,1280);renderer.render(a,data,false);renderer.resize(width,height);renderer.render(a,data,false);renderer.idle();
      if(renderer.allocations()!=marsBytes)throw std::runtime_error("Planet resources changed after space-scene/resize roundtrip");
+     if(a.showBodyStatistics){
+      a.showBodyStatistics=false;renderer.render(a,data,false);renderer.idle();
+      if(renderer.allocations()>=marsBytes)throw std::runtime_error("Hidden body statistics retained GPU texture");
+      a.showBodyStatistics=true;data.palette=float(cycle%4);renderer.render(a,data,false);renderer.render(a,data,false);renderer.idle();
+      if(renderer.allocations()!=marsBytes)throw std::runtime_error("Body statistics resources changed after visibility/palette roundtrip");
+     }
      renderer.validateDebugMessages();
     }
    }

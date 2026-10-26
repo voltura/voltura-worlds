@@ -1,8 +1,10 @@
 #include "model.h"
 #include "random_cycle.h"
+#include "body_card_layout.h"
 #include <set>
 #include "package.h"
 #include "dds.h"
+#include "json.hpp"
 #include <iostream>
 #include <fstream>
 #include <limits>
@@ -11,6 +13,15 @@ using namespace worlds;
 static void require(bool v,const char* s){if(!v)throw std::runtime_error(s);}
 static void rejects(const std::function<void()>& fn){bool threw=false;try{fn();}catch(...){threw=true;}require(threw,"Expected rejection");}
 int main(){try{
+ // Card stays above or beside app bars and scales inside even tiny work areas.
+ for(auto size:std::array<std::array<unsigned,2>,4>{{{1920,1080},{3840,2160},{320,240},{64,64}}}){
+  for(auto insets:std::array<std::array<unsigned,4>,5>{{{0,0,0,0},{0,0,0,48},{0,0,60,0},{48,0,0,0},{0,40,0,0}}}){
+   auto card=bodyCardPlacement(size[0],size[1],320,insets);
+   require(card.x>=insets[0]&&card.y>=insets[1]&&card.x+card.width<=size[0]-insets[2]+.01f&&card.y+card.height<=size[1]-insets[3]+.01f,"Body card fits taskbar-safe work area");
+   require(size[0]-insets[2]-(card.x+card.width)<=24*std::clamp(size[1]/1080.f,.75f,4.f)+1,"Body card anchors to the right of the work area");
+  }
+ }
+ auto desktopCard=bodyCardPlacement(1920,1080,320,{0,0,0,48});require(desktopCard.x==1536&&desktopCard.y+desktopCard.height==1008,"1080p card has a 24-pixel inset above a 48-pixel taskbar");
  // Full compressed mip tails occupy at least one block, including 2x2/1x1.
  std::vector<uint8_t> dds(148+3*16);auto put=[&](unsigned i,uint32_t v){for(unsigned b=0;b<4;b++)dds[i*4+b]=uint8_t(v>>(b*8));};
  put(0,0x20534444);put(1,124);put(3,4);put(4,4);put(6,1);put(7,3);put(19,32);put(20,4);put(21,0x30315844);put(32,DXGI_FORMAT_BC7_UNORM_SRGB);put(33,3);put(35,1);
@@ -46,6 +57,25 @@ int main(){try{
   require(std::find(randomScenes.begin(),randomScenes.end(),Scene::Neptune)!=randomScenes.end(),"Neptune is eligible for Random");
   Settings shuffle;shuffle.displays.emplace_back(L"random-monitor",random);saveSettings(dir,shuffle);
   auto loadedRandom=assignmentFor(loadSettings(dir),L"random-monitor");require(loadedRandom.random&&loadedRandom.randomInterval==30,"Random settings persist");
+  random.randomPool=RandomPool::SolarSystem;random.showBodyStatistics=true;
+  require(cycle.advance(random,0,true)&&bodyFacts(random.scene),"Switching pool starts a real body immediately");
+  require(!cycle.advance(random,30000,false)&&!cycle.advance(random,29999,true),"Solar shuffle counts only active time");
+  require(cycle.advance(random,1,true),"Solar interval boundary");
+  cycle.reset();visited.clear();previous=random.scene;
+  for(size_t i=0;i<bodyCatalog.size()*3;i++){
+   require(cycle.advance(random,i?30000:0,true)&&bodyFacts(random.scene)&&random.scene!=previous,"Solar shuffle only visits bodies without consecutive repeats");previous=random.scene;
+   visited.insert(random.scene);if(i%bodyCatalog.size()==bodyCatalog.size()-1){require(visited.size()==bodyCatalog.size(),"Solar shuffle visits every body once");visited.clear();}
+  }
+  shuffle.displays[0].second=random;saveSettings(dir,shuffle);
+  auto solar=assignmentFor(loadSettings(dir),L"random-monitor");require(solar.random&&solar.randomPool==RandomPool::SolarSystem&&solar.showBodyStatistics&&solar.randomInterval==30,"Solar pool and statistics persist");
+  RandomCycle copiedCycle;copiedCycle.reset(true,solar.randomPool);auto copiedScene=solar.scene;require(!copiedCycle.advance(solar,29999,true)&&solar.scene==copiedScene&&copiedCycle.advance(solar,1,true)&&solar.scene!=copiedScene,"Applying Solar Random keeps the copied body for the full interval");
+  auto settingsFile=dir/L"settings.json";nlohmann::json legacy;{std::ifstream input(settingsFile);input>>legacy;}
+  legacy["displays"][0].erase("randomPool");legacy["displays"][0].erase("showBodyStatistics");{std::ofstream output(settingsFile);output<<legacy;}
+  auto old=assignmentFor(loadSettings(dir),L"random-monitor");require(old.random&&old.randomPool==RandomPool::All&&!old.showBodyStatistics,"Old random settings use all scenes with statistics off");
+  legacy["displays"][0]["randomPool"]="unknown";{std::ofstream output(settingsFile);output<<legacy;}rejects([&]{loadSettings(dir);});
+  random.randomPool=RandomPool::All;require(cycle.advance(random,0,true),"Switching back to general Random resets the shuffle");
+  require(bodyCatalog.size()==11&&!bodyFacts(Scene::Orbit)&&!bodyFacts(Scene::Off)&&!bodyFacts(Scene::Video),"Body catalog excludes artistic scenes");
+  std::set<Scene> bodies;for(const auto& body:bodyCatalog){require(bodies.insert(body.scene).second&&*body.diameter&&*body.atmosphere&&*body.earthDistance&&*body.characteristic1&&*body.characteristic2,"Every body has unique complete facts");}
   random.random=false;require(!cycle.advance(random,999999,true),"Manual mode stops cycle");
   shuffle.displays[0].second.randomInterval=0;rejects([&]{saveSettings(dir,shuffle);});
  }

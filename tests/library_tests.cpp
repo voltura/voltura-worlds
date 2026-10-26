@@ -253,13 +253,26 @@ int wmain(int argc,wchar_t** argv){
   advanceRandomVisualizations(1000);requireUi(selected().scene!=randomScene&&selected().random,"Random switches after active interval");
   requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==randomChoice,"Random selection survives automatic switching");
   menu=visualizationMenu();requireUi(GetMenuState(menu,visualizationMenuBase+randomChoice,MF_BYCOMMAND)&MF_CHECKED,"Tray marks Random");DestroyMenu(menu);
+  requireUi(IsWindowEnabled(GetDlgItem(library,bodyStatisticsId))&&!selected().showBodyStatistics,"Statistics available in general Random and off by default");
+  SendMessageW(GetDlgItem(library,bodyStatisticsId),BM_CLICK,0,0);pump();requireUi(selected().showBodyStatistics,"Statistics checkbox updates assignment");
+  selectVisualization(solarRandomChoice);requireUi(selected().random&&selected().randomPool==RandomPool::SolarSystem&&bodyFacts(selected().scene)&&selected().showBodyStatistics,"Solar Random preserves statistics and starts a body");
+  if(argc>1){auto out=std::filesystem::path(argv[1]);pump();screenshot(out/L"solar-statistics.bmp");}
+  auto solarScene=selected().scene;advanceRandomVisualizations(30000);requireUi(bodyFacts(selected().scene)&&selected().scene!=solarScene,"Solar Random advances to another body");
+  requireUi(SendDlgItemMessageW(library,visualizationId,CB_GETCURSEL,0,0)==solarRandomChoice,"Solar Random stays selected after switching");
+  menu=visualizationMenu();requireUi((GetMenuState(menu,visualizationMenuBase+solarRandomChoice,MF_BYCOMMAND)&MF_CHECKED)&&!(GetMenuState(menu,visualizationMenuBase+randomChoice,MF_BYCOMMAND)&MF_CHECKED),"Tray distinguishes Solar Random from general Random");DestroyMenu(menu);
   SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(assignmentFor(settings,surfaces[1].monitor.id).random,"Apply to all copies Random mode");
+  auto other=assignmentFor(settings,surfaces[1].monitor.id);requireUi(other.randomPool==RandomPool::SolarSystem&&other.showBodyStatistics,"Apply to all copies pool and statistics");
+  selectVisualization(sceneChoice(Scene::Earth));requireUi(selected().showBodyStatistics&&IsWindowEnabled(GetDlgItem(library,bodyStatisticsId)),"Manual body retains statistics preference");
+  SendMessageW(GetDlgItem(library,resetId),BM_CLICK,0,0);pump();requireUi(!selected().showBodyStatistics,"Reset disables statistics");
+  SendMessageW(GetDlgItem(library,bodyStatisticsId),BM_CLICK,0,0);pump();
+
   mouseSelect(visualizationId,offChoice);requireUi(selected().scene==Scene::Off&&!IsWindowVisible(surfaces[0].hwnd)&&IsWindowVisible(surfaces[1].hwnd),"Off dropdown hides only the selected display");
   menu=visualizationMenu();requireUi((GetMenuState(menu,visualizationMenuBase+offChoice,MF_BYCOMMAND)&MF_CHECKED)!=0,"Context menu marks Off checked");DestroyMenu(menu);
   requireUi(selectVisualization(0)&&IsWindowVisible(surfaces[0].hwnd),"Selecting a World restores its surface");
   requireUi(selectVisualization(offChoice)&&!IsWindowVisible(surfaces[0].hwnd),"Context menu Off hides the surface");
   SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(!IsWindowVisible(surfaces[1].hwnd)&&assignmentFor(settings,surfaces[1].monitor.id).scene==Scene::Off,"Apply to all hides every display");
   requireUi(!selected().random&&!IsWindowEnabled(GetDlgItem(library,randomIntervalId)),"Manual selection stops Random");
+  requireUi(selected().showBodyStatistics&&!IsWindowEnabled(GetDlgItem(library,bodyStatisticsId)),"Ineligible scene disables checkbox while preserving preference");
   selectVisualization(0);SendMessageW(GetDlgItem(library,applyAllId),BM_CLICK,0,0);pump();requireUi(IsWindowVisible(surfaces[1].hwnd),"Apply to all restores every display");
   for(auto& surface:surfaces){DestroyWindow(surface.hwnd);surface.hwnd=nullptr;}
   mouseSelect(monitorId,1);mouseSelect(paletteId,2);requireUi(selected().params.palette==2,"Palette model changes");

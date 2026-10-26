@@ -23,6 +23,7 @@ public:
  ~Renderer();
  void render(const Assignment&,FrameData,bool present=true);
  void resize(unsigned,unsigned);
+ void setOverlayInsets(std::array<unsigned,4> insets){overlayInsets_=insets;}
  void capture(const std::filesystem::path&);
  void captureFluidFields(const std::filesystem::path&);
  void idle();
@@ -36,7 +37,7 @@ public:
  void setStageProfiling(bool enabled){stageProfiling_=enabled;}
  const std::array<double,14>& gpuStageMs()const{return gpuStageMs_;}
  uint64_t textureAllocations()const{return assetBytes_;}
- uint64_t allocations()const{return uint64_t(width_)*height_*16+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
+ uint64_t allocations()const{return bodyStatisticsBytes_+uint64_t(width_)*height_*16+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
  unsigned gridSize()const{return grid_;}
  unsigned densityGridSize()const{return referenceDensityGrid_?referenceDensityGrid_:(grid_>96?192:grid_*2);}
  std::array<unsigned,3> densityDimensions()const{return wideDensity_?std::array<unsigned,3>{grid_*6,((grid_*27/8+3)/4)*4,grid_}:std::array<unsigned,3>{densityGridSize(),densityGridSize(),densityGridSize()};}
@@ -60,6 +61,16 @@ public:
  void setFlowmapRenewal(float seconds){flowmapRenewal_=seconds;}
  unsigned flowmapRenewals()const{return flowmapRenewals_;}
 private:
+ void prepareBodyStatistics(const Assignment&,int palette);
+ void drawBodyStatistics(const Assignment&);
+ ComPtr<ID3D12Resource> bodyStatisticsTexture_;
+ ComPtr<ID3D12PipelineState> bodyStatisticsPipeline_;
+ Scene bodyStatisticsScene_=Scene::Off;
+ int bodyStatisticsPalette_=-1;
+ unsigned bodyStatisticsWidth_=0,bodyStatisticsHeight_=0,bodyStatisticsOutputWidth_=0,bodyStatisticsOutputHeight_=0;
+ uint64_t bodyStatisticsBytes_=0;
+ std::array<unsigned,4> overlayInsets_{},bodyStatisticsInsets_{};
+ float bodyStatisticsX_=0,bodyStatisticsY_=0;
  bool pressureMultigrid_=false;
  struct PressureLevel{unsigned n,base,side=0;unsigned cells()const{return n*n*n;}unsigned offset()const{return base+side*cells();}};
  std::vector<PressureLevel> pressureLevels_;

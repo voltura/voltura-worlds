@@ -11,6 +11,7 @@ namespace worlds {
 enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, PlasticMetal, Ripples, Mars, Earth, Moon, Jupiter, Saturn, Mercury, Venus, Uranus, Neptune, Pluto, Sun };
 enum class Quality { Eco, Auto, High };
 enum class Reaction { Off, Gentle, Expressive };
+enum class RandomPool { All, SolarSystem };
 struct Parameters {
     float brightness=1, movement=1, detail=1, flow=1, turbulence=1, density=1, strength=.5f;
     int palette=0;
@@ -23,6 +24,8 @@ struct Assignment {
     bool fit=false;
     bool random=false;
     int randomInterval=300;
+    RandomPool randomPool=RandomPool::All;
+    bool showBodyStatistics=false;
 };
 struct Settings {
     Quality quality=Quality::Auto;

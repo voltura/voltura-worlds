@@ -24,6 +24,8 @@ Settings loadSettings(const std::filesystem::path& dir) {
   Assignment a;a.scene=parseScene(item.at("scene"));int r=item.at("reaction");if(r<0||r>2)throw std::runtime_error("Invalid audio reaction");a.reaction=Reaction(r);
   auto p=item.at("parameters");a.params={p.at("brightness"),p.at("movement"),p.at("detail"),p.at("flow"),p.at("turbulence"),p.at("density"),p.at("strength"),p.at("palette")};
   if(!valid(a.params))throw std::runtime_error("Invalid scene parameters");a.video=wide(item.value("video",std::string{}));a.fit=item.value("fit",false);
+  a.showBodyStatistics=item.value("showBodyStatistics",false);
+  auto pool=item.value("randomPool",std::string("all"));if(pool!="all"&&pool!="solarSystem")throw std::runtime_error("Invalid random pool");a.randomPool=pool=="solarSystem"?RandomPool::SolarSystem:RandomPool::All;
   a.random=item.value("random",false);a.randomInterval=item.value("randomInterval",300);
   if(!validRandomInterval(a.randomInterval))throw std::runtime_error("Invalid random interval");
   s.displays.emplace_back(wide(item.at("id")),a);
@@ -31,10 +33,10 @@ Settings loadSettings(const std::filesystem::path& dir) {
 }
 void saveSettings(const std::filesystem::path& dir,const Settings& s){
  nlohmann::json j={{"version",1},{"quality",int(s.quality)},{"fps",s.fps},{"pauseBattery",s.pauseBattery},{"audioDevice",utf8(s.audioDevice)},{"displays",nlohmann::json::array()}};
- for(auto& [id,a]:s.displays){if(!valid(a.params)||!validRandomInterval(a.randomInterval))throw std::runtime_error("Invalid parameters");auto& p=a.params;
+ for(auto& [id,a]:s.displays){if(!valid(a.params)||!validRandomInterval(a.randomInterval)||(a.randomPool!=RandomPool::All&&a.randomPool!=RandomPool::SolarSystem))throw std::runtime_error("Invalid parameters");auto& p=a.params;
   j["displays"].push_back({{"id",utf8(id)},{"scene",sceneName(a.scene)},{"reaction",int(a.reaction)},{"video",utf8(a.video)},{"fit",a.fit},{"parameters",{{"brightness",p.brightness},{"movement",p.movement},{"detail",p.detail},{"flow",p.flow},{"turbulence",p.turbulence},{"density",p.density},{"strength",p.strength},{"palette",p.palette}}}});
  }
- for(size_t i=0;i<s.displays.size();i++){j["displays"][i]["random"]=s.displays[i].second.random;j["displays"][i]["randomInterval"]=s.displays[i].second.randomInterval;}
+ for(size_t i=0;i<s.displays.size();i++){j["displays"][i]["showBodyStatistics"]=s.displays[i].second.showBodyStatistics;j["displays"][i]["randomPool"]=s.displays[i].second.randomPool==RandomPool::SolarSystem?"solarSystem":"all";j["displays"][i]["random"]=s.displays[i].second.random;j["displays"][i]["randomInterval"]=s.displays[i].second.randomInterval;}
  std::filesystem::create_directories(dir);auto pending=dir/L"settings.pending",dest=dir/L"settings.json";
  auto bytes=j.dump(2);HANDLE h=CreateFileW(pending.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);if(h==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot save settings");
  DWORD written{};bool ok=WriteFile(h,bytes.data(),(DWORD)bytes.size(),&written,nullptr)&&written==bytes.size()&&FlushFileBuffers(h);CloseHandle(h);

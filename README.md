@@ -34,6 +34,8 @@ Sun adds an offline NASA/SDO ultraviolet observation with animated plasma, loops
 
 - Animates behind your desktop icons, with a World and settings for each display.
 - Shuffles all built-in Worlds with **Random**, with a saved interval for each display.
+- Cycles through the eight planets, Moon, Pluto and Sun with **Random Solar System**.
+- Offers optional palette-matched **body statistics** in the lower-right corner, saved per display. See [facts, sources and distance conventions](docs/body-statistics.md).
 - Gives Earth, Mars, Moon, Jupiter, Saturn, Mercury, Venus, Uranus and Neptune a shared NASA catalog-star background, with no extra resident sky texture memory.
 - Offers optional Gentle or Expressive audio reaction using local playback analysis. Audio is not recorded or uploaded.
 - Pauses on battery by default, and for fully covered displays, lock, sleep and remote sessions.
