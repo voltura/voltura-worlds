@@ -77,6 +77,7 @@ HRESULT invoke(const std::shared_ptr<Context>& context,const Entry& entry,HWND o
   auto result=ShellExecuteW(owner,L"open",context->executable.c_str(),nullptr,context->executable.parent_path().c_str(),SW_SHOWNORMAL);
   return reinterpret_cast<INT_PTR>(result)>32?S_OK:E_FAIL;
  }
+ if(entry.id==L"select-more"&&context->live)AllowSetForegroundWindow(context->state.processId);
  Request request{};request.invoke=1;wcscpy_s(request.command,entry.id.c_str());wcscpy_s(request.displayId,context->displayId.c_str());
  Response response{};return exchange(request,response,context->executable)&&response.accepted?S_OK:E_FAIL;
 }

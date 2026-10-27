@@ -48,7 +48,7 @@ inline const Visualization* visualization(const std::wstring& id){
  for(const auto& v:visualizations)if(id==v.id)return &v;return nullptr;
 }
 inline bool validCommand(const std::wstring& id){
- return visualization(id)||id==L"open"||id==L"pause"||id==L"resume"||id==L"automatic-on"||id==L"automatic-off"||id==L"restart-update"||id==L"exit";
+ return visualization(id)||id==L"open"||id==L"select-more"||id==L"pause"||id==L"resume"||id==L"automatic-on"||id==L"automatic-off"||id==L"restart-update"||id==L"exit";
 }
 inline std::vector<Entry> visualizationEntries(const DisplayState* display){
  Entry solar{L"",L"Solar System"};
@@ -90,11 +90,9 @@ inline const wchar_t* desktopTitle(DesktopGroup group){
  }
 }
 // Each independently registered root must fit the observed 16-command budget.
-// Count available video as well, so adding artwork cannot silently hide commands.
-inline constexpr size_t desktopVisualCount=[] {
- size_t count=0;for(const auto& v:visualizations)if(!v.solar&&std::wstring_view(v.id)!=L"random-solar"&&std::wstring_view(v.id)!=L"off")++count;return count;
-}();
-static_assert(desktopVisualCount<=16,"Split the desktop visualization menu before adding more commands.");
+// Keep a short, stable set of shortcuts; the library exposes the full catalog.
+inline constexpr const wchar_t* desktopVisualizations[]={L"aurora",L"orbit",L"smoke",L"bloom",L"silk",L"forest-water",L"tropical-paradise",L"tropical-island"};
+static_assert(std::size(desktopVisualizations)+3<=16,"Keep room for Random, imported video and Select more.");
 static_assert(std::size(solarOrder)+1<=16,"Split the Solar System desktop menu before adding more commands.");
 inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* display,DesktopGroup group){
  if(group==DesktopGroup::Controls){
@@ -110,11 +108,10 @@ inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* 
   for(auto id:solarOrder)result.push_back(choice(id,visualization(id)->name));
  }else{
   result.push_back(choice(L"random",L"Random"));result.push_back({});
-  for(const auto& v:visualizations){
-   if(v.solar||v.scene==Scene::Off||std::wstring_view(v.id)==L"random-solar"||std::wstring_view(v.id)==L"random")continue;
-   if(v.scene==Scene::Video&&(!display||!display->hasVideo))continue;
-   result.push_back(choice(v.id,v.name));
-  }
+  for(auto id:desktopVisualizations)result.push_back(choice(id,visualization(id)->name));
+  if(display&&display->hasVideo)result.push_back(choice(L"video",L"Imported video"));
+  result.push_back({});
+  result.push_back({L"select-more",L"Select more...",false,display!=nullptr});
  }
  return result;
 }

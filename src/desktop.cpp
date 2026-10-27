@@ -29,7 +29,7 @@ std::vector<Monitor> enumerateMonitors(){
 }
 HWND findWallpaperParent(){
  HWND progman=FindWindowW(L"Progman",nullptr);if(!progman)return nullptr;
- DWORD_PTR result{};SendMessageTimeoutW(progman,0x052c,0xD,0,SMTO_ABORTIFHUNG,1000,&result);SendMessageTimeoutW(progman,0x052c,0xD,1,SMTO_ABORTIFHUNG,1000,&result);
+ auto discover=[&]()->HWND{
  struct Search {HWND worker{};};Search found;
  EnumWindows([](HWND top,LPARAM param)->BOOL{
   if(FindWindowExW(top,nullptr,L"SHELLDLL_DefView",nullptr)){
@@ -40,6 +40,12 @@ HWND findWallpaperParent(){
  // Newer Explorer builds may keep the background WorkerW below Progman.
  if(!found.worker){HWND child=nullptr;while((child=FindWindowExW(progman,child,L"WorkerW",nullptr))){if(!FindWindowExW(child,nullptr,L"SHELLDLL_DefView",nullptr)){found.worker=child;break;}}}
  return found.worker;
+ };
+ // Reuse Explorer's existing host before asking it to change desktop layout.
+ // Relaunches and renderer recovery should not retrigger shell initialization.
+ if(auto existing=discover())return existing;
+ DWORD_PTR result{};SendMessageTimeoutW(progman,0x052c,0xD,0,SMTO_ABORTIFHUNG,1000,&result);SendMessageTimeoutW(progman,0x052c,0xD,1,SMTO_ABORTIFHUNG,1000,&result);
+ return discover();
 }
 bool attachWallpaper(HWND hwnd,const Monitor& m,HWND parent,bool visible){
  wchar_t parentClass[32]{};GetClassNameW(parent,parentClass,32);

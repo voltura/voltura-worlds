@@ -95,7 +95,9 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
 }
 Renderer::~Renderer(){try{idle();}catch(...){}if(event_)CloseHandle(event_);if(latency_)CloseHandle(latency_);}
 bool Renderer::tryPresent(){
- auto result=swap_->Present(0,DXGI_PRESENT_DO_NOT_WAIT);
+ // Keep wallpaper presentation synchronized with the desktop refresh. Retain
+ // nonblocking submission so one display cannot stall the other displays.
+ auto result=swap_->Present(1,DXGI_PRESENT_DO_NOT_WAIT);
  pendingPresent_=result==DXGI_ERROR_WAS_STILL_DRAWING;
  if(!pendingPresent_)check(result,"Present wallpaper without blocking");return !pendingPresent_;
 }

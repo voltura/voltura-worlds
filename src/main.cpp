@@ -171,7 +171,11 @@ void combo(int id,int x,int y,int w,std::initializer_list<const wchar_t*> values
 // existing wallpaper; no Windows wallpaper settings are changed.
 void syncSurfaceVisibility(){
  for(auto& s:surfaces){bool visible=assignmentFor(settings,s.monitor.id).scene!=Scene::Off;
-  if(IsWindow(s.hwnd)&&bool(IsWindowVisible(s.hwnd))!=visible)ShowWindow(s.hwnd,visible?SW_SHOWNOACTIVATE:SW_HIDE);
+  // IsWindowVisible also checks Explorer's parent windows. If the shell hides
+  // its desktop host during a transition, do not repeatedly show/reorder our
+  // already-visible child in response to that inherited visibility change.
+  if(IsWindow(s.hwnd)&&bool(GetWindowLongPtrW(s.hwnd,GWL_STYLE)&WS_VISIBLE)!=visible)
+   SetWindowPos(s.hwnd,nullptr,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|(visible?SWP_SHOWWINDOW:SWP_HIDEWINDOW));
  }
 }
 // Caller holds stateMutex; the shell receives a cached snapshot and never
@@ -470,7 +474,7 @@ void createSurfaces(){
  }
  for(auto& m:monitors){auto assignment=assignmentFor(settings,m.id);bool visible=assignment.scene!=Scene::Off;auto hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,L"VolturaWorldSurface",L"Voltura Worlds — native preview",previewMode?WS_OVERLAPPEDWINDOW:WS_POPUP,previewMode?CW_USEDEFAULT:m.rect.left,previewMode?CW_USEDEFAULT:m.rect.top,previewMode?960:m.rect.right-m.rect.left,previewMode?540:m.rect.bottom-m.rect.top,nullptr,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create wallpaper surface");
   // Recover the current Random World for a full interval instead of immediately shuffling.
-  if(!previewMode&&!attachWallpaper(hwnd,m,parent,visible)){DestroyWindow(hwnd);throw std::runtime_error("Cannot attach desktop surface");}try{surfaces.push_back({hwnd,m,false});}catch(...){DestroyWindow(hwnd);throw;}if(assignment.random)surfaces.back().randomCycle.reset(true,assignment.randomPool);if(visible)ShowWindow(hwnd,previewMode?SW_SHOWNOACTIVATE:SW_SHOWNA);if(previewMode)break;
+  if(!previewMode&&!attachWallpaper(hwnd,m,parent,visible)){DestroyWindow(hwnd);throw std::runtime_error("Cannot attach desktop surface");}try{surfaces.push_back({hwnd,m,false});}catch(...){DestroyWindow(hwnd);throw;}if(assignment.random)surfaces.back().randomCycle.reset(true,assignment.randomPool);if(previewMode){if(visible)ShowWindow(hwnd,SW_SHOWNOACTIVATE);break;}
  }
  }catch(const std::exception& e){
   for(auto& s:surfaces)DestroyWindow(s.hwnd);surfaces.clear();
@@ -689,6 +693,15 @@ void prepareTrayMenu(HWND owner,POINT point){
 void invokeMenuCommand(const std::wstring& command,const std::wstring& displayId){
  if(!shellmenu::validCommand(command))return;
  if(command==L"open"){showLibrary();return;}
+ if(command==L"select-more"){
+  showLibrary();
+  scrollOffset=0;layoutLibrary();
+  for(size_t i=0;i<surfaces.size();i++)if(surfaces[i].monitor.id==displayId){
+   SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,i,0);syncControls();break;
+  }
+  SetFocus(GetDlgItem(library,visualizationId));
+  SendDlgItemMessageW(library,visualizationId,CB_SHOWDROPDOWN,TRUE,0);return;
+ }
  if(command==L"exit"){DestroyWindow(controller);return;}
  if(command==L"restart-update"){if(updates.ready()){restartForUpdate=true;DestroyWindow(controller);}return;}
  if(command==L"pause"||command==L"resume"){{std::lock_guard lock(stateMutex);pauseState.manual=command==L"pause";}syncControls();return;}
