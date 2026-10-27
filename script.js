@@ -23,7 +23,8 @@
     moon: ['20', 'Moon', 'Cratered light. A tour of the near and far sides.'],
     pluto: ['21', 'Pluto', 'A bright heart. At the edge of the familiar.'],
     sun: ['22', 'Sun', 'Ultraviolet light. Plasma in motion.'],
-    forest_water: ['23', 'Forest Water', 'Woodland reflections. Ripples beneath drifting leaves.']
+    forest_water: ['23', 'Forest Water', 'Woodland reflections. Ripples beneath drifting leaves.'],
+    tropical_paradise: ['24', 'Tropical Paradise', 'Jungle shade. Falling water. A turquoise escape.']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');
@@ -64,9 +65,9 @@
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();
-      video.poster = `assets/${name}.jpg?v=0.1.10`;
+      video.poster = `assets/${name}.jpg?v=0.4.0`;
       video.setAttribute('aria-label', `${title}: native animated wallpaper`);
-      video.querySelector('source').src = `assets/${name}.mp4?v=0.1.10`;
+      video.querySelector('source').src = `assets/${name}.mp4?v=0.4.0`;
       video.load();
       play();
     });
