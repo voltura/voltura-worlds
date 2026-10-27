@@ -28,7 +28,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  ComPtr<IDXGISwapChain1> sw;check(factory_->CreateSwapChainForHwnd(queue_.Get(),hwnd,&sd,nullptr,nullptr,&sw),"Create wallpaper swap chain");check(sw.As(&swap_),"Query swap chain");factory_->MakeWindowAssociation(hwnd,DXGI_MWA_NO_ALT_ENTER);check(swap_->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709),"Set SDR color space");swap_->SetMaximumFrameLatency(1);latency_=swap_->GetFrameLatencyWaitableObject();
  D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=6;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_DSV;hd.NumDescriptors=2;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&dsv_)),"Create depth views");
- hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=423;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
+ hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=426;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  check(device_->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence_)),"Create fence");event_=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!event_)throw std::runtime_error("Cannot create GPU wait event");
  for(auto& f:frames_)check(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&f.allocator)),"Create frame allocator");
  check(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,frames_[0].allocator.Get(),nullptr,IID_PPV_ARGS(&list_)),"Create command list");list_->Close();
@@ -78,6 +78,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
  pipeline(L"forest_water.cso",false,false,forestWater_);
  pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);
+ pipeline(L"tropical_island.cso",false,false,tropicalIsland_);
  const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"plastic_metal.cso",L"ripples.cso"};
  for(unsigned i=0;i<proceduralWorlds_.size();i++)pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);
  auto computePipeline=[&](const wchar_t* file,ComPtr<ID3D12PipelineState>& output){
@@ -227,6 +228,11 @@ void Renderer::loadMoon(){
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-color.dds",moonColor_,399);
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-normal.dds",moonNormal_,400);
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-earth.dds",moonEarth_,401);
+}
+void Renderer::loadTropicalIsland(){
+ if(islandArtwork_&&islandSand_)return;
+ loadTexture(assetDirectory_/L"tropical-island"/L"environment.png",islandArtwork_,423,4096);
+ loadTexture(assetDirectory_/L"tropical-island"/L"clean-sand.png",islandSand_,424,4096);
 }
 void Renderer::loadTropicalParadise(){
  if(tropicalArtwork_)return;
@@ -791,7 +797,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  prepareBodyStatistics(assignment,int(data.palette));
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
- if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn||lastScene_==Scene::Mercury||lastScene_==Scene::Neptune||lastScene_==Scene::Venus||lastScene_==Scene::Uranus||lastScene_==Scene::Pluto||lastScene_==Scene::Sun||lastScene_==Scene::ForestWater||lastScene_==Scene::TropicalParadise)){
+ if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn||lastScene_==Scene::Mercury||lastScene_==Scene::Neptune||lastScene_==Scene::Venus||lastScene_==Scene::Uranus||lastScene_==Scene::Pluto||lastScene_==Scene::Sun||lastScene_==Scene::ForestWater||lastScene_==Scene::TropicalParadise||lastScene_==Scene::TropicalIsland)){
   idle();
   auto releaseTexture=[&](ComPtr<ID3D12Resource>& texture){
    if(!texture)return;
@@ -804,6 +810,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   if(lastScene_==Scene::Sun){releaseTexture(sunImage_);releaseTexture(sunProminence_);}
   if(lastScene_==Scene::ForestWater)releaseTexture(forestReflection_);
   if(lastScene_==Scene::TropicalParadise)releaseTexture(tropicalArtwork_);
+  if(lastScene_==Scene::TropicalIsland){releaseTexture(islandArtwork_);releaseTexture(islandSand_);}
   if(lastScene_==Scene::Mercury){releaseTexture(mercuryColor_);releaseTexture(mercuryNormal_);}
   if(lastScene_==Scene::Jupiter){releaseTexture(jupiterColor_);releaseTexture(jupiterAtmosphere_);}
   if(lastScene_==Scene::Moon){releaseTexture(moonColor_);releaseTexture(moonNormal_);releaseTexture(moonEarth_);}
@@ -821,6 +828,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Sun)loadSun();
  if(assignment.scene==Scene::ForestWater)loadForestWater();
  if(assignment.scene==Scene::TropicalParadise)loadTropicalParadise();
+ if(assignment.scene==Scene::TropicalIsland)loadTropicalIsland();
  if(assignment.scene==Scene::Mercury)loadMercury();
  if(assignment.scene==Scene::Jupiter)loadJupiter();
  if(assignment.scene==Scene::Moon)loadMoon();
@@ -853,6 +861,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  auto draw=[&](ID3D12PipelineState* state,float pass,unsigned count,unsigned instances=1){data.pass=pass;list_->SetPipelineState(state);list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->DrawInstanced(count,instances,0,0);};
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
+ else if(assignment.scene==Scene::TropicalIsland){list_->SetGraphicsRootDescriptorTable(2,gpu(423));draw(tropicalIsland_.Get(),0,3);}
  else if(assignment.scene==Scene::TropicalParadise){list_->SetGraphicsRootDescriptorTable(2,gpu(420));draw(tropicalParadise_.Get(),0,3);}
  else if(assignment.scene==Scene::ForestWater){list_->SetGraphicsRootDescriptorTable(2,gpu(417));draw(forestWater_.Get(),0,3);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}

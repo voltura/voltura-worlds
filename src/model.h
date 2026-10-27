@@ -10,7 +10,7 @@
 #include <chrono>
 #include <exception>
 namespace worlds {
-enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, PlasticMetal, Ripples, Mars, Earth, Moon, Jupiter, Saturn, Mercury, Venus, Uranus, Neptune, Pluto, Sun, ForestWater, TropicalParadise };
+enum class Scene { Aurora, Orbit, Smoke, Video, Bloom, Off, Silk, Eclipse, Lattice, Drift, Contour, PlasticMetal, Ripples, Mars, Earth, Moon, Jupiter, Saturn, Mercury, Venus, Uranus, Neptune, Pluto, Sun, ForestWater, TropicalParadise, TropicalIsland };
 enum class OutputPreference { Auto, Sdr };
 enum class Quality { Eco, Auto, High };
 enum class FrameLimit { Auto, Fps30, Fps60 };

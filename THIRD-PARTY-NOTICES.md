@@ -8,6 +8,8 @@
 Dependency license texts are included under `licenses/` and copied by the build and installer. The bootstrap process downloads pinned versions; version and hashes are recorded in scripts/bootstrap.ps1.
 # Artwork
 
+Tropical Island uses original artwork generated with OpenAI's built-in image generation tool. Provenance is recorded in `assets/tropical-island/ATTRIBUTION.md`. Water, shoreline wash and palm-frond motion are rendered locally by the app.
+
 Tropical Paradise uses original generated tropical landscape artwork. Provenance and the full generation prompt are recorded in `assets/tropical-paradise/ATTRIBUTION.md`. Waterfall, pool, mist and foliage motion are rendered locally by the app.
 
 Forest Water uses synthetic woodland artwork generated with OpenAI's built-in image generation tool. Provenance and the generation prompt are recorded in `assets/forest-water/ATTRIBUTION.md`; no footage from the reference video is bundled.

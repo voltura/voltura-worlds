@@ -21,6 +21,7 @@ inline constexpr Visualization visualizations[]={
  {Scene::PlasticMetal,L"Plastic metal",L"plastic-metal"},{Scene::Ripples,L"Ripples",L"ripples"},
  {Scene::ForestWater,L"Forest Water",L"forest-water"},
  {Scene::TropicalParadise,L"Tropical Paradise",L"tropical-paradise"},
+ {Scene::TropicalIsland,L"Tropical Island",L"tropical-island"},
  {Scene::Off,L"Random",L"random"},{Scene::Off,L"Random Solar System",L"random-solar"},
  {Scene::Off,L"Off",L"off"},{Scene::Video,L"Imported video",L"video"}
 };
@@ -91,12 +92,16 @@ inline const wchar_t* desktopTitle(DesktopGroup group){
 // Each independently registered root must fit the observed 16-command budget.
 // Count available video as well, so adding artwork cannot silently hide commands.
 inline constexpr size_t desktopVisualCount=[] {
- size_t count=0;for(const auto& v:visualizations)if(!v.solar&&std::wstring_view(v.id)!=L"random-solar")++count;return count;
+ size_t count=0;for(const auto& v:visualizations)if(!v.solar&&std::wstring_view(v.id)!=L"random-solar"&&std::wstring_view(v.id)!=L"off")++count;return count;
 }();
 static_assert(desktopVisualCount<=16,"Split the desktop visualization menu before adding more commands.");
 static_assert(std::size(solarOrder)+1<=16,"Split the Solar System desktop menu before adding more commands.");
 inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* display,DesktopGroup group){
- if(group==DesktopGroup::Controls)return controlEntries(state);
+ if(group==DesktopGroup::Controls){
+  auto result=controlEntries(state);
+  if(state)result.insert(result.begin()+1,{L"off",L"Off",display&&std::wstring(display->choice)==L"off",display!=nullptr});
+  return result;
+ }
  if(!state)return {};
  auto choice=[&](const wchar_t* id,const wchar_t* title){return Entry{id,title,display&&std::wstring(display->choice)==id,display!=nullptr};};
  std::vector<Entry> result;
@@ -106,7 +111,7 @@ inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* 
  }else{
   result.push_back(choice(L"random",L"Random"));result.push_back({});
   for(const auto& v:visualizations){
-   if(v.solar||std::wstring_view(v.id)==L"random-solar"||std::wstring_view(v.id)==L"random")continue;
+   if(v.solar||v.scene==Scene::Off||std::wstring_view(v.id)==L"random-solar"||std::wstring_view(v.id)==L"random")continue;
    if(v.scene==Scene::Video&&(!display||!display->hasVideo))continue;
    result.push_back(choice(v.id,v.name));
   }

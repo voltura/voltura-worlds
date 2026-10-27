@@ -8,11 +8,11 @@
 python -m http.server 8080 --bind 127.0.0.1 --directory site
 ```
 
-Visit `http://127.0.0.1:8080`. Stop the server with Ctrl+C when finished. Verify all 24 scene choices, play/pause, fullscreen, narrow layouts, keyboard focus and reduced-motion behavior. Visitors who prefer reduced motion see a still until they choose Play.
+Visit `http://127.0.0.1:8080`. Stop the server with Ctrl+C when finished. Verify all 25 scene choices, play/pause, fullscreen, narrow layouts, keyboard focus and reduced-motion behavior. Visitors who prefer reduced motion see a still until they choose Play.
 
 ## Native media
 
-The 24 1600 × 900, eight-second, silent clips are captured directly by the app's native renderer at 30 frames per second. They use ordinary scene settings, without capture-only visual experiments, interpolation or retiming. They show actual native graphics; they do not verify physical desktop attachment. Only the selected clip plays; it pauses when hidden or out of view. Posters remain available when video playback is blocked. The 1200 × 630 social preview is composed from these same native posters and features Earth beside native thumbnails of the other ten Solar System Worlds.
+The 25 1600 × 900, eight-second, silent clips are captured directly by the app's native renderer at 30 frames per second. They use ordinary scene settings, without capture-only visual experiments, interpolation or retiming. They show actual native graphics; they do not verify physical desktop attachment. Only the selected clip plays; it pauses when hidden or out of view. Posters remain available when video playback is blocked. The 1200 × 630 social preview is composed from these same native posters and features Earth beside native thumbnails of the other ten Solar System Worlds.
 
 To regenerate after building the app, install the development tools with `python -m pip install -r requirements-dev.txt` (the script also supports `.deps/python`) and run:
 
