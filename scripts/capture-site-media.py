@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SCENES = ('aurora', 'orbit', 'smoke', 'bloom', 'silk', 'eclipse',
           'lattice', 'drift', 'contour', 'plastic_metal', 'ripples',
-          'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon', 'pluto', 'sun', 'forest_water')
+          'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon', 'pluto', 'sun', 'forest_water', 'tropical_paradise')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--scenes', nargs='+', choices=SCENES, default=list(SCENES),
                     help='Capture only these Worlds, retaining existing media for the others.')
@@ -54,7 +54,7 @@ def font(size, bold=False):
     return ImageFont.truetype(str(font_dir / ('segoeuib.ttf' if bold else 'segoeui.ttf')), size)
 draw.text((28, 19), 'voltura worlds', font=font(25), fill='#b5c2cc')
 draw.text((26, 58), 'Your desktop, alive.', font=font(67), fill='#f1f4f7')
-draw.text((30, 153), '23 animated Worlds. A whole Solar System to explore.', font=font(25), fill='#98eddc')
+draw.text((30, 153), '24 animated Worlds. A whole Solar System to explore.', font=font(25), fill='#98eddc')
 # Eleven new native scenes, with Earth as the full-frame feature.
 with Image.open(destination / 'earth.jpg') as source:
     tile = ImageOps.contain(source.convert('RGB'), (584, 329), Image.Resampling.LANCZOS)

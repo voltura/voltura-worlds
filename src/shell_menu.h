@@ -20,6 +20,7 @@ inline constexpr Visualization visualizations[]={
  {Scene::Drift,L"Drift",L"drift"},{Scene::Contour,L"Contour",L"contour"},
  {Scene::PlasticMetal,L"Plastic metal",L"plastic-metal"},{Scene::Ripples,L"Ripples",L"ripples"},
  {Scene::ForestWater,L"Forest Water",L"forest-water"},
+ {Scene::TropicalParadise,L"Tropical Paradise",L"tropical-paradise"},
  {Scene::Off,L"Random",L"random"},{Scene::Off,L"Random Solar System",L"random-solar"},
  {Scene::Off,L"Off",L"off"},{Scene::Video,L"Imported video",L"video"}
 };

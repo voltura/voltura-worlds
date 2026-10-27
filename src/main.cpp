@@ -208,6 +208,7 @@ void syncControls(){
  auto& a=selected();
  // Planet Worlds reuse saved parameters with scene-specific, meaningful labels.
  const wchar_t* uranusNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Band contrast",L"Cloud drift",L"Atmosphere",L"Audio strength"};
+ const wchar_t* tropicalNames[]={L"Brightness",L"Movement",L"Water detail",L"Waterfall flow",L"Water ripples",L"Foliage breeze",L"Audio strength"};
  const wchar_t* forestNames[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Floating leaves",L"Audio strength"};
  const wchar_t* regularNames[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Density",L"Audio strength"};
  const wchar_t* sunNames[]={L"Brightness",L"Movement",L"Surface detail",L"Camera drift",L"Solar activity",L"Corona",L"Audio strength"};
@@ -217,7 +218,8 @@ void syncControls(){
  const wchar_t* jupiterNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Camera drift",L"Cloud drift",L"Atmosphere",L"Audio strength"};
  const wchar_t* moonNames[]={L"Brightness",L"Movement",L"Terrain relief",L"Camera drift",L"Sun angle",L"Earth brightness",L"Audio strength"};
  const wchar_t* earthNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Camera drift",L"Cloud drift",L"Atmosphere",L"Audio strength"};
- for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::ForestWater?forestNames:a.scene==Scene::Sun?sunNames:a.scene==Scene::Pluto?plutoNames:a.scene==Scene::Uranus?uranusNames:a.scene==Scene::Mercury?mercuryNames:(a.scene==Scene::Saturn||a.scene==Scene::Jupiter||a.scene==Scene::Venus||a.scene==Scene::Neptune)?jupiterNames:a.scene==Scene::Moon?moonNames:a.scene==Scene::Earth?earthNames:a.scene==Scene::Mars?marsNames:regularNames)[i]);
+ for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::TropicalParadise?tropicalNames:a.scene==Scene::ForestWater?forestNames:a.scene==Scene::Sun?sunNames:a.scene==Scene::Pluto?plutoNames:a.scene==Scene::Uranus?uranusNames:a.scene==Scene::Mercury?mercuryNames:(a.scene==Scene::Saturn||a.scene==Scene::Jupiter||a.scene==Scene::Venus||a.scene==Scene::Neptune)?jupiterNames:a.scene==Scene::Moon?moonNames:a.scene==Scene::Earth?earthNames:a.scene==Scene::Mars?marsNames:regularNames)[i]);
+ const wchar_t* tropicalPalettes[]={L"Natural",L"Warm sunlight",L"Cool lagoon",L"Soft overcast"};
  const wchar_t* forestPalettes[]={L"Natural",L"Summer",L"Autumn",L"Overcast"};
  const wchar_t* regularPalettes[]={L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"};
  const wchar_t* uranusPalettes[]={L"Natural Uranus",L"Pale aqua",L"Cool blue",L"Neutral survey"};
@@ -231,9 +233,10 @@ void syncControls(){
  const wchar_t* jupiterPalettes[]={L"Natural Jupiter",L"Warm belts",L"Cool haze",L"Neutral survey"};
  const wchar_t* moonPalettes[]={L"Natural Moon",L"Warm sunlight",L"Cool silver",L"Neutral survey"};
  const wchar_t* earthPalettes[]={L"Natural Earth",L"Warm daylight",L"Cool daylight",L"Neutral survey"};
- auto palettes=a.scene==Scene::ForestWater?forestPalettes:a.scene==Scene::Sun?sunPalettes:a.scene==Scene::Pluto?plutoPalettes:a.scene==Scene::Neptune?neptunePalettes:a.scene==Scene::Uranus?uranusPalettes:a.scene==Scene::Venus?venusPalettes:a.scene==Scene::Mercury?mercuryPalettes:a.scene==Scene::Saturn?saturnPalettes:a.scene==Scene::Jupiter?jupiterPalettes:a.scene==Scene::Moon?moonPalettes:a.scene==Scene::Earth?earthPalettes:a.scene==Scene::Mars?marsPalettes:regularPalettes;
- wchar_t firstPalette[80]{};SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(firstPalette));
- if(wcscmp(firstPalette,palettes[0])!=0){
+ auto palettes=a.scene==Scene::TropicalParadise?tropicalPalettes:a.scene==Scene::ForestWater?forestPalettes:a.scene==Scene::Sun?sunPalettes:a.scene==Scene::Pluto?plutoPalettes:a.scene==Scene::Neptune?neptunePalettes:a.scene==Scene::Uranus?uranusPalettes:a.scene==Scene::Venus?venusPalettes:a.scene==Scene::Mercury?mercuryPalettes:a.scene==Scene::Saturn?saturnPalettes:a.scene==Scene::Jupiter?jupiterPalettes:a.scene==Scene::Moon?moonPalettes:a.scene==Scene::Earth?earthPalettes:a.scene==Scene::Mars?marsPalettes:regularPalettes;
+ bool paletteLabelsChanged=false;
+ for(int i=0;i<4;i++){wchar_t label[80]{};SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,i,reinterpret_cast<LPARAM>(label));if(wcscmp(label,palettes[i])!=0)paletteLabelsChanged=true;}
+ if(paletteLabelsChanged){
   SendDlgItemMessageW(library,paletteId,CB_RESETCONTENT,0,0);
   for(int i=0;i<4;i++)ui::appendComboChoice(GetDlgItem(library,paletteId),palettes[i]);
  }

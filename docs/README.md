@@ -1,6 +1,6 @@
 # Voltura Worlds documentation
 
-The current app has 22 built-in Worlds, independent display assignments, Random and Random Solar System, optional body statistics, local audio reaction and silent video playback. Version 0.1.10 also includes HDR output, adaptive display performance, video framing and speed controls, and saved desktop presets.
+The current app has 24 built-in Worlds, independent display assignments, Random and Random Solar System, optional body statistics, local audio reaction and silent video playback. Version 0.4.0 includes Tropical Paradise, Forest Water, optional desktop right-click menus, HDR output, adaptive display performance, video framing and speed controls, and saved desktop presets.
 
 ## Using and maintaining the app
 
