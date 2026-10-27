@@ -1,16 +1,16 @@
 # Using Voltura Worlds
 
-The per-user Windows 11 x64 app includes **22 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun. C++20, Direct3D 12, HLSL. MIT licensed.
+The per-user Windows 11 x64 app includes **23 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto, Sun and Forest Water. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Version **0.2.0** includes HDR output, per-display adaptive performance, broader video controls and saved desktop presets.
+Version **0.3.0** adds Forest Water and optional desktop right-click menus, alongside HDR output, per-display adaptive performance, video controls and saved desktop presets.
 
 The window title and tray icon tooltip show the running version. When upgrading from 0.1.10 or earlier, run the installer once; those versions cannot automatically upgrade to the current release.
 
-[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.2.0/VolturaWorlds-Setup-0.2.0-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.3.0/VolturaWorlds-Setup-0.3.0-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
 
 ## Install and try it
 
-Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.2.0-win-x64.exe` after packaging a local build. No administrator account is required. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
+Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.3.0-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. In the tray menu, the eleven bodies are grouped under **Solar System**. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 
@@ -18,7 +18,7 @@ Choose **Random** to shuffle through all built-in Worlds, showing each once befo
 
 Choose **Random Solar System** to cycle through the eight planets, Moon, Pluto and Sun. Enable **Show body statistics** for palette-matched facts in the lower-right corner, saved per display. See [statistics and sources](body-statistics.md).
 
-Closing the library leaves the background running. Reopen it through the notification-area icon or the Start-menu shortcut. Use **Pause**, **Resume**, or **Exit Worlds** to control playback. Exit reveals your ordinary Windows wallpaper; Worlds does not overwrite it.
+Closing the library leaves the background running. Reopen it through the notification-area icon or the Start-menu shortcut. Use **Pause**, **Resume**, or **Exit Voltura Worlds** to control playback. Exit reveals your ordinary Windows wallpaper; Worlds does not overwrite it.
 
 The library follows your Windows light/dark theme. Opening **Adjustments** minimizes other app windows to reveal the desktop, keeps the Worlds interface in front, and reveals detailed artwork and playback controls. The library becomes translucent so you can see the World while adjusting it. Collapsing the settings leaves other apps minimized; you can restore them from the taskbar. **Restore defaults**, inside Adjustments, restores the selected World’s adjustments and global playback preferences without deleting imports or changing assigned scenes. It uses built-in default values; it does not load or change a saved preset.
 
@@ -28,7 +28,19 @@ Personal SDR videos can be imported, copied to the managed library, and looped s
 
 User settings and imported assets live in `%LOCALAPPDATA%\Voltura\Worlds`. Uninstall from Windows Settings; exit Worlds first. Uninstall asks whether to keep your library and preferences.
 
-Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
+Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Voltura Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
+
+## Desktop right-click menus
+
+Setup offers **Add Voltura Worlds to desktop right-click menus**, initially unchecked. Both desktop menus list the visualization choices directly, using names such as **Sun**, **Mercury** and **Earth**, with no �Solar System:� prefix. The tray menu retains its **Visualizations > Solar System** hierarchy. Visualization choices and checkmarks belong to the display where you opened the desktop menu; they do not change the library's display selection. Pause and updates remain global. If Worlds is closed or not responding, the submenu contains only **Open Voltura Worlds**; opening the menu does not start the app.
+
+**Also enable the Windows 11 compact menu** is a separate, optional setup choice. It registers the same three independent menu groups. Windows limits `IExplorerCommand` submenu depth. Neither integration appears on files or ordinary Explorer folder backgrounds.
+
+The app, installer, classic menu and package registration run for your account. With the self-signed build, enabling the compact menu may show a one-time Windows administrator prompt to trust Voltura's public signing certificate in **Local Computer > Trusted People**. The dedicated signed helper trusts only its own signing certificate; it never installs a private key. Declining leaves the classic menu usable. A computer policy can still block package registration.
+
+Setup and automatic updates preserve your choices. Silent updates never prompt for elevation or trust a replacement certificate. Rerun interactive setup to enable the optional trust step after a certificate change. Unsigned local installer builds offer the classic menu only. Disabling integration in setup, or uninstalling, unregisters the desktop menus. Windows may retain loaded shell code until you sign out; setup never forcibly restarts Explorer.
+
+Registration details and partial failures are recorded in `%LOCALAPPDATA%\Voltura\Worlds\desktop-menu.log`. Removing the app leaves certificate trust intact because other Voltura apps can share the signer. To revoke that trust separately, an administrator can open **Manage computer certificates > Trusted People > Certificates**, check the certificate's thumbprint against `shell\menu.json` before uninstalling, and remove that specific Voltura certificate. Do not remove other publishers' certificates.
 
 ## Display performance
 
@@ -83,6 +95,8 @@ Bloom is an original animated folded-sheet World inspired by the blue Windows 11
 **Mars** shows a complete globe using NASA/USGS Viking imagery and MOLA terrain data. Brightness controls exposure; Movement controls its 15-minute rotation and slow drift; Terrain relief adjusts surface normals; Camera drift adjusts the framing motion; Dust variation changes suspended-dust contrast; Atmosphere adjusts the thin haze. The four Mars palettes preserve natural surface colors. Gentle and Expressive audio modes modulate atmospheric scattering, scaled by Audio strength. Movement at zero freezes the scene and audio response. Sunlight uses a fixed mean distance of 1.524 AU and a fixed orbital composition. See [source data and reproduction](../assets/mars/ATTRIBUTION.md).
 
 **Ripples** shows calm reflective water from above, with scattered drops producing expanding concentric waves that overlap and interfere. Overlaps share one displaced surface: crests reinforce, opposite phases cancel, and reflections and refraction follow the combined shape. Gentle wind produces drifting patches of small, curved ripples between the drops, while clouds move across the reflections and softly shade the water. A sandy, pebbled bottom slopes from clear foreground shallows into deeper tinted water; surface motion refracts its fixed features, and depth gradually reduces their visibility. Density adjusts drop frequency, Flow controls wave and wind speed, Detail controls drop-wave fineness, and Turbulence adjusts the wind disturbance. Movement at zero freezes the water and clouds together. It supports the shared palettes, quality settings, and optional audio reaction. Higher quality refines the surface intersection as well as the small water texture.
+
+**Forest Water** looks down onto a dark woodland pond. Tall trunks, branching trees and irregular green canopy reflect through a gently rippling water surface, with blue sky between the crowns and scattered drifting autumn leaves. A generated photographic woodland environment supplies the tree and foliage reflections; water distortion and floating leaves are rendered in real time, inspired by the video reference rather than playing that clip. Localized breeze patches produce curved ripples with quieter water between them. Floating leaves drift with the slow current and sample the same wave field for bobbing, sideways motion, tilt and rotation; their lighting follows that tilt. Natural, Summer, Autumn and Overcast palettes change the forest colors. Flow adjusts drift speed, Turbulence adjusts water disturbance, Detail adjusts ripple fineness, and Floating leaves adjusts leaf density. Movement at zero freezes all animation; optional audio reaction gently strengthens water disturbance. Quality adjusts small wave detail. The fixed camera fills landscape, ultrawide and portrait displays without stretching the scene.
 
 **Silk** shows translucent flowing ribbons; **Eclipse**, a glowing corona; **Lattice**, a porous rotating sculpture; **Drift**, bioluminescent currents; **Contour**, living topography; and **Plastic metal**, merging metallic forms. Each supports the existing palettes, brightness, movement, detail, flow, turbulence, density, and optional audio reaction with Audio strength. Quality adjusts rendering detail; Frame limit controls each display’s cadence. Movement at zero freezes procedural motion. Lattice and Plastic metal use bounded mathematical surfaces rather than physical material simulation.
 

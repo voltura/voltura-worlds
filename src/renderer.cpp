@@ -28,7 +28,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  ComPtr<IDXGISwapChain1> sw;check(factory_->CreateSwapChainForHwnd(queue_.Get(),hwnd,&sd,nullptr,nullptr,&sw),"Create wallpaper swap chain");check(sw.As(&swap_),"Query swap chain");factory_->MakeWindowAssociation(hwnd,DXGI_MWA_NO_ALT_ENTER);check(swap_->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709),"Set SDR color space");swap_->SetMaximumFrameLatency(1);latency_=swap_->GetFrameLatencyWaitableObject();
  D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=6;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_DSV;hd.NumDescriptors=2;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&dsv_)),"Create depth views");
- hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=418;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
+ hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=420;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  check(device_->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence_)),"Create fence");event_=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!event_)throw std::runtime_error("Cannot create GPU wait event");
  for(auto& f:frames_)check(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&f.allocator)),"Create frame allocator");
  check(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,frames_[0].allocator.Get(),nullptr,IID_PPV_ARGS(&list_)),"Create command list");list_->Close();
@@ -76,6 +76,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  pipeline(L"aurora.cso",false,false,aurora_);pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);pipeline(L"smoke.cso",false,false,smoke_);pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);
  pipeline(L"post.cso",false,false,postHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
  pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
+ pipeline(L"forest_water.cso",false,false,forestWater_);
  const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"plastic_metal.cso",L"ripples.cso"};
  for(unsigned i=0;i<proceduralWorlds_.size();i++)pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);
  auto computePipeline=[&](const wchar_t* file,ComPtr<ID3D12PipelineState>& output){
@@ -225,6 +226,12 @@ void Renderer::loadMoon(){
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-color.dds",moonColor_,399);
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-normal.dds",moonNormal_,400);
  loadDds(assetDirectory_/L"moon"/L"runtime"/L"moon-earth.dds",moonEarth_,401);
+}
+void Renderer::loadForestWater(){
+ if(forestReflection_)return;
+ loadTexture(assetDirectory_/L"forest-water"/L"environment.png",forestReflection_,417,4096);
+ D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&empty,cpu(418));device_->CreateShaderResourceView(nullptr,&empty,cpu(419));
 }
 void Renderer::loadSun(){
  if(sunImage_&&sunProminence_)return;
@@ -777,7 +784,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  prepareBodyStatistics(assignment,int(data.palette));
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
- if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn||lastScene_==Scene::Mercury||lastScene_==Scene::Neptune||lastScene_==Scene::Venus||lastScene_==Scene::Uranus||lastScene_==Scene::Pluto||lastScene_==Scene::Sun)){
+ if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn||lastScene_==Scene::Mercury||lastScene_==Scene::Neptune||lastScene_==Scene::Venus||lastScene_==Scene::Uranus||lastScene_==Scene::Pluto||lastScene_==Scene::Sun||lastScene_==Scene::ForestWater)){
   idle();
   auto releaseTexture=[&](ComPtr<ID3D12Resource>& texture){
    if(!texture)return;
@@ -788,6 +795,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   if(lastScene_==Scene::Saturn)releaseTexture(saturnColor_);
   if(lastScene_==Scene::Pluto)releaseTexture(plutoColor_);
   if(lastScene_==Scene::Sun){releaseTexture(sunImage_);releaseTexture(sunProminence_);}
+  if(lastScene_==Scene::ForestWater)releaseTexture(forestReflection_);
   if(lastScene_==Scene::Mercury){releaseTexture(mercuryColor_);releaseTexture(mercuryNormal_);}
   if(lastScene_==Scene::Jupiter){releaseTexture(jupiterColor_);releaseTexture(jupiterAtmosphere_);}
   if(lastScene_==Scene::Moon){releaseTexture(moonColor_);releaseTexture(moonNormal_);releaseTexture(moonEarth_);}
@@ -803,6 +811,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Saturn)loadSaturn();
  if(assignment.scene==Scene::Pluto)loadPluto();
  if(assignment.scene==Scene::Sun)loadSun();
+ if(assignment.scene==Scene::ForestWater)loadForestWater();
  if(assignment.scene==Scene::Mercury)loadMercury();
  if(assignment.scene==Scene::Jupiter)loadJupiter();
  if(assignment.scene==Scene::Moon)loadMoon();
@@ -835,6 +844,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  auto draw=[&](ID3D12PipelineState* state,float pass,unsigned count,unsigned instances=1){data.pass=pass;list_->SetPipelineState(state);list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->DrawInstanced(count,instances,0,0);};
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
+ else if(assignment.scene==Scene::ForestWater){list_->SetGraphicsRootDescriptorTable(2,gpu(417));draw(forestWater_.Get(),0,3);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
  else if(assignment.scene==Scene::Uranus){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(uranusSpace_.Get(),0,3);draw(uranus_.Get(),0,3);}
  else if(assignment.scene==Scene::Neptune){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(neptuneSpace_.Get(),0,3);draw(neptune_.Get(),0,3);}

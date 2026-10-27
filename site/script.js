@@ -22,7 +22,8 @@
     neptune: ['19', 'Neptune', 'Blue winds. White clouds. A distant storm.'],
     moon: ['20', 'Moon', 'Cratered light. A tour of the near and far sides.'],
     pluto: ['21', 'Pluto', 'A bright heart. At the edge of the familiar.'],
-    sun: ['22', 'Sun', 'Ultraviolet light. Plasma in motion.']
+    sun: ['22', 'Sun', 'Ultraviolet light. Plasma in motion.'],
+    forest_water: ['23', 'Forest Water', 'Woodland reflections. Ripples beneath drifting leaves.']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');

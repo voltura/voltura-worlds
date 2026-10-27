@@ -5,7 +5,7 @@
 #include <random>
 
 namespace worlds {
-inline constexpr std::array randomScenes{Scene::Aurora,Scene::Orbit,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Saturn,Scene::Mercury,Scene::Venus,Scene::Neptune,Scene::Uranus,Scene::Pluto,Scene::Sun,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::PlasticMetal,Scene::Ripples};
+inline constexpr std::array randomScenes{Scene::Aurora,Scene::Orbit,Scene::Mars,Scene::Earth,Scene::Moon,Scene::Jupiter,Scene::Saturn,Scene::Mercury,Scene::Venus,Scene::Neptune,Scene::Uranus,Scene::Pluto,Scene::Sun,Scene::Smoke,Scene::Bloom,Scene::Silk,Scene::Eclipse,Scene::Lattice,Scene::Drift,Scene::Contour,Scene::PlasticMetal,Scene::Ripples,Scene::ForestWater};
 inline constexpr std::array randomIntervals{30,60,120,300,600,900,1800};
 inline bool validRandomInterval(int seconds){return std::find(randomIntervals.begin(),randomIntervals.end(),seconds)!=randomIntervals.end();}
 inline bool validRandomScene(Scene scene,RandomPool pool){return pool==RandomPool::SolarSystem?bodyFacts(scene)!=nullptr:pool==RandomPool::All&&std::find(randomScenes.begin(),randomScenes.end(),scene)!=randomScenes.end();}

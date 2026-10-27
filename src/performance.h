@@ -10,7 +10,7 @@ inline double frameCeiling(const DisplayPerformance& p,double hz){return std::mi
 inline bool canCopyFrameLimit(FrameLimit limit,double hz){return limit==FrameLimit::Auto||displayRefresh(hz)+.12>=(limit==FrameLimit::Fps30?30.:60.);}
 inline Assignment importForDisplay(const Assignment& source,const Assignment& destination){auto copy=source;copy.performance=destination.performance;copy.output=destination.output;copy.showBodyStatistics=destination.showBodyStatistics;return copy;}
 inline Assignment copyForDisplay(const Assignment& source,const Assignment& destination,double hz){auto copy=source;if(!canCopyFrameLimit(copy.performance.frameLimit,hz))copy.performance.frameLimit=destination.performance.frameLimit;return copy;}
-inline bool adaptiveDetail(Scene scene){return scene==Scene::Smoke||scene==Scene::Silk||scene==Scene::Eclipse||scene==Scene::Drift||scene==Scene::Contour||scene==Scene::Ripples||scene==Scene::Sun;}
+inline bool adaptiveDetail(Scene scene){return scene==Scene::Smoke||scene==Scene::Silk||scene==Scene::Eclipse||scene==Scene::Drift||scene==Scene::Contour||scene==Scene::Ripples||scene==Scene::Sun||scene==Scene::ForestWater;}
 inline std::vector<double> cadenceLevels(const DisplayPerformance& p,double hz){
  hz=displayRefresh(hz);double top=frameCeiling(p,hz);std::vector<double> rates;
  // Fixed caps also use refresh divisors while adapting; exact cap remains the

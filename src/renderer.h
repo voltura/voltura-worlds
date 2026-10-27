@@ -174,6 +174,8 @@ private:
  std::array<ComPtr<ID3D12Resource>,2> bloomTargets_,auroraTextures_;
  std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;bool starForeground_=false;
  ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
+ ComPtr<ID3D12Resource> forestReflection_;
+ ComPtr<ID3D12PipelineState> forestWater_;
  std::array<ComPtr<ID3D12PipelineState>,7> proceduralWorlds_;
  bool videoRateKnown_=false;double requestedVideoRate_=-1,acceptedVideoRate_=1;std::wstring videoRateMessage_;
  std::unique_ptr<VideoPlayer> video_;std::filesystem::path videoPath_;ID3D12Resource* videoView_{};uint64_t videoBytes_{};
@@ -182,7 +184,7 @@ private:
  unsigned v_=0,d_=0,p_=0;bool fluidReady_=false;Scene lastScene_=Scene::Aurora;
  ComPtr<ID3D12QueryHeap> query_;ComPtr<ID3D12Resource> queryReadback_;UINT64 frequency_=0;
  double gpuMs_=0;uint64_t allocationBytes_=0,fluidBytes_=0;
- void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadMercury();void loadSun();void loadPluto();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
+ void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadMercury();void loadSun();void loadForestWater();void loadPluto();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
  static constexpr unsigned QueryStride=66;
  bool stageProfiling_=false;
  std::array<unsigned,2> stageCount_{};

@@ -41,7 +41,7 @@ if ($ValidateOnly) {
     return
 }
 $file = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
-if ([IO.Path]::GetExtension($file) -ine '.exe') { throw 'This signing script accepts executable files only.' }
+if ([IO.Path]::GetExtension($file) -inotmatch '^\.(exe|dll)$') { throw 'This signing script accepts EXE and DLL files only.' }
 $signature = Get-AuthenticodeSignature -LiteralPath $file
 if ($signature.Status -ne 'NotSigned') {
     throw "Refusing to replace an existing or invalid signature ($($signature.Status)). Rebuild the executable first."

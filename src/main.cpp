@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "random_cycle.h"
+#include "shell_ipc.h"
 #include "performance.h"
 #include "updates.h"
 #include "desktop.h"
@@ -28,9 +29,7 @@ using namespace worlds;
 namespace {
 constexpr UINT trayMessage=WM_APP+1,errorMessage=WM_APP+2,openLibraryMessage=WM_APP+3,renderStatusMessage=WM_APP+4;
 constexpr int monitorId=100,visualizationId=110,applyAllId=113,reactionId=120,qualityId=121,fpsId=122,paletteId=123,batteryId=124,deviceId=125,pauseId=126,retryId=127,communityId=128,importId=129,videoImportId=130,videoFitId=131,advancedId=132,resetId=133,randomIntervalId=134,bodyStatisticsId=135,performanceStatusId=136,outputId=137,videoSpeedId=138,videoCenterId=139,videoXId=140,videoYId=141,presetsId=142;
-struct Visualization { Scene scene; const wchar_t* name; };
-constexpr Visualization visualizations[]={{Scene::Aurora,L"Aurora"},{Scene::Orbit,L"Orbit"},{Scene::Mars,L"Mars"},{Scene::Earth,L"Earth"},{Scene::Moon,L"Moon"},{Scene::Jupiter,L"Jupiter"},{Scene::Saturn,L"Saturn"},{Scene::Mercury,L"Mercury"},{Scene::Venus,L"Venus"},{Scene::Neptune,L"Neptune"},{Scene::Uranus,L"Uranus"},{Scene::Pluto,L"Pluto"},{Scene::Sun,L"Sun"},{Scene::Smoke,L"Smoke"},{Scene::Bloom,L"Bloom"},{Scene::Silk,L"Silk"},{Scene::Eclipse,L"Eclipse"},{Scene::Lattice,L"Lattice"},{Scene::Drift,L"Drift"},{Scene::Contour,L"Contour"},{Scene::PlasticMetal,L"Plastic metal"},{Scene::Ripples,L"Ripples"},{Scene::Off,L"Random"},{Scene::Off,L"Random Solar System"},{Scene::Off,L"Off"},{Scene::Video,L"Imported video"}};
-constexpr int visualizationMenuBase=1000;
+using shellmenu::visualizations;
 constexpr int randomChoice=int(std::size(visualizations))-4;
 constexpr int solarRandomChoice=randomChoice+1;
 bool isRandomChoice(int choice){return choice==randomChoice||choice==solarRandomChoice;}
@@ -63,6 +62,7 @@ unsigned renderGeneration=0;std::atomic<bool> renderSetupFailed{false};
 UINT taskbarCreated{};AudioCapture audio;HANDLE singleInstance{};
 ULONGLONG nextDesktopRetry{},nextUpdateCheck{},previousRandomTick{};
 wu::Updates updates;bool automaticUpdates=false,sessionEnding=false,restartForUpdate=false;
+shellmenu::Server desktopMenu;
 struct LayoutItem{HWND hwnd;int x,y,w,h;bool advanced,footer;int sx{},sy{},sw{},sh{};};
 std::vector<LayoutItem> layoutItems;bool advancedOpen=false,addingAdvanced=false,addingFooter=false,layingOut=false,sideExpansion=false;
 int scrollOffset=0,wheelRemainder=0;UINT uiDpi=96;unsigned promotionAttempts=0;
@@ -174,8 +174,26 @@ void syncSurfaceVisibility(){
   if(IsWindow(s.hwnd)&&bool(IsWindowVisible(s.hwnd))!=visible)ShowWindow(s.hwnd,visible?SW_SHOWNOACTIVATE:SW_HIDE);
  }
 }
+// Caller holds stateMutex; the shell receives a cached snapshot and never
+// enumerates renderers or touches the UI while Explorer is building its menu.
+shellmenu::State currentMenuState(){
+ shellmenu::State state{};state.processId=GetCurrentProcessId();state.timestamp=GetTickCount64();
+ state.paused=pauseState.manual;state.automaticUpdates=automaticUpdates;state.updateReady=updates.ready();
+ for(const auto& surface:surfaces){
+  if(state.displayCount==std::size(state.displays))break;
+  MONITORINFOEXW monitor{};monitor.cbSize=sizeof(monitor);
+  if(!GetMonitorInfoW(surface.monitor.handle,&monitor)||surface.monitor.id.size()>=std::size(state.displays[0].id))continue;
+  auto a=assignmentFor(settings,surface.monitor.id);auto& d=state.displays[state.displayCount++];
+  wcscpy_s(d.id,surface.monitor.id.c_str());wcscpy_s(d.device,monitor.szDevice);d.hasVideo=!a.video.empty();
+  for(const auto& v:visualizations){
+   if(a.random){if(std::wstring(v.id)==(a.randomPool==RandomPool::SolarSystem?L"random-solar":L"random"))wcscpy_s(d.choice,v.id);}
+   else if(v.scene==a.scene&&std::wstring(v.id)!=L"random"&&std::wstring(v.id)!=L"random-solar")wcscpy_s(d.choice,v.id);
+  }
+ }
+ return state;
+}
 void syncControls(){
- std::lock_guard lock(stateMutex);syncSurfaceVisibility();if(!library)return;
+ std::lock_guard lock(stateMutex);syncSurfaceVisibility();desktopMenu.publish(currentMenuState());if(!library)return;
  std::wstring statusError=lastError;if(!settingsError.empty()){if(!statusError.empty())statusError+=L" | ";statusError+=settingsError;}
  if(!renderSetupError.empty()){if(!statusError.empty())statusError+=L" | ";statusError+=renderSetupError;}
  auto retry=GetDlgItem(library,retryId);
@@ -190,6 +208,7 @@ void syncControls(){
  auto& a=selected();
  // Planet Worlds reuse saved parameters with scene-specific, meaningful labels.
  const wchar_t* uranusNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Band contrast",L"Cloud drift",L"Atmosphere",L"Audio strength"};
+ const wchar_t* forestNames[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Floating leaves",L"Audio strength"};
  const wchar_t* regularNames[]={L"Brightness",L"Movement",L"Detail",L"Flow",L"Turbulence",L"Density",L"Audio strength"};
  const wchar_t* sunNames[]={L"Brightness",L"Movement",L"Surface detail",L"Camera drift",L"Solar activity",L"Corona",L"Audio strength"};
  const wchar_t* plutoNames[]={L"Brightness",L"Movement",L"Surface detail",L"Camera drift",L"Sun angle",L"Atmosphere",L"Audio strength"};
@@ -198,7 +217,8 @@ void syncControls(){
  const wchar_t* jupiterNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Camera drift",L"Cloud drift",L"Atmosphere",L"Audio strength"};
  const wchar_t* moonNames[]={L"Brightness",L"Movement",L"Terrain relief",L"Camera drift",L"Sun angle",L"Earth brightness",L"Audio strength"};
  const wchar_t* earthNames[]={L"Brightness",L"Movement",L"Cloud detail",L"Camera drift",L"Cloud drift",L"Atmosphere",L"Audio strength"};
- for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::Sun?sunNames:a.scene==Scene::Pluto?plutoNames:a.scene==Scene::Uranus?uranusNames:a.scene==Scene::Mercury?mercuryNames:(a.scene==Scene::Saturn||a.scene==Scene::Jupiter||a.scene==Scene::Venus||a.scene==Scene::Neptune)?jupiterNames:a.scene==Scene::Moon?moonNames:a.scene==Scene::Earth?earthNames:a.scene==Scene::Mars?marsNames:regularNames)[i]);
+ for(int i=0;i<7;i++)setControlText(GetDlgItem(library,210+i),(a.scene==Scene::ForestWater?forestNames:a.scene==Scene::Sun?sunNames:a.scene==Scene::Pluto?plutoNames:a.scene==Scene::Uranus?uranusNames:a.scene==Scene::Mercury?mercuryNames:(a.scene==Scene::Saturn||a.scene==Scene::Jupiter||a.scene==Scene::Venus||a.scene==Scene::Neptune)?jupiterNames:a.scene==Scene::Moon?moonNames:a.scene==Scene::Earth?earthNames:a.scene==Scene::Mars?marsNames:regularNames)[i]);
+ const wchar_t* forestPalettes[]={L"Natural",L"Summer",L"Autumn",L"Overcast"};
  const wchar_t* regularPalettes[]={L"Teal / violet / gold",L"Emerald / blue",L"Ember / gold",L"Silver"};
  const wchar_t* uranusPalettes[]={L"Natural Uranus",L"Pale aqua",L"Cool blue",L"Neutral survey"};
  const wchar_t* neptunePalettes[]={L"Cinematic blue",L"Natural blue-green",L"Deep azure",L"Neutral survey"};
@@ -211,7 +231,7 @@ void syncControls(){
  const wchar_t* jupiterPalettes[]={L"Natural Jupiter",L"Warm belts",L"Cool haze",L"Neutral survey"};
  const wchar_t* moonPalettes[]={L"Natural Moon",L"Warm sunlight",L"Cool silver",L"Neutral survey"};
  const wchar_t* earthPalettes[]={L"Natural Earth",L"Warm daylight",L"Cool daylight",L"Neutral survey"};
- auto palettes=a.scene==Scene::Sun?sunPalettes:a.scene==Scene::Pluto?plutoPalettes:a.scene==Scene::Neptune?neptunePalettes:a.scene==Scene::Uranus?uranusPalettes:a.scene==Scene::Venus?venusPalettes:a.scene==Scene::Mercury?mercuryPalettes:a.scene==Scene::Saturn?saturnPalettes:a.scene==Scene::Jupiter?jupiterPalettes:a.scene==Scene::Moon?moonPalettes:a.scene==Scene::Earth?earthPalettes:a.scene==Scene::Mars?marsPalettes:regularPalettes;
+ auto palettes=a.scene==Scene::ForestWater?forestPalettes:a.scene==Scene::Sun?sunPalettes:a.scene==Scene::Pluto?plutoPalettes:a.scene==Scene::Neptune?neptunePalettes:a.scene==Scene::Uranus?uranusPalettes:a.scene==Scene::Venus?venusPalettes:a.scene==Scene::Mercury?mercuryPalettes:a.scene==Scene::Saturn?saturnPalettes:a.scene==Scene::Jupiter?jupiterPalettes:a.scene==Scene::Moon?moonPalettes:a.scene==Scene::Earth?earthPalettes:a.scene==Scene::Mars?marsPalettes:regularPalettes;
  wchar_t firstPalette[80]{};SendDlgItemMessageW(library,paletteId,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(firstPalette));
  if(wcscmp(firstPalette,palettes[0])!=0){
   SendDlgItemMessageW(library,paletteId,CB_RESETCONTENT,0,0);
@@ -245,48 +265,35 @@ void syncControls(){
  SendDlgItemMessageW(library,bodyStatisticsId,BM_SETCHECK,a.showBodyStatistics?BST_CHECKED:BST_UNCHECKED,0);
  EnableWindow(GetDlgItem(library,bodyStatisticsId),a.random||bodyFacts(a.scene)!=nullptr);
 } 
-// Both entry points share the catalog and keep imported video available to return to.
-bool selectVisualization(int choice){
+// Library, tray and shell commands use the same per-display transition.
+bool selectVisualization(int choice,const std::wstring& displayId=L""){
  {std::lock_guard lock(stateMutex);
   if(surfaces.empty()||choice<0||choice>=int(std::size(visualizations)))return false;
-  auto& a=selected();auto scene=visualizations[choice].scene;
+  auto surface=displayId.empty()?&selectedSurface():nullptr;
+  if(!displayId.empty())for(auto& s:surfaces)if(s.monitor.id==displayId)surface=&s;
+  if(!surface)return false;
+  auto assignment=std::find_if(settings.displays.begin(),settings.displays.end(),[&](const auto& item){return item.first==surface->monitor.id;});
+  if(assignment==settings.displays.end()){settings.displays.emplace_back(surface->monitor.id,Assignment{});assignment=std::prev(settings.displays.end());}
+  auto& a=assignment->second;auto scene=visualizations[choice].scene;
   if(scene==Scene::Video&&a.video.empty())return false;
   a.random=isRandomChoice(choice);
   if(a.random)a.randomPool=choice==solarRandomChoice?RandomPool::SolarSystem:RandomPool::All;
   if(!a.random)a.scene=scene;
-  selectedSurface().pendingVideoSpeed.reset();selectedSurface().videoMessage.clear();
-  auto& cycle=selectedSurface().randomCycle;cycle.reset();if(a.random)cycle.advance(a,0,true);
+  surface->pendingVideoSpeed.reset();surface->videoMessage.clear();
+  auto& cycle=surface->randomCycle;cycle.reset();if(a.random)cycle.advance(a,0,true);
   requestSave();
  }
  syncControls();return true;
 }
-HMENU visualizationMenu(){
- HMENU menu=CreatePopupMenu();std::lock_guard lock(stateMutex);
- HMENU solar=CreatePopupMenu();
- auto appendChoice=[&](HMENU target,size_t i,const wchar_t* name){
-  bool available=!surfaces.empty();
-  auto scene=visualizations[i].scene;
-  if(available&&scene==Scene::Video&&selected().video.empty())return;
-  UINT flags=MF_OWNERDRAW|(available?0:MF_GRAYED);
-  if(available&&(selected().random?int(i)==randomChoiceFor(selected()):(!isRandomChoice(int(i))&&selected().scene==scene)))flags|=MF_CHECKED;
-  AppendMenuW(target,flags,visualizationMenuBase+i,name);
- };
- appendChoice(solar,solarRandomChoice,L"Random");
- AppendMenuW(solar,MF_SEPARATOR,0,nullptr);
- constexpr Scene solarOrder[]={Scene::Sun,Scene::Mercury,Scene::Venus,Scene::Earth,Scene::Moon,Scene::Mars,Scene::Jupiter,Scene::Saturn,Scene::Uranus,Scene::Neptune,Scene::Pluto};
- for(auto scene:solarOrder)for(size_t i=0;i<std::size(visualizations);i++)if(visualizations[i].scene==scene)appendChoice(solar,i,visualizations[i].name);
- for(size_t i=0;i<std::size(visualizations);i++){
-  if(bodyFacts(visualizations[i].scene)||int(i)==solarRandomChoice)continue;
-  appendChoice(menu,i,visualizations[i].name);
-  if(visualizations[i].scene==Scene::Orbit){
-   UINT flags=MF_POPUP|MF_OWNERDRAW;
-   if(surfaces.empty())flags|=MF_GRAYED;
-   else if(selected().random?selected().randomPool==RandomPool::SolarSystem:bodyFacts(selected().scene)!=nullptr)flags|=MF_CHECKED;
-   AppendMenuW(menu,flags,reinterpret_cast<UINT_PTR>(solar),L"Solar System");
-  }
+HMENU makeTrayMenu(const std::vector<shellmenu::Entry>& values,std::vector<std::wstring>& commands){
+ HMENU menu=CreatePopupMenu();
+ for(const auto& e:values){
+  if(e.separator()){AppendMenuW(menu,MF_SEPARATOR,0,nullptr);continue;}
+  UINT flags=MF_OWNERDRAW|(e.checked?MF_CHECKED:0)|(e.enabled?0:MF_GRAYED);
+  if(!e.children.empty())AppendMenuW(menu,flags|MF_POPUP,reinterpret_cast<UINT_PTR>(makeTrayMenu(e.children,commands)),e.title.c_str());
+  else {commands.push_back(e.id);AppendMenuW(menu,flags,commands.size(),e.title.c_str());}
  }
  MENUINFO info{sizeof(info),MIM_BACKGROUND|MIM_APPLYTOSUBMENUS};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);return menu;
-
 }
 void advanceRandomVisualizations(uint64_t elapsed){
  bool changed=false;
@@ -621,7 +628,7 @@ void showLibrary(){
  control(L"BUTTON",L"Pause on battery",BS_AUTOCHECKBOX|WS_TABSTOP,30,631,230,28,batteryId);
  control(L"STATIC",L"Performance will appear during playback.",SS_NOPREFIX,30,668,690,48,performanceStatusId);
  addingAdvanced=false;addingFooter=true;
- control(L"BUTTON",L"Apply to all displays",WS_TABSTOP,30,330,170,36,applyAllId);control(L"BUTTON",L"Pause",WS_TABSTOP,210,330,130,36,pauseId);control(L"BUTTON",L"Retry now",WS_TABSTOP,350,330,190,36,retryId);control(L"BUTTON",L"Exit Worlds",WS_TABSTOP,550,330,170,36,communityId);
+ control(L"BUTTON",L"Apply to all displays",WS_TABSTOP,30,330,170,36,applyAllId);control(L"BUTTON",L"Pause",WS_TABSTOP,210,330,130,36,pauseId);control(L"BUTTON",L"Retry now",WS_TABSTOP,350,330,190,36,retryId);control(L"BUTTON",L"Exit Voltura Worlds",WS_TABSTOP,550,330,170,36,communityId);
  statusLabel=control(L"STATIC",L"",0,30,386,690,55,0);addingFooter=false;syncControls();resizeLibrary();ShowWindow(library,SW_SHOW);SetForegroundWindow(library);
  }catch(...){DestroyWindow(library);library=statusLabel=nullptr;layoutItems.clear();addingAdvanced=addingFooter=layingOut=false;audioDevices.clear();throw;}
 }
@@ -675,6 +682,19 @@ void prepareTrayMenu(HWND owner,POINT point){
  menuDpi=GetDpiForWindow(owner);if(!menuDpi)menuDpi=GetDpiForSystem();
  menuFont=CreateFontW(-MulDiv(16,menuDpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
 }
+void invokeMenuCommand(const std::wstring& command,const std::wstring& displayId){
+ if(!shellmenu::validCommand(command))return;
+ if(command==L"open"){showLibrary();return;}
+ if(command==L"exit"){DestroyWindow(controller);return;}
+ if(command==L"restart-update"){if(updates.ready()){restartForUpdate=true;DestroyWindow(controller);}return;}
+ if(command==L"pause"||command==L"resume"){{std::lock_guard lock(stateMutex);pauseState.manual=command==L"pause";}syncControls();return;}
+ if(command==L"automatic-on"||command==L"automatic-off"){
+  bool next=command==L"automatic-on";wu::setEnabled(next);automaticUpdates=next;
+  if(!next)updates.cancel();else nextUpdateCheck=GetTickCount64()+5000;syncControls();return;
+ }
+ if(displayId.empty())return;
+ for(size_t i=0;i<std::size(visualizations);i++)if(command==visualizations[i].id){selectVisualization(int(i),displayId);return;}
+}
 LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  try{
  if(taskbarCreated&&msg==taskbarCreated){addTray();if(!previewMode)createSurfaces();return 0;}
@@ -687,7 +707,25 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(!path||path[length-1]!=0||wcsnlen_s(path,length)!=length-1)return FALSE;
   importWorld(std::filesystem::path(path));return TRUE;
  }
- case trayMessage:if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){POINT point{};GetCursorPos(&point);prepareTrayMenu(hwnd,point);HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_OWNERDRAW,1,L"Open Worlds");AppendMenuW(menu,MF_POPUP|MF_OWNERDRAW,reinterpret_cast<UINT_PTR>(visualizationMenu()),L"Visualizations");AppendMenuW(menu,MF_OWNERDRAW,2,pauseState.manual?L"Resume":L"Pause");AppendMenuW(menu,MF_OWNERDRAW|(automaticUpdates?MF_CHECKED:0),4,L"Automatic updates");if(updates.ready())AppendMenuW(menu,MF_OWNERDRAW,5,L"Restart to update");AppendMenuW(menu,MF_OWNERDRAW,3,L"Exit Worlds");MENUINFO info{sizeof(info),MIM_BACKGROUND};info.hbrBack=ui::surfaceBrush;SetMenuInfo(menu,&info);SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,point.x,point.y,0,hwnd,nullptr);if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;if(cmd==1)showLibrary();if(cmd==2){std::lock_guard lock(stateMutex);pauseState.manual=!pauseState.manual;}if(cmd==3)DestroyWindow(hwnd);if(cmd==4){bool next=!automaticUpdates;wu::setEnabled(next);automaticUpdates=next;if(!next)updates.cancel();else nextUpdateCheck=GetTickCount64()+5000;}if(cmd==5&&updates.ready()){restartForUpdate=true;DestroyWindow(hwnd);}if(cmd>=visualizationMenuBase&&cmd<visualizationMenuBase+int(std::size(visualizations)))selectVisualization(cmd-visualizationMenuBase);}return 0;
+ case shellmenu::invokeMessage:{
+  // Payloads live in the private server queue, never in a window-message pointer.
+  if(auto request=desktopMenu.takeRequest())invokeMenuCommand(request->command,request->displayId);
+  return 0;
+ }
+ case trayMessage:
+  if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();
+  else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){
+   POINT point{};GetCursorPos(&point);prepareTrayMenu(hwnd,point);
+   shellmenu::State state;std::wstring displayId;
+   {std::lock_guard lock(stateMutex);state=currentMenuState();if(!surfaces.empty())displayId=selectedSurface().monitor.id;}
+   const shellmenu::DisplayState* display=nullptr;for(DWORD i=0;i<state.displayCount;i++)if(displayId==state.displays[i].id)display=&state.displays[i];
+   auto values=shellmenu::entries(&state,display);std::vector<std::wstring> commands;HMENU menu=makeTrayMenu(values,commands);
+   SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());
+   int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,point.x,point.y,0,hwnd,nullptr);
+   if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;
+   if(cmd>0&&size_t(cmd)<=commands.size())invokeMenuCommand(commands[cmd-1],displayId);
+  }
+  return 0;
  case errorMessage:syncControls();return 0;
  case renderStatusMessage:if(unsigned(l)==renderGeneration){{std::lock_guard lock(stateMutex);renderingProblem=renderSetupFailed||std::any_of(surfaces.begin(),surfaces.end(),[](const auto& s){return s.renderingFailed;});}syncControls();}return 0;
  case WM_MEASUREITEM:{auto d=reinterpret_cast<MEASUREITEMSTRUCT*>(l);d->itemWidth=MulDiv(230,menuDpi,96);d->itemHeight=MulDiv(36,menuDpi,96);return TRUE;}
@@ -721,7 +759,7 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  case WM_QUERYENDSESSION:sessionEnding=true;updates.sessionEnd();return TRUE;
  case WM_ENDSESSION:sessionEnding=w!=FALSE;if(w){updates.sessionEnd();DestroyWindow(hwnd);}else{updates.cancel();nextUpdateCheck=GetTickCount64()+5000;}return 0;
  case WM_CLOSE:DestroyWindow(hwnd);return 0;
- case WM_DESTROY:{updates.close(automaticUpdates&&!sessionEnding,restartForUpdate);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);PostQuitMessage(0);}return 0;
+ case WM_DESTROY:{desktopMenu.stop();updates.close(automaticUpdates&&!sessionEnding,restartForUpdate);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);PostQuitMessage(0);}return 0;
  }
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
@@ -985,6 +1023,7 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
   bool backgroundLaunch=std::find(args.begin(),args.end(),L"--wallpaper")!=args.end();
   if(!backgroundLaunch||!importFile.empty())showLibrary();
   previewMode=std::find(args.begin(),args.end(),L"--preview")!=args.end();createSurfaces();
+  desktopMenu.start(controller);syncControls();
   saveThread=std::jthread([](std::stop_token stop){
    while(!stop.stop_requested()){
     try{
@@ -1010,6 +1049,6 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
   if(!importFile.empty())importWorld(importFile);
   MSG msg;while(GetMessageW(&msg,nullptr,0,0)>0){HWND root=GetAncestor(msg.hwnd,GA_ROOT);wchar_t name[64]{};GetClassNameW(root,name,64);if((!wcscmp(name,L"VolturaWorldImport")||!wcscmp(name,L"VolturaSavedPresets"))&&IsDialogMessageW(root,&msg))continue;if(library&&IsDialogMessageW(library,&msg))continue;TranslateMessage(&msg);DispatchMessageW(&msg);}if(powerNotify)UnregisterPowerSettingNotification(powerNotify);
  }catch(const std::exception& e){error(e);result=1;}
- renderThread.request_stop();if(renderThread.joinable())renderThread.join();running=false;saveCv.notify_all();if(saveThread.joinable())saveThread.join();closeWorldImports();audio.configure(false,{});for(auto& s:surfaces)if(IsWindow(s.hwnd))DestroyWindow(s.hwnd);if(library&&IsWindow(library))DestroyWindow(library);if(font)DeleteObject(font);if(headingFont)DeleteObject(headingFont);if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return result;
+ desktopMenu.stop();renderThread.request_stop();if(renderThread.joinable())renderThread.join();running=false;saveCv.notify_all();if(saveThread.joinable())saveThread.join();closeWorldImports();audio.configure(false,{});for(auto& s:surfaces)if(IsWindow(s.hwnd))DestroyWindow(s.hwnd);if(library&&IsWindow(library))DestroyWindow(library);if(font)DeleteObject(font);if(headingFont)DeleteObject(headingFont);if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return result;
 }
 

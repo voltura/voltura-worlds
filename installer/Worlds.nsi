@@ -4,6 +4,7 @@ Unicode true
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
+!include "..\build\Release\shell\shell-files.nsh"
 !ifndef PRODUCT_KEY
  !define PRODUCT_KEY "VolturaWorlds"
 !endif
@@ -20,20 +21,20 @@ Unicode true
  !define PROFILE_DIR "$LOCALAPPDATA\Voltura\Worlds"
 !endif
 !ifndef OUTPUT
- !define OUTPUT "..\dist\VolturaWorlds-Setup-0.2.0-win-x64.exe"
+ !define OUTPUT "..\dist\VolturaWorlds-Setup-0.3.0-win-x64.exe"
 !endif
 Name "Voltura Worlds"
-Caption "Voltura Worlds 0.2.0 Setup"
+Caption "Voltura Worlds 0.3.0 Setup"
 BrandingText "Voltura AB"
 ManifestDPIAware true
 ManifestSupportedOS all
-VIProductVersion "0.2.0.0"
+VIProductVersion "0.3.0.0"
 VIAddVersionKey "ProductName" "Voltura Worlds"
 VIAddVersionKey "CompanyName" "Voltura AB"
 VIAddVersionKey "FileDescription" "Voltura Worlds Setup"
-VIAddVersionKey "FileVersion" "0.2.0"
-VIAddVersionKey "ProductVersion" "0.2.0"
-VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.2.0-win-x64.exe"
+VIAddVersionKey "FileVersion" "0.3.0"
+VIAddVersionKey "ProductVersion" "0.3.0"
+VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.3.0-win-x64.exe"
 VIAddVersionKey "LegalCopyright" "Voltura AB"
 !define MUI_ICON "artwork\worlds.ico"
 !define MUI_UNICON "artwork\worlds.ico"
@@ -55,6 +56,12 @@ Var StartupEnabled
 Var AutomaticUpdate
 Var UpdateCancelName
 Var SetupMutex
+Var DesktopMenuCheckbox
+Var DesktopMenuEnabled
+Var CompactMenuCheckbox
+Var CompactMenuEnabled
+Var ShellPowerShell
+Var ShellArguments
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION LaunchWorlds
@@ -84,6 +91,16 @@ Function .onInit
   Abort
  ${EndIf}
  SetRegView 64
+ StrCpy $DesktopMenuEnabled ${BST_UNCHECKED}
+ StrCpy $CompactMenuEnabled ${BST_UNCHECKED}
+ ReadRegDWORD $0 HKCU "Software\Voltura\Worlds\DesktopMenu" "Enabled"
+ ${If} $0 == 1
+  StrCpy $DesktopMenuEnabled ${BST_CHECKED}
+ ${EndIf}
+ ReadRegDWORD $0 HKCU "Software\Voltura\Worlds\DesktopMenu" "CompactRequested"
+ ${If} $0 == 1
+  StrCpy $CompactMenuEnabled ${BST_CHECKED}
+ ${EndIf}
  System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\VolturaWorldsSetup") p.r0 ?e'
  Pop $1
  StrCpy $SetupMutex $0
@@ -169,10 +186,48 @@ Function OptionsPage
  ${NSD_CreateCheckbox} 0 48u 100% 16u "Start with Windows"
  Pop $StartupCheckbox
  ${NSD_SetState} $StartupCheckbox $StartupEnabled
+ ${NSD_CreateCheckbox} 0 76u 100% 16u "Add Voltura Worlds to desktop right-click menus"
+ Pop $DesktopMenuCheckbox
+ ${NSD_SetState} $DesktopMenuCheckbox $DesktopMenuEnabled
+ ${NSD_CreateCheckbox} 12u 100u 95% 16u "Also enable the Windows 11 compact menu"
+ Pop $CompactMenuCheckbox
+ ${NSD_SetState} $CompactMenuCheckbox $CompactMenuEnabled
+ !if ${SHELL_CAN_TRUST} == 0
+  EnableWindow $CompactMenuCheckbox 0
+ !endif
+ ${NSD_CreateLabel} 12u 120u 95% 40u "The classic menu needs no administrator access. The compact menu may ask once for administrator approval to trust Voltura's public signing certificate for this computer. App installation stays per-user."
+ Pop $0
  nsDialogs::Show
 FunctionEnd
 Function OptionsLeave
  ${NSD_GetState} $StartupCheckbox $StartupEnabled
+ ${NSD_GetState} $DesktopMenuCheckbox $DesktopMenuEnabled
+ ${NSD_GetState} $CompactMenuCheckbox $CompactMenuEnabled
+FunctionEnd
+Function RegisterDesktopMenus
+ StrCpy $ShellPowerShell "$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+ IfFileExists "$ShellPowerShell" +2 0
+  StrCpy $ShellPowerShell "$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+ ${If} $DesktopMenuEnabled == ${BST_CHECKED}
+  StrCpy $ShellArguments '-Action Enable'
+  ${If} $CompactMenuEnabled == ${BST_CHECKED}
+   StrCpy $ShellArguments '$ShellArguments -EnableCompact'
+   IfSilent no_machine_trust
+    StrCpy $ShellArguments '$ShellArguments -AllowMachineTrust'
+   no_machine_trust:
+  ${EndIf}
+ ${Else}
+  StrCpy $ShellArguments '-Action Disable'
+ ${EndIf}
+ nsExec::ExecToStack '$\"$ShellPowerShell$\" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $\"$INSTDIR\shell\register-shell.ps1$\" $ShellArguments -InstallRoot $\"$INSTDIR$\" -Quiet'
+ Pop $0
+ Pop $1
+ ${If} $0 != 0
+  DetailPrint "Desktop-menu setup returned $0. See %LOCALAPPDATA%\Voltura\Worlds\desktop-menu.log."
+  IfSilent menu_setup_done
+  MessageBox MB_OK|MB_ICONINFORMATION "Worlds is installed. Desktop-menu setup could not finish completely. The classic menu remains available if it registered successfully. See %LOCALAPPDATA%\Voltura\Worlds\desktop-menu.log for details."
+ ${EndIf}
+ menu_setup_done:
 FunctionEnd
 Section "Voltura Worlds"
  SetShellVarContext current
@@ -204,6 +259,20 @@ Section "Voltura Worlds"
  ${EndIf}
  worlds_replaced:
  Delete "$INSTDIR\VolturaWorlds.update-old.exe"
+ SetOutPath "$INSTDIR\shell\${SHELL_REVISION}"
+ File "..\build\Release\shell\${SHELL_REVISION}\VolturaWorldsShell.dll"
+ SetOutPath "$INSTDIR\shell"
+ File "..\build\Release\shell\register-shell.ps1"
+ File "..\build\Release\shell\verify-signature.ps1"
+ File "..\build\Release\shell\menu.json"
+ File "..\build\Release\shell\logo.png"
+ File "..\build\Release\shell\VolturaWorldsMenu.msix"
+ File "..\build\Release\shell\VolturaWorldsTrust.exe"
+ !if ${SHELL_CAN_TRUST} == 1
+  File "..\build\Release\shell\publisher.cer"
+ !endif
+ Call RegisterDesktopMenus
+ SetOutPath "$INSTDIR"
  File "..\LICENSE"
  File "..\THIRD-PARTY-NOTICES.md"
  SetOutPath "$INSTDIR\licenses"
@@ -285,6 +354,9 @@ Section "Voltura Worlds"
  File "..\assets\aurora\violet-silk-v1.png"
  File "..\assets\aurora\PROVENANCE.md"
  File "..\assets\aurora\approved-clean-v1.png"
+ SetOutPath "$INSTDIR\assets\forest-water"
+ File "..\assets\forest-water\environment.png"
+ File "..\assets\forest-water\ATTRIBUTION.md"
  SetOutPath "$INSTDIR\shaders"
  File "..\build\Release\shaders\*.cso"
  SetOutPath "$INSTDIR\D3D12"
@@ -302,7 +374,7 @@ Section "Voltura Worlds"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_KEY}"
  ${EndIf}
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayName" "Voltura Worlds"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.2.0"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.3.0"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "Publisher" "Voltura AB"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayIcon" "$INSTDIR\VolturaWorlds.exe"
@@ -329,6 +401,18 @@ Function un.onInit
 FunctionEnd
 Section "Uninstall"
  SetShellVarContext current
+ StrCpy $ShellPowerShell "$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+ IfFileExists "$ShellPowerShell" +2 0
+  StrCpy $ShellPowerShell "$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+ nsExec::ExecToStack '$\"$ShellPowerShell$\" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $\"$INSTDIR\shell\register-shell.ps1$\" -Action Disable -InstallRoot $\"$INSTDIR$\" -Quiet'
+ Pop $0
+ Pop $1
+ ${If} $0 != 0
+  DetailPrint "Desktop-menu removal returned $0. See %LOCALAPPDATA%\Voltura\Worlds\desktop-menu.log."
+ ${EndIf}
+ # NSIS owns this fixed, installation-relative directory. Locked DLLs remain
+ # until Explorer releases them; do not terminate Explorer or schedule a reboot.
+ RMDir /r "$INSTDIR\shell"
  Delete "$INSTDIR\VolturaWorlds.exe"
  Delete "$INSTDIR\LICENSE"
  Delete "$INSTDIR\THIRD-PARTY-NOTICES.md"
@@ -415,6 +499,9 @@ Section "Uninstall"
  Delete "$INSTDIR\assets\aurora\PROVENANCE.md"
  Delete "$INSTDIR\assets\aurora\approved-clean-v1.png"
  RMDir "$INSTDIR\assets\aurora"
+ Delete "$INSTDIR\assets\forest-water\environment.png"
+ Delete "$INSTDIR\assets\forest-water\ATTRIBUTION.md"
+ RMDir "$INSTDIR\assets\forest-water"
  RMDir "$INSTDIR\assets"
  Delete "$INSTDIR\shaders\*.cso"
  RMDir "$INSTDIR\shaders"

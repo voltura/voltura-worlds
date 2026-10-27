@@ -1,0 +1,4 @@
+LIBRARY VolturaWorldsShell
+EXPORTS
+ DllGetClassObject PRIVATE
+ DllCanUnloadNow PRIVATE

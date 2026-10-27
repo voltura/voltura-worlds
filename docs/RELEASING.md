@@ -26,6 +26,8 @@ Authenticode signing and timestamp verification are handled by the signing scrip
 
 ## 3. Publish the accepted result
 
+Desktop-menu packaging also signs the shell DLL, the sparse identity package and the optional certificate-trust helper. Keep the package Publisher matched to the configured signing certificate and include only the public certificate. The main installer stays per-user; only the separately selected trust helper requests elevation. Silent updates must never invoke it. See [desktop-menu installation](USING.md#desktop-right-click-menus). Use the SDK's package-signature verification; do not add release checksum files.
+
 Publish when authorized by the user. Upload the signed installer and release manifest. GitHub automatically supplies the uploaded asset's `sha256:` digest; the updater compares its download against that digest and verifies its signature and product/version identity. No separate checksum file, compatibility path or manual checksum comparison is required.
 
 Regenerate previews/posters only for changed visuals, then update relevant site content and download links following [website maintenance](PAGES.md). Check the published release metadata and changed site content after propagation. Do not add repeated full downloads or unrelated media review as routine release gates.

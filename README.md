@@ -8,9 +8,9 @@
 
 ## Worlds and desktop controls
 
-Choose from **22 built-in Worlds**, independently on each display:
+Choose from **23 built-in Worlds**, independently on each display:
 
-- **Moving artwork:** Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal and Ripples.
+- **Moving artwork:** Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples and Forest Water.
 - **Solar System:** Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun.
 
 Each World has palettes, brightness and movement controls, scene-specific adjustments and optional Gentle or Expressive audio reaction. Playback analysis stays on your PC; audio is not recorded or uploaded. Solar System scenes combine observational imagery and artistic rendering; [source notices](THIRD-PARTY-NOTICES.md) explain their limits.
@@ -22,19 +22,19 @@ Each World has palettes, brightness and movement controls, scene-specific adjust
 - **Output: Auto** uses HDR for built-in Worlds when Windows HDR is enabled and supported; **SDR** keeps SDR output. Worlds does not change Windows display settings.
 - **Import video…** accepts personal SDR videos supported by installed Windows decoders. H.264 MP4 is the baseline; Fill/Fit, crop positioning and 0.25x–2x playback speed are available. Playback loops silently.
 - **Presets…** saves named whole-desktop configurations and exports portable `.world` packages with required videos and reviewed display mapping.
-- Playback pauses on battery by default, for fully covered displays, lock, sleep and remote sessions. **Off** reveals your Windows wallpaper; **Exit Worlds** stops the app. Closing the library keeps it running.
+- Playback pauses on battery by default, for fully covered displays, lock, sleep and remote sessions. **Off** reveals your Windows wallpaper; **Exit Voltura Worlds** stops the app. Closing the library keeps it running.
 
 See [Using Worlds](docs/USING.md) for the full guide and [documentation](docs/README.md) for technical references.
 
 ## Current release
 
-**Version 0.2.0** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.2.0/VolturaWorlds-Setup-0.2.0-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.2.0). Includes all **22 Worlds** and personal MP4 video wallpapers. Setup requires no administrator access. GitHub's source ZIP does not contain a built app.
+**Version 0.3.0** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.3.0/VolturaWorlds-Setup-0.3.0-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.3.0). Includes all **23 Worlds** and personal MP4 video wallpapers. Setup runs for your account. The optional Windows 11 compact desktop menu can request administrator approval to trust the public signing certificate. GitHub's source ZIP does not contain a built app.
 
 Pluto includes the original New Horizons heart region and artistically reconstructed far-side and southern terrain. Reconstructed detail is not additional spacecraft measurement. See [Pluto sources and limitations](assets/pluto/ATTRIBUTION.md).
 
 Run the installer to upgrade. Existing settings, imported videos and startup preferences are retained.
 
-Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
+Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Voltura Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
 
 ## Build and run
 
@@ -53,7 +53,7 @@ Build compiles the application without automated tests. Development uses code re
 ./scripts/package.ps1 -SkipBuild
 ```
 
-Packaging does not run the installer. See [Using Worlds](docs/USING.md) for installation, local settings, playback and signing details. Closing the library keeps Worlds running; use **Exit Worlds** in the tray menu to quit.
+Packaging does not run the installer. See [Using Worlds](docs/USING.md) for installation, local settings, playback and signing details. Closing the library keeps Worlds running; use **Exit Voltura Worlds** in the tray menu to quit.
 
 ## Product site
 
