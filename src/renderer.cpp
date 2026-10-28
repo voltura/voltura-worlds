@@ -24,9 +24,22 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  context_=context?std::move(context):GpuContext::acquire({},debug);
  if(!context_->factory||!context_->factory->IsCurrent()){ComPtr<IDXGIFactory6> refreshed;check(CreateDXGIFactory2(0,IID_PPV_ARGS(&refreshed)),"Refresh DXGI factory");context_->factory=refreshed;}
  factory_=context_->factory;device_=context_->device;queue_=context_->queue;adapterName_=context_->adapterName;
+ composedDesktop_=(GetWindowLongPtrW(hwnd,GWL_STYLE)&WS_CHILD)!=0&&GetEnvironmentVariableW(L"VOLTURA_WORLDS_DIRECT_PRESENTATION",nullptr,0)==0;
+ if(composedDesktop_){
+  IUnknown* queues[]={queue_.Get()};
+  check(D3D11On12CreateDevice(device_.Get(),D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,queues,1,0,&compositionDevice11_,&compositionContext11_,nullptr),"Create desktop composition bridge");
+  check(compositionDevice11_.As(&compositionBridge_),"Query desktop composition bridge");
+  ComPtr<IDXGIDevice> dxgi;check(compositionDevice11_.As(&dxgi),"Query composition device");
+  check(DCompositionCreateDevice(dxgi.Get(),IID_PPV_ARGS(&compositionDevice_)),"Create desktop compositor");
+  check(compositionDevice_->CreateTargetForHwnd(hwnd,FALSE,&compositionTarget_),"Create desktop composition target");
+  check(compositionDevice_->CreateVisual(&compositionVisual_),"Create desktop visual");
+  check(compositionTarget_->SetRoot(compositionVisual_.Get()),"Set desktop visual");
+  makeCompositionSurface(output_.format());
+ }else{
  DXGI_SWAP_CHAIN_DESC1 sd{};sd.Width=w;sd.Height=h;sd.Format=DXGI_FORMAT_R8G8B8A8_UNORM;sd.SampleDesc.Count=1;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;sd.BufferCount=2;sd.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;sd.Scaling=DXGI_SCALING_STRETCH;sd.Flags=DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
  ComPtr<IDXGISwapChain1> sw;check(factory_->CreateSwapChainForHwnd(queue_.Get(),hwnd,&sd,nullptr,nullptr,&sw),"Create wallpaper swap chain");check(sw.As(&swap_),"Query swap chain");factory_->MakeWindowAssociation(hwnd,DXGI_MWA_NO_ALT_ENTER);check(swap_->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709),"Set SDR color space");swap_->SetMaximumFrameLatency(1);latency_=swap_->GetFrameLatencyWaitableObject();
- D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=6;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
+ }
+ D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=7;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_DSV;hd.NumDescriptors=2;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&dsv_)),"Create depth views");
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=426;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  check(device_->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence_)),"Create fence");event_=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!event_)throw std::runtime_error("Cannot create GPU wait event");
@@ -79,6 +92,8 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  pipeline(L"forest_water.cso",false,false,forestWater_);
  pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);
  pipeline(L"tropical_island.cso",false,false,tropicalIsland_);
+ pipeline(L"tropical_island_coast.cso",false,false,islandCoastPipeline_);
+ pipeline(L"tropical_island_composite.cso",false,false,islandComposite_);
  const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"plastic_metal.cso",L"ripples.cso"};
  for(unsigned i=0;i<proceduralWorlds_.size();i++)pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);
  auto computePipeline=[&](const wchar_t* file,ComPtr<ID3D12PipelineState>& output){
@@ -93,8 +108,61 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  nullFine={};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;nullFine.Buffer.NumElements=1;nullFine.Buffer.StructureByteStride=8;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(381));
  setupHandles.complete=true;
 }
-Renderer::~Renderer(){try{idle();}catch(...){}if(event_)CloseHandle(event_);if(latency_)CloseHandle(latency_);}
+Renderer::~Renderer(){
+ try{if(compositionTarget_){compositionTarget_->SetRoot(nullptr);compositionDevice_->Commit();}if(compositionContext11_){compositionContext11_->ClearState();compositionContext11_->Flush();}idle();}catch(...){}
+ if(event_)CloseHandle(event_);if(latency_)CloseHandle(latency_);
+}
+void Renderer::releasePresentationBuffers(){
+ for(auto& source:compositionSources_)source.Reset();
+ if(compositionContext11_){compositionContext11_->ClearState();compositionContext11_->Flush();}
+ for(auto& buffer:buffers_)buffer.Reset();
+}
+void Renderer::makeCompositionSurface(DXGI_FORMAT format){
+ ComPtr<IDCompositionSurface> surface;
+ check(compositionDevice_->CreateSurface(width_,height_,format,DXGI_ALPHA_MODE_IGNORE,&surface),"Create desktop composition surface");
+ check(compositionVisual_->SetContent(surface.Get()),"Set desktop composition content");
+ RECT client{};GetClientRect(window_,&client);
+ D2D_MATRIX_3X2_F transform{float(std::max(1L,client.right))/width_,0,0,float(std::max(1L,client.bottom))/height_,0,0};
+ check(compositionVisual_->SetTransform(transform),"Scale desktop composition content");
+ // Publish the replacement and its transform with the first completed frame.
+ // Committing an empty surface here would briefly replace the visible image.
+ compositionSurface_=std::move(surface);compositionIndex_=0;
+}
+void Renderer::makePresentationBuffers(DXGI_FORMAT format){
+ auto view=rtv_->GetCPUDescriptorHandleForHeapStart();
+ for(unsigned i=0;i<2;i++){
+  if(composedDesktop_){
+   D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=width_;desc.Height=height_;
+   desc.DepthOrArraySize=1;desc.MipLevels=1;desc.Format=format;desc.SampleDesc.Count=1;desc.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+   auto properties=heap(D3D12_HEAP_TYPE_DEFAULT);
+   check(device_->CreateCommittedResource(&properties,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_COMMON,nullptr,IID_PPV_ARGS(&buffers_[i])),"Create desktop frame");
+   D3D11_RESOURCE_FLAGS flags{};flags.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+   check(compositionBridge_->CreateWrappedResource(buffers_[i].Get(),&flags,D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_COMMON,IID_PPV_ARGS(&compositionSources_[i])),"Wrap desktop frame");
+  }else check(swap_->GetBuffer(i,IID_PPV_ARGS(&buffers_[i])),"Get output buffer");
+  device_->CreateRenderTargetView(buffers_[i].Get(),nullptr,view);view.ptr+=rtvStride_;
+ }
+}
 bool Renderer::tryPresent(){
+ if(composedDesktop_){
+  ComPtr<ID3D11Texture2D> destination;POINT offset{};
+  check(compositionSurface_->BeginDraw(nullptr,IID_PPV_ARGS(&destination),&offset),"Begin desktop composition frame");
+  // Obtain the compositor's destination before starting the GPU timestamps.
+  // Waiting for that surface after submission would count CPU/compositor idle
+  // time as GPU work and make the adaptive budget reduce cadence prematurely.
+  ID3D12CommandList* rendered[]={list_.Get()};queue_->ExecuteCommandLists(1,rendered);
+  auto source=compositionSources_[frameIndex_].Get();compositionBridge_->AcquireWrappedResources(&source,1);
+  D3D11_BOX area{0,0,0,width_,height_,1};
+  compositionContext11_->CopySubresourceRegion(destination.Get(),0,offset.x,offset.y,0,source,0,&area);
+  compositionBridge_->ReleaseWrappedResources(&source,1);compositionContext11_->Flush();
+  auto ended=compositionSurface_->EndDraw();destination.Reset();check(ended,"End desktop composition frame");
+  // Include the presentation copy in the GPU budget used for adaptation.
+  check(list_->Reset(frames_[frameIndex_].allocator.Get(),nullptr),"Begin presentation timing");resolveFrameTiming();
+  check(list_->Close(),"Close presentation timing");ID3D12CommandList* timing[]={list_.Get()};queue_->ExecuteCommandLists(1,timing);
+  check(compositionDevice_->Commit(),"Commit desktop composition frame");
+  check(queue_->Signal(fence_.Get(),++fenceValue_),"Fence desktop composition copy");frames_[frameIndex_].fence=fenceValue_;
+  compositionIndex_=(frameIndex_+1)%2;return true;
+ }
+
  // Keep wallpaper presentation synchronized with the desktop refresh. Retain
  // nonblocking submission so one display cannot stall the other displays.
  auto result=swap_->Present(1,DXGI_PRESENT_DO_NOT_WAIT);
@@ -104,7 +172,7 @@ bool Renderer::tryPresent(){
 bool Renderer::ready(){
  if(context_->removed())throw std::runtime_error("Graphics device removed");
  if(pendingPresent_){tryPresent();return false;}
- auto index=swap_->GetCurrentBackBufferIndex();if(frames_[index].fence&&fence_->GetCompletedValue()<frames_[index].fence)return false;
+ auto index=composedDesktop_?compositionIndex_:swap_->GetCurrentBackBufferIndex();if(frames_[index].fence&&fence_->GetCompletedValue()<frames_[index].fence)return false;
  return !latency_||WaitForSingleObject(latency_,0)==WAIT_OBJECT_0;
 }
 ID3D12Resource* Renderer::textureIdentity(unsigned slot)const{auto it=assetSlots_.find(slot);return it==assetSlots_.end()?nullptr:it->second;}
@@ -139,7 +207,7 @@ void Renderer::validateDebugMessages(){
  messages->ClearStoredMessages();
 }
 void Renderer::targets(){
- auto handle=rtv_->GetCPUDescriptorHandleForHeapStart();for(auto& b:buffers_){check(swap_->GetBuffer((UINT)(&b-buffers_.data()),IID_PPV_ARGS(&b)),"Get back buffer");device_->CreateRenderTargetView(b.Get(),nullptr,handle);handle.ptr+=rtvStride_;}
+ makePresentationBuffers(output_.format());
  D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
  auto h=heap(D3D12_HEAP_TYPE_DEFAULT);
  check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,nullptr,IID_PPV_ARGS(&hdr_)),"Create HDR scene target");hdr_->SetName(L"Linear HDR artwork");
@@ -153,6 +221,25 @@ void Renderer::targets(){
  }
  allocationBytes_=uint64_t(width_)*height_*20;
 }
+void Renderer::makeIslandCoastTarget(const Assignment& assignment,const FrameData& data){
+ if(assignment.performance.quality==Quality::High){
+  if(islandCoast_){idle();islandCoast_.Reset();islandCoastBytes_=0;islandCoastWidth_=islandCoastHeight_=0;}
+  return;
+ }
+ unsigned ceiling=assignment.performance.quality==Quality::Eco||data.spare[0]<.5f?540:data.spare[0]<1.5f?720:1080;
+ double scale=std::min({1.,double(ceiling)*16./9./width_,double(ceiling)/height_});
+ unsigned w=std::max(1u,unsigned(std::lround(width_*scale))),h=std::max(1u,unsigned(std::lround(height_*scale)));
+ if(islandCoast_&&w==islandCoastWidth_&&h==islandCoastHeight_)return;
+ idle();islandCoast_.Reset();islandCoastBytes_=0;
+ D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=w;desc.Height=h;
+ desc.DepthOrArraySize=1;desc.MipLevels=1;desc.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;desc.SampleDesc.Count=1;desc.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+ auto properties=heap(D3D12_HEAP_TYPE_DEFAULT);
+ check(device_->CreateCommittedResource(&properties,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,nullptr,IID_PPV_ARGS(&islandCoast_)),"Create coast target");
+ islandCoast_->SetName(L"Coast lighting");islandCoastWidth_=w;islandCoastHeight_=h;islandCoastBytes_=device_->GetResourceAllocationInfo(0,1,&desc).SizeInBytes;
+ auto view=rtv_->GetCPUDescriptorHandleForHeapStart();view.ptr+=6*rtvStride_;device_->CreateRenderTargetView(islandCoast_.Get(),nullptr,view);
+ D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=desc.Format;srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;srv.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(islandCoast_.Get(),&srv,cpu(425));
+}
 void Renderer::makeDepthTarget(){
  if(depth_)return;
  D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_D32_FLOAT;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
@@ -160,7 +247,7 @@ void Renderer::makeDepthTarget(){
  check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_DEPTH_WRITE,&clear,IID_PPV_ARGS(&depth_)),"Create depth target");device_->CreateDepthStencilView(depth_.Get(),nullptr,dsv_->GetCPUDescriptorHandleForHeapStart());
  depthTargetBytes_=device_->GetResourceAllocationInfo(0,1,&d).SizeInBytes;
 }
-void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();for(auto& b:buffers_)b.Reset();depth_.Reset();depthTargetBytes_=0;hdr_.Reset();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;for(auto& b:bloomTargets_)b.Reset();auto resizeOutput=[&](){check(swap_->ResizeBuffers(2,w,h,output_.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Resize wallpaper");check(swap_->SetColorSpace1(output_.colorSpace()),"Restore output color space");};
+void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();releasePresentationBuffers();depth_.Reset();depthTargetBytes_=0;hdr_.Reset();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;for(auto& b:bloomTargets_)b.Reset();auto resizeOutput=[&](){if(composedDesktop_){auto oldWidth=width_,oldHeight=height_;width_=w;height_=h;try{makeCompositionSurface(output_.format());}catch(...){width_=oldWidth;height_=oldHeight;throw;}return;}check(swap_->ResizeBuffers(2,w,h,output_.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Resize wallpaper");check(swap_->SetColorSpace1(output_.colorSpace()),"Restore output color space");};
  try{resizeOutput();}catch(...){if(context_->removed()||!output_.hdr)throw;output_.hdr=false;output_.reason=L"HDR presentation unavailable";resizeOutput();}
  width_=w;height_=h;pendingPresent_=false;targets();}
 void Renderer::outputConstants(){float values[]={output_.hdr?1.f:0.f,output_.white/80.f,output_.peak/output_.white,0};list_->SetGraphicsRoot32BitConstants(5,4,values,0);}
@@ -169,16 +256,17 @@ bool Renderer::configureOutput(const OutputConfig& requested,bool retry){
  requestedOutput_=requested;outputConfigured_=true;OutputConfig next=requested;
  if(next.format()!=output_.format()){
   idle();pendingPresent_=false;
-  for(auto& b:buffers_)b.Reset();
+  releasePresentationBuffers();
   auto apply=[&](const OutputConfig& c){
-   for(auto& b:buffers_)b.Reset();
-   check(swap_->ResizeBuffers(2,width_,height_,c.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Change display output format");
-   UINT support=0;check(swap_->CheckColorSpaceSupport(c.colorSpace(),&support),"Check display color space");
-   if(!(support&DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))throw std::runtime_error("HDR presentation unavailable");
-   check(swap_->SetColorSpace1(c.colorSpace()),"Set display color space");
-   auto view=rtv_->GetCPUDescriptorHandleForHeapStart();for(unsigned i=0;i<2;i++){
-    check(swap_->GetBuffer(i,IID_PPV_ARGS(&buffers_[i])),"Get output buffer");device_->CreateRenderTargetView(buffers_[i].Get(),nullptr,view);view.ptr+=rtvStride_;
+   releasePresentationBuffers();
+   if(composedDesktop_)makeCompositionSurface(c.format());
+   else{
+    check(swap_->ResizeBuffers(2,width_,height_,c.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Change display output format");
+    UINT support=0;check(swap_->CheckColorSpaceSupport(c.colorSpace(),&support),"Check display color space");
+    if(!(support&DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))throw std::runtime_error("HDR presentation unavailable");
+    check(swap_->SetColorSpace1(c.colorSpace()),"Set display color space");
    }
+   makePresentationBuffers(c.format());
   };
   next=applyOutputWithFallback(next,apply,[&]{return context_->removed();});
  }
@@ -510,7 +598,7 @@ void Renderer::makeFluid(){
 }
 void Renderer::transition(ID3D12Resource* resource,D3D12_RESOURCE_STATES from,D3D12_RESOURCE_STATES to){D3D12_RESOURCE_BARRIER b{};b.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;b.Transition={resource,D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,from,to};list_->ResourceBarrier(1,&b);}
 void Renderer::begin(){
- frameIndex_=swap_->GetCurrentBackBufferIndex();auto& f=frames_[frameIndex_];wait(f.fence);
+ frameIndex_=composedDesktop_?compositionIndex_:swap_->GetCurrentBackBufferIndex();auto& f=frames_[frameIndex_];wait(f.fence);
  if(f.fence){
   uint64_t* times{};size_t base=frameIndex_*QueryStride;
   D3D12_RANGE range{base*sizeof(uint64_t),(base+QueryStride)*sizeof(uint64_t)};
@@ -536,10 +624,15 @@ unsigned Renderer::beginGpuStage(unsigned stage){
  list_->EndQuery(query_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frameIndex_*QueryStride+2+slot*2);return slot;
 }
 void Renderer::endGpuStage(unsigned slot){if(slot!=UINT_MAX)list_->EndQuery(query_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frameIndex_*QueryStride+3+slot*2);}
-void Renderer::submit(){
+void Renderer::resolveFrameTiming(){
  list_->EndQuery(query_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frameIndex_*QueryStride+1);
  list_->ResolveQueryData(query_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frameIndex_*QueryStride,2+stageCount_[frameIndex_]*2,queryReadback_.Get(),frameIndex_*QueryStride*sizeof(uint64_t));
- check(list_->Close(),"Close graphics list");ID3D12CommandList* lists[]={list_.Get()};queue_->ExecuteCommandLists(1,lists);check(queue_->Signal(fence_.Get(),++fenceValue_),"Submit graphics fence");frames_[frameIndex_].fence=fenceValue_;
+}
+void Renderer::submit(bool completeTiming){
+ if(completeTiming)resolveFrameTiming();
+ check(list_->Close(),"Close graphics list");
+ if(!completeTiming)return; // Desktop submission starts after BeginDraw.
+ ID3D12CommandList* lists[]={list_.Get()};queue_->ExecuteCommandLists(1,lists);check(queue_->Signal(fence_.Get(),++fenceValue_),"Submit graphics fence");frames_[frameIndex_].fence=fenceValue_;
 }
 void Renderer::advectCoordinates(FrameData& data,bool initialize){
  if(!detailCoordinates_)return;
@@ -792,7 +885,11 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
   list_->SetGraphicsRootSignature(root_.Get());list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->SetGraphicsRootDescriptorTable(2,gpu(240));list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);list_->SetPipelineState(videoPipeline_.Get());list_->DrawInstanced(3,1,0,0);
   transition(source,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_COMMON);
  }
- transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit();video_->consumed();if(present){if(nonblocking_)tryPresent();else check(swap_->Present(1,0),"Present video wallpaper");}
+ transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(!composedDesktop_||!present);
+ if(present){if(nonblocking_||composedDesktop_)tryPresent();else check(swap_->Present(1,0),"Present video wallpaper");}
+ // Desktop presentation submits the sampling commands inside tryPresent().
+ // Queue the decoder's reuse fence only after that GPU work is submitted.
+ video_->consumed();
 }
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Aurora&&auroraArtwork_){idle();releaseAsset(auroraArtwork_);}
@@ -812,7 +909,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   if(lastScene_==Scene::Sun){releaseTexture(sunImage_);releaseTexture(sunProminence_);}
   if(lastScene_==Scene::ForestWater)releaseTexture(forestReflection_);
   if(lastScene_==Scene::TropicalParadise)releaseTexture(tropicalArtwork_);
-  if(lastScene_==Scene::TropicalIsland){releaseTexture(islandArtwork_);releaseTexture(islandSand_);}
+  if(lastScene_==Scene::TropicalIsland){releaseTexture(islandArtwork_);releaseTexture(islandSand_);islandCoast_.Reset();islandCoastBytes_=0;islandCoastWidth_=islandCoastHeight_=0;}
   if(lastScene_==Scene::Mercury){releaseTexture(mercuryColor_);releaseTexture(mercuryNormal_);}
   if(lastScene_==Scene::Jupiter){releaseTexture(jupiterColor_);releaseTexture(jupiterAtmosphere_);}
   if(lastScene_==Scene::Moon){releaseTexture(moonColor_);releaseTexture(moonNormal_);releaseTexture(moonEarth_);}
@@ -830,7 +927,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Sun)loadSun();
  if(assignment.scene==Scene::ForestWater)loadForestWater();
  if(assignment.scene==Scene::TropicalParadise)loadTropicalParadise();
- if(assignment.scene==Scene::TropicalIsland)loadTropicalIsland();
+ if(assignment.scene==Scene::TropicalIsland){loadTropicalIsland();makeIslandCoastTarget(assignment,data);}
  if(assignment.scene==Scene::Mercury)loadMercury();
  if(assignment.scene==Scene::Jupiter)loadJupiter();
  if(assignment.scene==Scene::Moon)loadMoon();
@@ -863,7 +960,18 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  auto draw=[&](ID3D12PipelineState* state,float pass,unsigned count,unsigned instances=1){data.pass=pass;list_->SetPipelineState(state);list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->DrawInstanced(count,instances,0,0);};
  if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
- else if(assignment.scene==Scene::TropicalIsland){list_->SetGraphicsRootDescriptorTable(2,gpu(423));draw(tropicalIsland_.Get(),0,3);}
+ else if(assignment.scene==Scene::TropicalIsland){
+  list_->SetGraphicsRootDescriptorTable(2,gpu(423));
+  if(islandCoast_){
+   transition(islandCoast_.Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
+   auto coastView=rtv_->GetCPUDescriptorHandleForHeapStart();coastView.ptr+=6*rtvStride_;list_->OMSetRenderTargets(1,&coastView,FALSE,nullptr);
+   D3D12_VIEWPORT coastViewport{0,0,float(islandCoastWidth_),float(islandCoastHeight_),0,1};list_->RSSetViewports(1,&coastViewport);
+   auto coastData=data;coastData.width=float(islandCoastWidth_);coastData.height=float(islandCoastHeight_);coastData.spare[1]=float(width_);coastData.spare[2]=float(height_);
+   list_->SetPipelineState(islandCoastPipeline_.Get());list_->SetGraphicsRoot32BitConstants(0,32,&coastData,0);list_->DrawInstanced(3,1,0,0);
+   transition(islandCoast_.Get(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+   list_->OMSetRenderTargets(1,&rtv,FALSE,nullptr);list_->RSSetViewports(1,&vp);draw(islandComposite_.Get(),0,3);
+  }else draw(tropicalIsland_.Get(),0,3);
+ }
  else if(assignment.scene==Scene::TropicalParadise){list_->SetGraphicsRootDescriptorTable(2,gpu(420));draw(tropicalParadise_.Get(),0,3);}
  else if(assignment.scene==Scene::ForestWater){list_->SetGraphicsRootDescriptorTable(2,gpu(417));draw(forestWater_.Get(),0,3);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
@@ -907,7 +1015,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  outputConstants();list_->SetGraphicsRootDescriptorTable(2,gpu(66));draw(output_.hdr?postHdr_.Get():post_.Get(),assignment.scene==Scene::Orbit?1.f:0.f,3);
  drawBodyStatistics(assignment);
  endGpuStage(postTiming);
- transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit();if(present){if(nonblocking_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
+ transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(!composedDesktop_||!present);if(present){if(nonblocking_||composedDesktop_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
 }
 void Renderer::captureFluidFields(const std::filesystem::path& directory){
  if(!fluidReady_)throw std::runtime_error("Fluid diagnostics require an initialized Smoke scene");

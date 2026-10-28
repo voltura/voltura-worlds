@@ -3,6 +3,8 @@
 #include "output.h"
 #include "gpu_context.h"
 #include <d3d12.h>
+#include <d3d11on12.h>
+#include <dcomp.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <memory>
@@ -29,6 +31,7 @@ public:
  ID3D12PipelineState* outputPipelineIdentity()const{return output_.hdr?postHdr_.Get():post_.Get();}
  void setNonblocking(bool enabled){nonblocking_=enabled;}
  bool ready();
+ bool compositorPresentation()const{return composedDesktop_;}
  bool deviceRemoved()const{return context_->removed();}
  std::shared_ptr<GpuContext> context()const{return context_;}
  uint64_t mutableAllocations()const{return allocations()-assetBytes_;}
@@ -56,7 +59,7 @@ public:
  void setStageProfiling(bool enabled){stageProfiling_=enabled;}
  const std::array<double,14>& gpuStageMs()const{return gpuStageMs_;}
  uint64_t textureAllocations()const{return assetBytes_;}
- uint64_t allocations()const{return bodyStatisticsBytes_+uint64_t(width_)*height_*(output_.hdr?24:16)+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
+ uint64_t allocations()const{return bodyStatisticsBytes_+uint64_t(width_)*height_*(output_.hdr?24:16)+depthTargetBytes_+uint64_t((width_+3)/4)*((height_+3)/4)*16+assetBytes_+smokeTracerBytes_+pressureHierarchyBytes_+fineAtlasBytes_+orbitTargetBytes_+islandCoastBytes_+videoBytes_+(velocity_[0].resource?fluidBytes_:0);}
  unsigned gridSize()const{return grid_;}
  unsigned densityGridSize()const{return referenceDensityGrid_?referenceDensityGrid_:(grid_>96?192:grid_*2);}
  std::array<unsigned,3> densityDimensions()const{return wideDensity_?std::array<unsigned,3>{grid_*6,((grid_*27/8+3)/4)*4,grid_}:std::array<unsigned,3>{densityGridSize(),densityGridSize(),densityGridSize()};}
@@ -147,6 +150,18 @@ private:
  void outputConstants();
  bool nonblocking_=false,pendingPresent_=false;HANDLE latency_=nullptr;
  bool tryPresent();
+ void makePresentationBuffers(DXGI_FORMAT);
+ void releasePresentationBuffers();
+ void makeCompositionSurface(DXGI_FORMAT);
+ bool composedDesktop_=false;unsigned compositionIndex_=0;
+ ComPtr<ID3D11Device> compositionDevice11_;
+ ComPtr<ID3D11DeviceContext> compositionContext11_;
+ ComPtr<ID3D11On12Device> compositionBridge_;
+ ComPtr<IDCompositionDevice> compositionDevice_;
+ ComPtr<IDCompositionTarget> compositionTarget_;
+ ComPtr<IDCompositionVisual> compositionVisual_;
+ ComPtr<IDCompositionSurface> compositionSurface_;
+ std::array<ComPtr<ID3D11Resource>,2> compositionSources_;
  HWND window_{};unsigned width_=0,height_=0,frameIndex_=0,rtvStride_=0,descriptorStride_=0,grid_=48;
  std::wstring adapterName_;
  ComPtr<IDXGIFactory6> factory_;ComPtr<ID3D12Device> device_;ComPtr<ID3D12CommandQueue> queue_;
@@ -175,7 +190,9 @@ private:
  std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;bool starForeground_=false;
  ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
  ComPtr<ID3D12Resource> forestReflection_,tropicalArtwork_,islandArtwork_,islandSand_;
- ComPtr<ID3D12PipelineState> forestWater_,tropicalParadise_,tropicalIsland_;
+ ComPtr<ID3D12PipelineState> forestWater_,tropicalParadise_,tropicalIsland_,islandCoastPipeline_,islandComposite_;
+ ComPtr<ID3D12Resource> islandCoast_;unsigned islandCoastWidth_=0,islandCoastHeight_=0;uint64_t islandCoastBytes_=0;
+ void makeIslandCoastTarget(const Assignment&,const FrameData&);
  std::array<ComPtr<ID3D12PipelineState>,7> proceduralWorlds_;
  bool videoRateKnown_=false;double requestedVideoRate_=-1,acceptedVideoRate_=1;std::wstring videoRateMessage_;
  std::unique_ptr<VideoPlayer> video_;std::filesystem::path videoPath_;ID3D12Resource* videoView_{};uint64_t videoBytes_{};
@@ -184,7 +201,7 @@ private:
  unsigned v_=0,d_=0,p_=0;bool fluidReady_=false;Scene lastScene_=Scene::Aurora;
  ComPtr<ID3D12QueryHeap> query_;ComPtr<ID3D12Resource> queryReadback_;UINT64 frequency_=0;
  double gpuMs_=0;uint64_t allocationBytes_=0,fluidBytes_=0;
- void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadMercury();void loadSun();void loadForestWater();void loadTropicalParadise();void loadTropicalIsland();void loadPluto();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit();
+ void targets();void makeDepthTarget();void makeOrbitTargets();void makeFluid();void loadAurora();void loadPlanet();void loadJupiter();void loadSaturn();void loadMoon();void loadMars();void loadMercury();void loadSun();void loadForestWater();void loadTropicalParadise();void loadTropicalIsland();void loadPluto();void loadEarth();void loadStars(bool foreground=false);void loadDds(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned);void loadTexture(const std::filesystem::path&,ComPtr<ID3D12Resource>&,unsigned,unsigned,bool grayscale=false);void simulate(FrameData&);void wait(uint64_t);void submit(bool completeTiming=true);void resolveFrameTiming();
  static constexpr unsigned QueryStride=66;
  bool stageProfiling_=false;
  std::array<unsigned,2> stageCount_{};

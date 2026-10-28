@@ -1,6 +1,10 @@
 #include "common.hlsli"
 #include "tropical_island_masks.hlsli"
+#ifndef ISLAND_COAST_TEXTURE
 #include "tropical_island_ocean.hlsli"
+#else
+Texture2D<float4> coastTexture:register(t2);
+#endif
 Texture2D<float4> artwork:register(t0);
 Texture2D<float4> cleanSand:register(t1);
 SamplerState linearClamp:register(s0);
@@ -22,26 +26,33 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  fit/=max(1.,fit.x);
  float2 p=(uv-.5)*fit+.5;
  float t=time*movement;
- float phase=p.x<.5?0.:1.7;
- float gust=islandGust(t,phase);
- float2 leaf=float2(gust+.10*sin(t*1.71+p.x*43.+p.y*28.),.28*gust);
- float3 photo=artwork.SampleLevel(linearClamp,p+leaf*.0048*density*islandPalms(p),0).rgb;
- // Keep the existing photographic display exposure for the distant scenery.
- float3 c=-log(max(1.-min(photo,.98),.02));
  float coastMask=smoothstep(.5045,.507,p.y);
  // Preserve the rocky headland; all sea and the foreground beach are rebuilt.
  float bank=1.-smoothstep(.265,.29,p.x);
  coastMask*=1.-bank*(1.-smoothstep(.607-.28*p.x,.618-.28*p.x,p.y));
+ float3 c=0;
+ [branch]if(coastMask<1.) {
+  float phase=p.x<.5?0.:1.7;
+  float gust=islandGust(t,phase);
+  float2 leaf=float2(gust+.10*sin(t*1.71+p.x*43.+p.y*28.),.28*gust);
+  float3 photo=artwork.SampleLevel(linearClamp,p+leaf*.0048*density*islandPalms(p),0).rgb;
+  // Fully reconstructed coast pixels do not use the photographic layer.
+  c=-log(max(1.-min(photo,.98),.02));
+ }
  [branch]if(coastMask>.001) {
+#ifdef ISLAND_COAST_TEXTURE
+  float3 coast=coastTexture.SampleLevel(linearClamp,uv,0).rgb;
+#else
   float audio=saturate(reaction*(energy*.6+bass*.4))*step(.0001,movement)*step(.0001,flow);
   float strength=turbulence*(1.+audio*.18);
   float3 coast=coastRender(p,t*flow,strength);
+#endif
   // Shadows remain coupled to the palm gust on dry sand.
   float dry=islandDrySand(p);
   float projection=lerp(.6,1.3,saturate((p.y-.62)/.38));
   float shadowGust=islandGust(t,0.);
   float2 offset=float2(shadowGust*.0075,shadowGust*.0026)*density*projection;
-  coast*=lerp(1.,islandShadow(p+offset,1./float2(width,height)),dry);
+  [branch]if(dry>0.)coast*=lerp(1.,islandShadow(p+offset,1./float2(width,height)),dry);
   c=lerp(c,coast,coastMask);
  }
  if(palette>.5&&palette<1.5)c*=float3(1.065,1.015,.94);

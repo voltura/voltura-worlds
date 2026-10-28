@@ -125,6 +125,7 @@ float3 coastSand(float2 p,float footprint) {
  return float3(.76,.61,.42)*(1.12+.075*broad+grain*.11*fine);
 }
 float coastFoam(float2 p,float t,float strength,float depth,float footprint) {
+ [branch]if(depth>=1.20||depth<=.002||strength==0.)return 0.;
  float s=coastDistance(p),along=coastAlong(p);
  float travel=coastTravel(s),event=floor((t+travel)/6.7);
  float result=0.;

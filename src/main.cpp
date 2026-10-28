@@ -55,6 +55,16 @@ HICON trayIcon{};bool trayRegistered=false;
 std::vector<Surface> surfaces;std::vector<std::pair<std::wstring,std::wstring>> audioDevices;
 std::wstring selectedMonitorId;
 std::filesystem::path profile,exeDir;Settings settings;PauseState pauseState;
+bool renderDiagnostics=false;
+std::mutex renderDiagnosticMutex;
+void renderDiagnostic(const std::string& message){
+ if(!renderDiagnostics)return;
+ try{std::lock_guard lock(renderDiagnosticMutex);SYSTEMTIME now{};GetLocalTime(&now);
+  std::ofstream log(profile/L"render-diagnostics.log",std::ios::app);
+  log<<now.wHour<<":"<<now.wMinute<<":"<<now.wSecond<<"."<<now.wMilliseconds<<" "<<message<<"\n";
+ }catch(...){}
+}
+
 std::mutex stateMutex;std::condition_variable saveCv;std::jthread renderThread,saveThread;bool savePending=false;
 std::wstring lastError,settingsError,renderSetupError;bool previewMode=true,desktopConnectionProblem=false,renderingProblem=false,outputPresentationProblem=false,automated=false;std::atomic<bool> running{true};std::atomic<unsigned> outputRevision{0};
 UINT menuDpi=96;HFONT menuFont{};
@@ -338,6 +348,15 @@ void startRendering(){
   auto initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   try{
    if(FAILED(initialized))throw std::runtime_error("Cannot initialize rendering coordinator.");
+   auto needsRenderer=[](){
+    std::lock_guard lock(stateMutex);
+    for(const auto& surface:surfaces){auto a=assignmentFor(settings,surface.monitor.id);auto pause=pauseState;pause.covered=surface.covered;
+     if(a.scene!=Scene::Off&&!shouldPause(pause,settings.pauseBattery))return true;
+    }
+    return false;
+   };
+   while(!stop.stop_requested()&&!needsRenderer())std::this_thread::sleep_for(std::chrono::milliseconds(50));
+   if(!stop.stop_requested()){
    struct Group{std::shared_ptr<GpuContext> context;std::vector<size_t> indices;};std::vector<Group> groups;
    for(size_t i=0;i<surfaces.size();i++){
     auto context=GpuContext::acquire(surfaces[i].monitor.adapter);
@@ -358,7 +377,7 @@ void startRendering(){
      std::vector<std::unique_ptr<Renderer>> renderers(indices.size());std::vector<PerformanceState> performance(indices.size());
      std::vector<double> clocks(indices.size(),0),previous(indices.size(),0),retryAt(indices.size(),0),insetAt(indices.size(),0),outputAt(indices.size(),0);
      std::vector<OutputConfig> outputConfigs(indices.size());std::vector<OutputPreference> outputPreferences(indices.size(),OutputPreference::Auto);std::vector<bool> outputVideo(indices.size(),false);std::vector<unsigned> outputSeen(indices.size(),0);
-     double statusAt=0;
+     double statusAt=0;bool compositorPaced=false;
      std::vector<Scene> scenes(indices.size(),Scene::Off),failedScenes(indices.size(),Scene::Off);std::vector<std::wstring> failedVideos(indices.size());
      const auto ownedAdapter=context->luid;
      AdapterPerformance adapter;bool reported=false;
@@ -379,25 +398,36 @@ void startRendering(){
        if(a.scene==Scene::Off){renderers[n].reset();if(hadFailure)publish(i,false,{});}
        if(!active){if(renderers[n]){try{renderers[n]->setPaused(true);}catch(...){renderers[n].reset();}}previous[n]=now;continue;}
        if(changed)previous[n]=now;
-       if(!perf.deadline.due(now))continue;
+       double tickTolerance=compositorPaced?.5/displayRefresh(monitor.refreshHz):0.;
+       if(!perf.deadline.due(now+tickTolerance))continue;
        try{
         if(!context){context=GpuContext::acquire(ownedAdapter,false,false);adapter={now};for(auto& p:performance)p.restart(now);}
         RECT rect{};GetClientRect(window,&rect);
         if(!renderers[n]){renderers[n]=std::make_unique<Renderer>(window,std::max(1L,rect.right),std::max(1L,rect.bottom),exeDir/L"shaders",false,false,context);renderers[n]->setNonblocking(true);perf.restart(seconds());previous[n]=seconds();}
         auto& renderer=*renderers[n];
+        renderer.setStageProfiling(renderDiagnostics);
         auto revision=outputRevision.load();bool outputEvent=revision!=outputSeen[n];
         if(outputEvent||now>=outputAt[n]||outputPreferences[n]!=a.output||outputVideo[n]!=(a.scene==Scene::Video)){
          outputConfigs[n]=discoverOutput(monitor,a.output,a.scene==Scene::Video);outputAt[n]=now+1;outputPreferences[n]=a.output;outputVideo[n]=a.scene==Scene::Video;outputSeen[n]=revision;
         }
-        if(renderer.configureOutput(outputConfigs[n],outputEvent)){perf.restart(seconds());previous[n]=seconds();}
+        if(renderer.configureOutput(outputConfigs[n],outputEvent)){
+         const auto& requested=outputConfigs[n];const auto& actual=renderer.output();
+         renderDiagnostic("output display="+std::to_string(i)+" requestedHdr="+std::to_string(requested.hdr)+" actualHdr="+std::to_string(actual.hdr)+" white="+std::to_string(actual.white)+" peak="+std::to_string(actual.peak)+" reason="+utf8(actual.reason));
+         perf.restart(seconds());previous[n]=seconds();
+        }
         if(!renderer.ready())continue;
         if(!preview&&now>=insetAt[n]){renderer.setOverlayInsets(desktopOverlayInsets(monitor.handle));insetAt[n]=now+1;}
-        renderer.setPaused(a.scene!=Scene::Video);renderer.resize(std::max(1L,rect.right),std::max(1L,rect.bottom));
+        unsigned renderWidth=unsigned(std::max(1L,rect.right)),renderHeight=unsigned(std::max(1L,rect.bottom));
+        if(a.scene==Scene::TropicalIsland&&a.performance.quality!=Quality::High&&perf.detail==0){
+         double scale=std::min({1.,2560./renderWidth,1440./renderHeight});
+         renderWidth=std::max(1u,unsigned(std::lround(renderWidth*scale)));renderHeight=std::max(1u,unsigned(std::lround(renderHeight*scale)));
+        }
+        renderer.setPaused(a.scene!=Scene::Video);renderer.resize(renderWidth,renderHeight);
         if(a.scene==Scene::Smoke)renderer.setGrid(perf.detail==0?64:perf.detail==1?80:96);
         double elapsed=previous[n]>0?std::max(0.,now-previous[n]):0;previous[n]=now;clocks[n]+=elapsed;
         auto features=audio.features();FrameData data;data.time=float(clocks[n]);data.dt=boundedDelta(float(elapsed));data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene)||a.scene==Scene::Sun)data.spare[0]=float(perf.detail);
-        bool missed=perf.deadline.next>0&&now-perf.deadline.next>.25/perf.fps();
-        renderer.render(a,data);auto after=seconds();perf.sample(after,renderer.gpuMs(),missed);perf.deadline.submitted(after,perf.fps());
+        bool missed=elapsed>1.5/perf.fps();
+        renderer.render(a,data);auto after=seconds();perf.sample(after,renderer.gpuMs(),missed);perf.deadline.submitted(compositorPaced?now:after,perf.fps());
         if(after-now>.25){perf.restart(after);previous[n]=after;} // Ignore uploads and expensive resource changes.
         bool recoveredFailure;{std::lock_guard lock(stateMutex);++surfaces[i].renderedFrames;
          if(a.scene==Scene::Video&&renderer.videoRateKnown()){
@@ -409,20 +439,27 @@ void startRendering(){
          recoveredFailure=surfaces[i].renderingFailed;}
         if(recoveredFailure)publish(i,false,{});retryAt[n]=0;
        }catch(const std::exception& error){
-        bool removed=context&&context->removed();renderers[n].reset();retryAt[n]=now+5;failedScenes[n]=a.scene;failedVideos[n]=a.video;perf.restart(now);publish(i,true,describeError(error));
+        renderDiagnostic(std::string("renderer error: ")+error.what());bool removed=context&&context->removed();renderers[n].reset();retryAt[n]=now+5;failedScenes[n]=a.scene;failedVideos[n]=a.video;perf.restart(now);publish(i,true,describeError(error));
         if(removed){for(size_t k=0;k<renderers.size();k++){renderers[k].reset();retryAt[k]=now+5;failedScenes[k]=performance[k].scene;performance[k].restart(now);publish(indices[k],true,L"Graphics device unavailable. Retrying automatically.");}context.reset();}
        }
       }
-      auto now=seconds();std::vector<PerformanceState*> inputs;for(auto& p:performance)inputs.push_back(&p);adapter.evaluate(now,inputs);
+      auto now=seconds();std::vector<PerformanceState*> inputs;for(auto& p:performance)inputs.push_back(&p);
+      if(renderDiagnostics&&now-adapter.lastEvaluation>=1){for(size_t n=0;n<performance.size();n++){const auto& p=performance[n];renderDiagnostic("cadence display="+std::to_string(indices[n])+" samples="+std::to_string(p.frames)+" longGaps="+std::to_string(p.misses)+" gpuMsTotal="+std::to_string(p.gpuSum));}}
+      adapter.evaluate(now,inputs);
       if(now>=statusAt){statusAt=now+1;std::lock_guard lock(stateMutex);for(size_t n=0;n<indices.size();n++){
-       auto& p=performance[n];std::wostringstream summary;summary<<std::fixed<<std::setprecision(2)<<p.fps()<<L" FPS · "<<(p.detail==2?L"High":p.detail==1?L"Balanced":L"Eco")<<L" · Native resolution";
+       auto& p=performance[n];std::wostringstream summary;summary<<std::fixed<<std::setprecision(2)<<p.fps()<<L" FPS · "<<(p.detail==2?L"High":p.detail==1?L"Balanced":L"Eco")<<(p.scene==Scene::TropicalIsland&&p.requested.quality!=Quality::High?(p.detail==0?L" · Adaptive resolution":L" · Native image, adaptive water"):L" · Native resolution");
        if(renderers[n]){auto& out=renderers[n]->output();summary<<(out.hdr?L" · HDR":L" · SDR");if(!out.reason.empty())summary<<L" ("<<out.reason<<L")";if(out.hdr&&(out.whiteFallback||out.peakFallback))summary<<L" (estimated luminance)";}
        if(!p.active)summary<<L" · Paused";
        surfaces[indices[n]].outputFallback=renderers[n]&&renderers[n]->output().reason==L"HDR presentation unavailable";
        surfaces[indices[n]].performanceStatus=summary.str();surfaces[indices[n]].effectiveFps=p.fps();
+       if(renderDiagnostics&&renderers[n])renderDiagnostic("detail="+std::to_string(p.detail)+" frame display="+std::to_string(indices[n])+" targetFps="+std::to_string(p.fps())+" gpuMs="+std::to_string(renderers[n]->gpuMs())+" drawMs="+std::to_string(renderers[n]->gpuStageMs()[11])+" postMs="+std::to_string(renderers[n]->gpuStageMs()[13])+" frames="+std::to_string(surfaces[indices[n]].renderedFrames)+" active="+std::to_string(p.active));
       }}
       // High-resolution waits keep fractional deadlines accurate without a
       // process-wide timer-resolution change. Paused adapters sleep longer.
+      bool composedActive=false;
+      for(size_t n=0;n<performance.size();n++)composedActive|=performance[n].active&&renderers[n]&&renderers[n]->compositorPresentation();
+      compositorPaced=composedActive&&DCompositionWaitForCompositorClock(0,nullptr,50)==WAIT_OBJECT_0;
+      if(compositorPaced)continue;
       double delay=.05;for(auto& p:performance)if(p.active)delay=std::min(delay,std::max(.001,p.deadline.next-seconds()));
       LARGE_INTEGER due{};due.QuadPart=-LONGLONG(delay*10000000);
       if(wakeTimer&&SetWaitableTimer(wakeTimer,&due,0,nullptr,nullptr,FALSE))WaitForSingleObject(wakeTimer,60);else std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -440,6 +477,7 @@ void startRendering(){
     audio.configure(listen,device);std::this_thread::sleep_for(std::chrono::milliseconds(20));
    }
    for(auto& worker:workers)worker.request_stop();for(auto& worker:workers)worker.join();
+   }
   }catch(const std::exception& e){{std::lock_guard lock(stateMutex);renderSetupFailed=true;renderSetupError=describeError(e);}PostMessageW(controller,renderStatusMessage,TRUE,generation);}
   audio.configure(false,{});if(SUCCEEDED(initialized))CoUninitialize();
  });}catch(...){renderSetupFailed=true;renderingProblem=true;throw;}
@@ -484,6 +522,9 @@ void createSurfaces(){
  }
  desktopConnectionProblem=false;
  {std::lock_guard lock(stateMutex);lastError.clear();}
+ // Apply coverage before the worker can allocate/render its first frame. The
+ // periodic refresh otherwise leaves a startup interval rendering behind apps.
+ for(auto& surface:surfaces)surface.covered=!previewMode&&monitorCovered(surface.monitor,GetCurrentProcessId());
  startRendering();if(library){SendDlgItemMessageW(library,monitorId,CB_RESETCONTENT,0,0);int choice=0;for(size_t i=0;i<surfaces.size();i++){auto& s=surfaces[i];ui::appendComboChoice(GetDlgItem(library,monitorId),s.monitor.name.c_str());if(s.monitor.id==selectedMonitorId)choice=int(i);}selectedMonitorId=surfaces[choice].monitor.id;SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,choice,0);syncControls();}
 }
 void showLibrary();
@@ -902,7 +943,7 @@ int captureMode(const std::vector<std::wstring>& args){
   auto captureParameter=[&](const wchar_t* key){auto value=option(key,L"1");size_t consumed{};float number=std::stof(value,&consumed);if(consumed!=value.size()||!std::isfinite(number)||number<0||number>2)throw std::runtime_error("Capture parameter must be finite and between 0 and 2");return number;};
   data.density=captureParameter(L"--density");data.movement=captureParameter(L"--movement");data.brightness=captureParameter(L"--brightness");data.detail=captureParameter(L"--detail");data.flow=captureParameter(L"--flow");data.turbulence=captureParameter(L"--turbulence");
   auto paletteOption=option(L"--palette",L"0");size_t paletteConsumed{};int palette=std::stoi(paletteOption,&paletteConsumed);if(paletteConsumed!=paletteOption.size()||palette<0||palette>3)throw std::runtime_error("Capture palette must be 0 to 3");data.palette=float(palette);
-  auto qualityOption=option(L"--quality",L"auto");int quality=qualityOption==L"eco"?0:qualityOption==L"auto"?1:qualityOption==L"high"?2:-1;if(quality<0)throw std::runtime_error("Capture quality must be eco, auto or high");if(isProceduralWorld(scene)||scene==Scene::Sun)data.spare[0]=float(quality);
+  auto qualityOption=option(L"--quality",L"auto");int quality=qualityOption==L"eco"?0:qualityOption==L"auto"?1:qualityOption==L"high"?2:-1;if(quality<0)throw std::runtime_error("Capture quality must be eco, auto or high");if(isProceduralWorld(scene)||scene==Scene::Sun)data.spare[0]=float(quality);if(scene==Scene::TropicalIsland){a.performance.quality=Quality(quality);data.spare[0]=quality==0?0.f:2.f;}
   auto rippleProbe=option(L"--ripples-probe",L"0");size_t rippleConsumed{};int rippleMode=std::stoi(rippleProbe,&rippleConsumed);
   if(rippleConsumed!=rippleProbe.size()||rippleMode<0||rippleMode>6||(rippleMode&&scene!=Scene::Ripples))throw std::runtime_error("Ripples probe requires the ripples scene and a mode from 0 to 6");
   if(scene==Scene::Ripples)data.spare[1]=float(rippleMode);
@@ -1023,7 +1064,9 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
    if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return 0;
   }
   automaticUpdates=wu::enabled();nextUpdateCheck=GetTickCount64()+5000;
-  profile=profilePath();try{settings=loadSettings(profile);}catch(const std::exception& e){
+  profile=profilePath();renderDiagnostics=std::find(args.begin(),args.end(),L"--render-diagnostics")!=args.end();
+  if(renderDiagnostics){std::ofstream clear(profile/L"render-diagnostics.log",std::ios::trunc);}
+  renderDiagnostic("startup pid="+std::to_string(GetCurrentProcessId()));try{settings=loadSettings(profile);}catch(const std::exception& e){
    auto original=profile/L"settings.json";
    if(std::filesystem::exists(original)){
     auto recovery=profile/(L"settings-recovery-"+wide(newPresetId())+L".json");

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.26)
 project(VolturaWorlds VERSION 0.5.1 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,8 +23,11 @@ function(shader NAME ENTRY PROFILE)
   if(NAME STREQUAL "ripples")
     list(APPEND EXTRA_SHADER_DEPS "shaders/ripples_surface.hlsli" "shaders/ripples_bottom.hlsli")
   endif()
-  if(NAME STREQUAL "tropical_island")
+  if(NAME MATCHES "^tropical_island")
     list(APPEND EXTRA_SHADER_DEPS "shaders/tropical_island_masks.hlsli" "shaders/tropical_island_ocean.hlsli")
+  endif()
+  if(NAME STREQUAL "tropical_island_composite")
+    list(APPEND EXTRA_SHADER_DEPS "shaders/tropical_island.hlsl")
   endif()
   if(NAME STREQUAL "forest_water")
     list(APPEND EXTRA_SHADER_DEPS "shaders/ripples_surface.hlsli")
@@ -130,6 +133,8 @@ shader(ripples PS ps_6_0)
 shader(forest_water PS ps_6_0)
 shader(tropical_paradise PS ps_6_0)
 shader(tropical_island PS ps_6_0)
+shader(tropical_island_coast PS ps_6_0)
+shader(tropical_island_composite PS ps_6_0)
 shader(orbit VS vs_6_0)
 shader(planet PS ps_6_0)
 shader(space PS ps_6_0)
@@ -168,7 +173,7 @@ shader(video PS ps_6_0)
 # Refresh runtime bytecode even when only HLSL changed and the executable did
 # not relink (the executable's POST_BUILD copy alone cannot cover that case).
 add_custom_target(worlds_shaders ALL
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${SHADER_DIR}" "${CMAKE_BINARY_DIR}/$<CONFIG>/shaders"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${SHADER_DIR}" "${CMAKE_BINARY_DIR}/$<CONFIG>/shaders"
   DEPENDS ${SHADER_OUTPUTS})
 add_library(worlds_core STATIC src/settings.cpp src/output.cpp src/package.cpp src/presets.cpp src/policy.cpp)
 target_include_directories(worlds_core PUBLIC src "${DEPS}/json")
@@ -177,18 +182,27 @@ target_link_libraries(worlds_core PUBLIC dxgi shell32 ole32 bcrypt windowscodecs
 add_executable(VolturaWorlds WIN32 src/updates.cpp src/main.cpp src/desktop.cpp src/renderer.cpp src/gpu_context.cpp src/body_statistics_renderer.cpp src/smoke_atlas_renderer.cpp src/smoke_pressure_renderer.cpp src/audio.cpp src/video.cpp src/import_ui.cpp src/app.rc)
 target_link_options(VolturaWorlds PRIVATE /MANIFEST:NO)
 target_include_directories(VolturaWorlds BEFORE PRIVATE "${DEPS}/agility/build/native/include")
-target_link_libraries(VolturaWorlds PRIVATE worlds_core d3d12 dxgi dxguid d3dcompiler dwmapi comctl32 wtsapi32 avrt winmm mfplat mfreadwrite mfuuid d3d11 shlwapi psapi uxtheme gdiplus)
+target_link_libraries(VolturaWorlds PRIVATE worlds_core d3d12 dxgi dxguid d3dcompiler dcomp dwmapi comctl32 wtsapi32 avrt winmm mfplat mfreadwrite mfuuid d3d11 shlwapi psapi uxtheme gdiplus)
 add_dependencies(VolturaWorlds worlds_shaders)
 target_sources(VolturaWorlds PRIVATE src/presets_ui.cpp)
 foreach(t worlds_core VolturaWorlds)
   target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8 /EHsc)
 endforeach()
-add_custom_target(worlds_runtime ALL
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/licenses" "$<TARGET_FILE_DIR:VolturaWorlds>/licenses"
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:VolturaWorlds>/assets"
+file(GLOB_RECURSE WORLD_RUNTIME_INPUTS CONFIGURE_DEPENDS LIST_DIRECTORIES false
+  "${CMAKE_SOURCE_DIR}/assets/*" "${CMAKE_SOURCE_DIR}/licenses/*")
+set(WORLD_RUNTIME_STAMP "${CMAKE_BINARY_DIR}/runtime-$<CONFIG>.stamp")
+add_custom_command(OUTPUT "${WORLD_RUNTIME_STAMP}"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${CMAKE_SOURCE_DIR}/licenses" "$<TARGET_FILE_DIR:VolturaWorlds>/licenses"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:VolturaWorlds>/assets"
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/D3D12Core.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/d3d12SDKLayers.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/")
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DEPS}/agility/build/native/bin/x64/d3d12SDKLayers.dll" "$<TARGET_FILE_DIR:VolturaWorlds>/D3D12/"
+  COMMAND ${CMAKE_COMMAND} -E touch "${WORLD_RUNTIME_STAMP}"
+  DEPENDS ${WORLD_RUNTIME_INPUTS}
+    "${DEPS}/agility/build/native/bin/x64/D3D12Core.dll"
+    "${DEPS}/agility/build/native/bin/x64/d3d12SDKLayers.dll"
+  VERBATIM)
+add_custom_target(worlds_runtime ALL DEPENDS "${WORLD_RUNTIME_STAMP}")
 add_dependencies(VolturaWorlds worlds_runtime)
 
 target_link_libraries(VolturaWorlds PRIVATE bcrypt crypt32 wintrust winhttp version)

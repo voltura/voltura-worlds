@@ -67,7 +67,9 @@ bool monitorCovered(const Monitor& m,DWORD own){
  EnumWindows([](HWND hwnd,LPARAM param)->BOOL{
   auto& c=*reinterpret_cast<Coverage*>(param);DWORD pid{};GetWindowThreadProcessId(hwnd,&pid);
   if(pid==c.own||!IsWindowVisible(hwnd)||IsIconic(hwnd))return TRUE;
-  auto style=GetWindowLongPtrW(hwnd,GWL_EXSTYLE);if(style&(WS_EX_LAYERED|WS_EX_TRANSPARENT|WS_EX_NOREDIRECTIONBITMAP))return TRUE;
+  // DirectComposition windows can be opaque without a redirection bitmap.
+  // Only explicit transparency/layering excludes a visible window here.
+  auto style=GetWindowLongPtrW(hwnd,GWL_EXSTYLE);if(style&(WS_EX_LAYERED|WS_EX_TRANSPARENT))return TRUE;
   DWORD cloaked{};if(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_CLOAKED,&cloaked,sizeof(cloaked)))&&cloaked)return TRUE;
   wchar_t name[128]{};GetClassNameW(hwnd,name,128);if(!wcscmp(name,L"Progman")||!wcscmp(name,L"WorkerW")||!wcscmp(name,L"Shell_TrayWnd")||!wcscmp(name,L"Shell_SecondaryTrayWnd"))return TRUE;
   RECT r{};if(FAILED(DwmGetWindowAttribute(hwnd,DWMWA_EXTENDED_FRAME_BOUNDS,&r,sizeof(r))))GetWindowRect(hwnd,&r);

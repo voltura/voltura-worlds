@@ -10,7 +10,7 @@ inline double frameCeiling(const DisplayPerformance& p,double hz){return std::mi
 inline bool canCopyFrameLimit(FrameLimit limit,double hz){return limit==FrameLimit::Auto||displayRefresh(hz)+.12>=(limit==FrameLimit::Fps30?30.:60.);}
 inline Assignment importForDisplay(const Assignment& source,const Assignment& destination){auto copy=source;copy.performance=destination.performance;copy.output=destination.output;copy.showBodyStatistics=destination.showBodyStatistics;return copy;}
 inline Assignment copyForDisplay(const Assignment& source,const Assignment& destination,double hz){auto copy=source;if(!canCopyFrameLimit(copy.performance.frameLimit,hz))copy.performance.frameLimit=destination.performance.frameLimit;return copy;}
-inline bool adaptiveDetail(Scene scene){return scene==Scene::Smoke||scene==Scene::Silk||scene==Scene::Eclipse||scene==Scene::Drift||scene==Scene::Contour||scene==Scene::Ripples||scene==Scene::Sun||scene==Scene::ForestWater;}
+inline bool adaptiveDetail(Scene scene){return scene==Scene::Smoke||scene==Scene::Silk||scene==Scene::Eclipse||scene==Scene::Drift||scene==Scene::Contour||scene==Scene::Ripples||scene==Scene::Sun||scene==Scene::ForestWater||scene==Scene::TropicalIsland;}
 inline std::vector<double> cadenceLevels(const DisplayPerformance& p,double hz){
  hz=displayRefresh(hz);double top=frameCeiling(p,hz);std::vector<double> rates;
  // Fixed caps also use refresh divisors while adapting; exact cap remains the
@@ -44,14 +44,16 @@ struct PerformanceState {
  void sample(double now,double gpuMs,bool missed){if(now<warmUntil||!std::isfinite(gpuMs)||gpuMs<=0||gpuMs>10000)return;gpuSum+=gpuMs;lastGpuMs=gpuMs;++frames;misses+=missed;}
  bool lower(double now){
   if(!adaptive())return false;
-  if(cadence+1<rates.size())++cadence;
+  if(scene==Scene::TropicalIsland&&requested.quality==Quality::Auto&&detail>0)--detail;
+  else if(cadence+1<rates.size())++cadence;
   else if(requested.quality==Quality::Auto&&adaptiveDetail(scene)&&detail>0)--detail;
   else return false;
   trial.reset();restart(now);return true;
  }
  bool restore(double now){
   if(!adaptive())return false;auto previous=std::pair{cadence,detail};
-  if(requested.quality==Quality::Auto&&detail<2)++detail;
+  if(scene==Scene::TropicalIsland&&cadence>0)--cadence;
+  else if(requested.quality==Quality::Auto&&detail<2)++detail;
   else if(cadence>0)--cadence;
   else return false;
   trial=previous;restart(now);return true;
@@ -73,7 +75,7 @@ struct AdapterPerformance {
    for(auto* p:candidates)if(p->active&&p->lower(now))break;
    overload=headroom=0;
   }else if(headroom>=15){
-   // Restore spatial detail across the adapter before increasing any cadence.
+   // Beach restores motion first; other scenes restore spatial detail first.
    bool changed=false;for(auto* p:displays)if(p->active&&p->requested.quality==Quality::Auto&&p->detail<2){changed=p->restore(now);if(changed)break;}
    if(!changed)for(auto* p:displays)if(p->active&&p->restore(now))break;
    overload=headroom=0;
