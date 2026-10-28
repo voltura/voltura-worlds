@@ -21,21 +21,23 @@ Unicode true
  !define PROFILE_DIR "$LOCALAPPDATA\Voltura\Worlds"
 !endif
 !ifndef OUTPUT
- !define OUTPUT "..\dist\VolturaWorlds-Setup-0.5.1-win-x64.exe"
+ !define OUTPUT "..\dist\VolturaWorlds-Setup-0.5.2-win-x64.exe"
 !endif
 Name "Voltura Worlds"
-Caption "Voltura Worlds 0.5.1 Setup"
+Caption "Voltura Worlds 0.5.2 Setup"
 BrandingText "Voltura AB"
 ManifestDPIAware true
 ManifestSupportedOS all
-VIProductVersion "0.5.1.0"
+VIProductVersion "0.5.2.0"
 VIAddVersionKey "ProductName" "Voltura Worlds"
 VIAddVersionKey "CompanyName" "Voltura AB"
 VIAddVersionKey "FileDescription" "Voltura Worlds Setup"
-VIAddVersionKey "FileVersion" "0.5.1"
-VIAddVersionKey "ProductVersion" "0.5.1"
-VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.5.1-win-x64.exe"
-VIAddVersionKey "LegalCopyright" "Voltura AB"
+VIAddVersionKey "FileVersion" "0.5.2.0"
+VIAddVersionKey "ProductVersion" "0.5.2"
+VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.5.2-win-x64.exe"
+VIAddVersionKey "InternalName" "VolturaWorldsSetup"
+VIAddVersionKey "LegalCopyright" "Copyright (c) Voltura AB"
+VIAddVersionKey "Comments" "Developer: Joakim Skoglund; Website: https://worlds.voltura.se/; Support: https://github.com/voltura/voltura-worlds/issues; Address: Voltura AB, H${U+00E4}stholmsv${U+00E4}gen 33, SE-131 71 Nacka, Sweden"
 !define MUI_ICON "artwork\worlds.ico"
 !define MUI_UNICON "artwork\worlds.ico"
 !define MUI_WELCOMEFINISHPAGE_BITMAP "artwork\worlds-sidebar.bmp"
@@ -181,21 +183,21 @@ Function OptionsPage
  !insertmacro MUI_HEADER_TEXT "Make yourself at home" "Choose how Voltura Worlds starts."
  nsDialogs::Create 1018
  Pop $0
- ${NSD_CreateLabel} 0 0 100% 32u "Worlds runs quietly behind your desktop. You can pause it or open its library from the notification area."
+ ${NSD_CreateLabel} 0 0 100% 32u "Use the tray icon to pause Worlds or open the library."
  Pop $0
  ${NSD_CreateCheckbox} 0 48u 100% 16u "Start with Windows"
  Pop $StartupCheckbox
  ${NSD_SetState} $StartupCheckbox $StartupEnabled
- ${NSD_CreateCheckbox} 0 76u 100% 16u "Add Voltura Worlds to desktop right-click menus"
+ ${NSD_CreateCheckbox} 0 76u 100% 16u "Add Worlds to desktop right-click menus"
  Pop $DesktopMenuCheckbox
  ${NSD_SetState} $DesktopMenuCheckbox $DesktopMenuEnabled
- ${NSD_CreateCheckbox} 12u 100u 95% 16u "Also enable the Windows 11 compact menu"
+ ${NSD_CreateCheckbox} 12u 100u 95% 16u "Include the Windows 11 compact menu"
  Pop $CompactMenuCheckbox
  ${NSD_SetState} $CompactMenuCheckbox $CompactMenuEnabled
  !if ${SHELL_CAN_TRUST} == 0
   EnableWindow $CompactMenuCheckbox 0
  !endif
- ${NSD_CreateLabel} 12u 120u 95% 40u "The classic menu needs no administrator access. The compact menu may ask once for administrator approval to trust Voltura's public signing certificate for this computer. App installation stays per-user."
+ ${NSD_CreateLabel} 12u 120u 95% 28u "The compact menu may need admin approval to trust Voltura's certificate."
  Pop $0
  nsDialogs::Show
 FunctionEnd
@@ -381,7 +383,7 @@ Section "Voltura Worlds"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_KEY}"
  ${EndIf}
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayName" "Voltura Worlds"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.5.1"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.5.2"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "Publisher" "Voltura AB"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayIcon" "$INSTDIR\VolturaWorlds.exe"

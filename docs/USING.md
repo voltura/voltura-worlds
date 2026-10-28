@@ -2,15 +2,15 @@
 
 The per-user Windows 11 x64 app includes **25 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto, Sun, Forest Water, Tropical Paradise and Tropical Island. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Version **0.5.1** includes Tropical Island, Tropical Paradise, Forest Water and optional desktop right-click menus, alongside HDR output, per-display adaptive performance, video controls and saved desktop presets.
+Version **0.5.2** includes Tropical Island, Tropical Paradise, Forest Water and optional desktop right-click menus, alongside HDR output, per-display adaptive performance, video controls and saved desktop presets.
 
 The window title and tray icon tooltip show the running version. When upgrading from 0.1.10 or earlier, run the installer once; those versions cannot automatically upgrade to the current release.
 
-[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.5.1/VolturaWorlds-Setup-0.5.1-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.5.2/VolturaWorlds-Setup-0.5.2-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
 
 ## Install and try it
 
-Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.5.1-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. The installer offers **Start with Windows** and opens the library when you choose **Start Voltura Worlds** on the final page.
+Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.5.2-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. In the tray menu, the eleven bodies are grouped under **Solar System**. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. In the desktop right-click menu, **Off** is under **Voltura Worlds** controls. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 

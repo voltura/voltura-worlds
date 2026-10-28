@@ -139,6 +139,23 @@ void refreshAudioDeviceChoices(){
 }
 
 std::filesystem::path executable(){wchar_t path[32768];DWORD n=GetModuleFileNameW(nullptr,path,32768);return std::filesystem::path(std::wstring(path,n));}
+constexpr auto startupKey=L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+bool startsWithWindows(){
+ DWORD bytes=0;auto status=RegGetValueW(HKEY_CURRENT_USER,startupKey,L"VolturaWorlds",RRF_RT_REG_SZ,nullptr,nullptr,&bytes);
+ if(status==ERROR_FILE_NOT_FOUND)return false;
+ if(status!=ERROR_SUCCESS)throw std::runtime_error("Cannot read the Windows startup setting.");
+ return bytes>sizeof(wchar_t);
+}
+void setStartsWithWindows(bool enabled){
+ HKEY key{};auto status=RegCreateKeyExW(HKEY_CURRENT_USER,startupKey,0,nullptr,0,KEY_SET_VALUE,nullptr,&key,nullptr);
+ if(status!=ERROR_SUCCESS)throw std::runtime_error("Cannot open the Windows startup setting.");
+ if(enabled){
+  auto command=L"\""+executable().wstring()+L"\" --wallpaper";
+  status=RegSetValueExW(key,L"VolturaWorlds",0,REG_SZ,reinterpret_cast<const BYTE*>(command.c_str()),DWORD((command.size()+1)*sizeof(wchar_t)));
+ }else status=RegDeleteValueW(key,L"VolturaWorlds");
+ RegCloseKey(key);
+ if(status!=ERROR_SUCCESS&&!(status==ERROR_FILE_NOT_FOUND&&!enabled))throw std::runtime_error("Cannot save the Windows startup setting.");
+}
 void error(const std::exception& e){
  if(automated){std::ofstream out(exeDir/L"capture-error.txt");out<<e.what();return;}
  static bool reporting=false;if(reporting)return;
@@ -777,11 +794,18 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
    shellmenu::State state;std::wstring displayId;
    {std::lock_guard lock(stateMutex);state=currentMenuState();if(!surfaces.empty())displayId=selectedSurface().monitor.id;}
    const shellmenu::DisplayState* display=nullptr;for(DWORD i=0;i<state.displayCount;i++)if(displayId==state.displays[i].id)display=&state.displays[i];
-   auto values=shellmenu::entries(&state,display);std::vector<std::wstring> commands;HMENU menu=makeTrayMenu(values,commands);
+   auto values=shellmenu::entries(&state,display);
+   bool startup=startsWithWindows();
+   values.insert(values.end()-1,{startup?L"startup-off":L"startup-on",L"Start with Windows",startup});
+   std::vector<std::wstring> commands;HMENU menu=makeTrayMenu(values,commands);
    SetForegroundWindow(hwnd);auto hook=SetWindowsHookExW(WH_CBT,ui::menuCreation,nullptr,GetCurrentThreadId());
    int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,point.x,point.y,0,hwnd,nullptr);
    if(hook)UnhookWindowsHookEx(hook);DestroyMenu(menu);DeleteObject(menuFont);menuFont=nullptr;
-   if(cmd>0&&size_t(cmd)<=commands.size())invokeMenuCommand(commands[cmd-1],displayId);
+   if(cmd>0&&size_t(cmd)<=commands.size()){
+    const auto& command=commands[cmd-1];
+    if(command==L"startup-on"||command==L"startup-off")setStartsWithWindows(command==L"startup-on");
+    else invokeMenuCommand(command,displayId);
+   }
   }
   return 0;
  case errorMessage:syncControls();return 0;

@@ -1,9 +1,10 @@
 #include <windows.h>
+#pragma code_page(65001)
 101 ICON "../installer/artwork/worlds.ico"
 1 RT_MANIFEST "app.manifest"
 1 VERSIONINFO
- FILEVERSION 0,5,1,0
- PRODUCTVERSION 0,5,1,0
+ FILEVERSION 0,5,2,0
+ PRODUCTVERSION 0,5,2,0
  FILETYPE VFT_APP
 BEGIN
  BLOCK "StringFileInfo"
@@ -12,10 +13,13 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "Voltura AB"
    VALUE "FileDescription", "Voltura Worlds"
-   VALUE "FileVersion", "0.5.1"
+   VALUE "FileVersion", "0.5.2.0"
+   VALUE "InternalName", "VolturaWorlds"
+   VALUE "LegalCopyright", "Copyright (c) Voltura AB"
+   VALUE "Comments", "Developer: Joakim Skoglund; Website: https://worlds.voltura.se/; Support: https://github.com/voltura/voltura-worlds/issues; Address: Voltura AB, Hästholmsvägen 33, SE-131 71 Nacka, Sweden"
    VALUE "OriginalFilename", "VolturaWorlds.exe"
    VALUE "ProductName", "Voltura Worlds"
-   VALUE "ProductVersion", "0.5.1"
+   VALUE "ProductVersion", "0.5.2"
   END
  END
  BLOCK "VarFileInfo"
