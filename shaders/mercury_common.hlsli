@@ -18,10 +18,16 @@ float3 mercuryToWorld(float3 p){
  return mercuryRotateZ(p,radians(0.034));
 }
 float2 mercuryScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+
  float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);
  p.y=-p.y;
  float t=mercuryClock();
  return (p-float2(.075+sin(t*.0011)*.009*flow,.008+sin(t*.0014)*.006*flow))/.375;
+
+#endif
 }
 float3 mercuryGrade(float3 c){
  return c*(palette<.5?float3(1,1,1):palette<1.5?float3(1.045,1.01,.955):palette<2.5?float3(.96,1.005,1.05):float3(.99,1.005,1.01));

@@ -22,6 +22,7 @@ inline constexpr Visualization visualizations[]={
  {Scene::ForestWater,L"Forest Water",L"forest-water"},
  {Scene::TropicalParadise,L"Tropical Paradise",L"tropical-paradise"},
  {Scene::TropicalIsland,L"Tropical Island",L"tropical-island"},
+ {Scene::SolarSystemJourney,L"Solar System Journey",L"solar_system_journey",true},
  {Scene::Off,L"Random",L"random"},{Scene::Off,L"Random Solar System",L"random-solar"},
  {Scene::Off,L"Off",L"off"},{Scene::Video,L"Imported video",L"video"}
 };
@@ -53,6 +54,7 @@ inline bool validCommand(const std::wstring& id){
 inline std::vector<Entry> visualizationEntries(const DisplayState* display){
  Entry solar{L"",L"Solar System"};
  auto choice=[&](const wchar_t* id,const wchar_t* title){return Entry{id,title,display&&std::wstring(display->choice)==id,display!=nullptr};};
+ solar.children.push_back(choice(L"solar_system_journey",L"Solar System Journey"));
  solar.children.push_back(choice(L"random-solar",L"Random"));solar.children.push_back({});
  for(auto id:solarOrder){auto v=visualization(id);solar.children.push_back(choice(id,v->name));}
  solar.checked=std::any_of(solar.children.begin(),solar.children.end(),[](const Entry& e){return e.checked;});
@@ -93,7 +95,7 @@ inline const wchar_t* desktopTitle(DesktopGroup group){
 // Keep a short, stable set of shortcuts; the library exposes the full catalog.
 inline constexpr const wchar_t* desktopVisualizations[]={L"aurora",L"orbit",L"smoke",L"bloom",L"silk",L"forest-water",L"tropical-paradise",L"tropical-island"};
 static_assert(std::size(desktopVisualizations)+3<=16,"Keep room for Random, imported video and Select more.");
-static_assert(std::size(solarOrder)+1<=16,"Split the Solar System desktop menu before adding more commands.");
+static_assert(std::size(solarOrder)+2<=16,"Split the Solar System desktop menu before adding more commands.");
 inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* display,DesktopGroup group){
  if(group==DesktopGroup::Controls){
   auto result=controlEntries(state);
@@ -104,6 +106,7 @@ inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* 
  auto choice=[&](const wchar_t* id,const wchar_t* title){return Entry{id,title,display&&std::wstring(display->choice)==id,display!=nullptr};};
  std::vector<Entry> result;
  if(group==DesktopGroup::SolarSystem){
+  result.push_back(choice(L"solar_system_journey",L"Solar System Journey"));
   result.push_back(choice(L"random-solar",L"Random Solar System"));result.push_back({});
   for(auto id:solarOrder)result.push_back(choice(id,visualization(id)->name));
  }else{

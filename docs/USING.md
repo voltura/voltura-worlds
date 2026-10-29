@@ -1,16 +1,24 @@
 # Using Voltura Worlds
 
-The per-user Windows 11 x64 app includes **25 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto, Sun, Forest Water, Tropical Paradise and Tropical Island. C++20, Direct3D 12, HLSL. MIT licensed.
+The per-user Windows 11 x64 app includes **26 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto, Sun, Forest Water, Tropical Paradise, Tropical Island and Solar System Journey. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Version **0.5.2** includes Tropical Island, Tropical Paradise, Forest Water and optional desktop right-click menus, alongside HDR output, per-display adaptive performance, video controls and saved desktop presets.
+Version **0.6.0** adds Solar System Journey, alongside Tropical Island, Tropical Paradise, Forest Water and optional desktop right-click menus, HDR output, per-display adaptive performance, video controls and saved desktop presets.
 
 The window title and tray icon tooltip show the running version. When upgrading from 0.1.10 or earlier, run the installer once; those versions cannot automatically upgrade to the current release.
 
-[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.5.2/VolturaWorlds-Setup-0.5.2-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.0/VolturaWorlds-Setup-0.6.0-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+
+## Solar System Journey
+
+Choose **Solar System Journey** in the library or Solar System menu for one continuous camera journey through Sun → Mercury → Venus → Earth → Moon → Mars → Jupiter → Saturn → Uranus → Neptune → Pluto → Sun. Distances and sizes are artistically adjusted for a readable cinematic tour; this is not a scale model or a simulation of current orbital positions. The Sun retains its existing false-color observation imagery.
+
+At **Movement = 1**, each visit lasts 25 seconds and each trip lasts 12 seconds, for a 6 minute 47 second loop. **Movement / tour speed** changes the pace continuously; zero freezes the journey and body animation. **Pause** and automatic desktop pauses suspend progress. Each display has its own journey clock. Entering the scene or restarting the app starts at the Sun; resizing and changing output mode retain progress.
+
+**Show body statistics** defaults to enabled for the journey and fades the current body's existing information card in at arrival and out before departure. This choice is saved separately from the individual body scenes and included in saved desktop presets and version 2 `.world` exports. The journey is excluded from both random pools so it can complete its route.
 
 ## Install and try it
 
-Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.5.2-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
+Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.6.0-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. In the tray menu, the eleven bodies are grouped under **Solar System**. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. In the desktop right-click menu, **Off** is under **Voltura Worlds** controls. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 

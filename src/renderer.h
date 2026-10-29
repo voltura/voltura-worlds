@@ -84,7 +84,9 @@ public:
  unsigned flowmapRenewals()const{return flowmapRenewals_;}
 private:
  void prepareBodyStatistics(const Assignment&,int palette);
- void drawBodyStatistics(const Assignment&);
+ void drawBodyStatistics(const Assignment&,float opacity=1);
+ std::array<ComPtr<ID3D12PipelineState>,11> journeyPipelines_;
+ ComPtr<ID3D12PipelineState> journeySky_;
  ComPtr<ID3D12Resource> bodyStatisticsTexture_;
  ComPtr<ID3D12PipelineState> bodyStatisticsPipeline_;
  Scene bodyStatisticsScene_=Scene::Off;

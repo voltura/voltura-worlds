@@ -13,8 +13,14 @@ float earthPitch(){return radians(12)+sin(earthClock()*.0017)*.012*flow;}
 float3 earthToBody(float3 p){return earthRY(earthRX(earthRZ(p,-radians(23.44)),-earthPitch()),-earthSpin());}
 float3 earthToWorld(float3 p){return earthRZ(earthRX(earthRY(p,earthSpin()),earthPitch()),radians(23.44));}
 float2 earthScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+
  float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;
  return (p-float2(.075+sin(earthClock()*.0011)*.009*flow,.008+sin(earthClock()*.0014)*.006*flow))/.375;
+
+#endif
 }
 float2 earthUV(float3 p){return float2(atan2(p.x,p.z)/(2*earthPi)+.5,.5-asin(clamp(p.y,-1,1))/earthPi);}
 float2 earthGradient(float2 v){v.x-=round(v.x);return v;}

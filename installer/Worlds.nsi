@@ -21,20 +21,20 @@ Unicode true
  !define PROFILE_DIR "$LOCALAPPDATA\Voltura\Worlds"
 !endif
 !ifndef OUTPUT
- !define OUTPUT "..\dist\VolturaWorlds-Setup-0.5.2-win-x64.exe"
+ !define OUTPUT "..\dist\VolturaWorlds-Setup-0.6.0-win-x64.exe"
 !endif
 Name "Voltura Worlds"
-Caption "Voltura Worlds 0.5.2 Setup"
+Caption "Voltura Worlds 0.6.0 Setup"
 BrandingText "Voltura AB"
 ManifestDPIAware true
 ManifestSupportedOS all
-VIProductVersion "0.5.2.0"
+VIProductVersion "0.6.0.0"
 VIAddVersionKey "ProductName" "Voltura Worlds"
 VIAddVersionKey "CompanyName" "Voltura AB"
 VIAddVersionKey "FileDescription" "Voltura Worlds Setup"
-VIAddVersionKey "FileVersion" "0.5.2.0"
-VIAddVersionKey "ProductVersion" "0.5.2"
-VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.5.2-win-x64.exe"
+VIAddVersionKey "FileVersion" "0.6.0.0"
+VIAddVersionKey "ProductVersion" "0.6.0"
+VIAddVersionKey "OriginalFilename" "VolturaWorlds-Setup-0.6.0-win-x64.exe"
 VIAddVersionKey "InternalName" "VolturaWorldsSetup"
 VIAddVersionKey "LegalCopyright" "Copyright (c) Voltura AB"
 VIAddVersionKey "Comments" "Developer: Joakim Skoglund; Website: https://worlds.voltura.se/; Support: https://github.com/voltura/voltura-worlds/issues; Address: Voltura AB, H${U+00E4}stholmsv${U+00E4}gen 33, SE-131 71 Nacka, Sweden"
@@ -383,7 +383,7 @@ Section "Voltura Worlds"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_KEY}"
  ${EndIf}
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayName" "Voltura Worlds"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.5.2"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayVersion" "0.6.0"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "Publisher" "Voltura AB"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_KEY}" "DisplayIcon" "$INSTDIR\VolturaWorlds.exe"

@@ -6,8 +6,12 @@ Texture2D<float4> cloudMap:register(t0);
 Texture2D<float4> galaxy:register(t1);
 SamplerState globeSampler:register(s1);
 float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
+ #ifndef JOURNEY
  float2 skyP=(uv-.5)*resolution/min(resolution.x,resolution.y);
  float3 sky=planetSky(galaxy.Sample(globeSampler,planetSkyUV(skyP)),.0035);
+ #else
+ float3 sky=0;
+#endif
  float2 q=saturnScreen(uv);
  float3 origin=saturnToBody(float3(q,4)),ray=saturnToBody(float3(0,0,-1));
  float disc;float globeT=saturnHit(origin,ray,disc);
@@ -74,5 +78,11 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  if(spare1.x==4)color=ringAlpha*(1-ringVisibility)*(1-coverage)*.2;
  if(spare1.x==5)color=sky*(1-ringAlpha)*(1-coverage);
  if(spare1.x==6)color=sky;
+ #ifdef JOURNEY
+ float alpha=coverage+ringAlpha*(1-coverage);
+ clip(alpha-.00001);
+ return float4(tone(color)/max(alpha,.00001),alpha);
+#else
  return float4(tone(color),1);
+#endif
 }

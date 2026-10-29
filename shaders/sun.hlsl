@@ -72,8 +72,17 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  float2 drift=float2(sin(t*.011),sin(t*.008))*.006*flow;
  // Diameter 64% of the shorter edge leaves room for off-limb structures.
  float2 q=(p-drift)/.32;
+#ifdef JOURNEY
+ q=journeyScreen(uv);
+#endif
  float r=length(q),edge=max(fwidth(r),.0001);
- if(r>1.48)return float4(0,0,0,1);
+ if(r>1.48){
+#ifdef JOURNEY
+ discard;
+#else
+ return float4(0,0,0,1);
+#endif
+ }
  float disc=1-smoothstep(1-edge,1+edge,r);
  float audio=movement>0?reaction*saturate(energy):0;
  float active=turbulence*(1+audio*.10);
@@ -106,5 +115,11 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  else if(palette>1.5&&palette<2.5)loops*=float3(1,.72,.70);
  else if(palette>2.5)loops=dot(loops,float3(.3,.59,.11))*float3(.82,.85,.9);
  float3 color=sunColor(max(intensity,0))+loops*active*(1-smoothstep(1.40,1.47,r))*(1+audio*.045);
+ #ifdef JOURNEY
+ // Corona is emissive but the photosphere must still occlude distant bodies.
+ float alpha=max(1-smoothstep(.995,1.005,r),saturate(max(color.r,max(color.g,color.b))*2));
+ return float4(tone(color)/max(alpha,.00001),alpha);
+#else
  return float4(tone(color),1);
+#endif
 }

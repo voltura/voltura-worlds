@@ -8,7 +8,13 @@ float3 uranusRZ(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x-s*
 // Geometry does not spin: an oblate body's silhouette is rotation invariant.
 float3 uranusToBody(float3 p){return uranusRZ(p,-radians(97.8));}
 float3 uranusToWorld(float3 p){return uranusRZ(p,radians(97.8));}
-float2 uranusScreen(float2 uv){float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;return p/.375;}
+float2 uranusScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;return p/.375;
+#endif
+}
 float3 uranusLight(){return normalize(float3(-.58,.20,.79));}
 float3 uranusGrade(float3 c){
  return c*(palette<.5?float3(1,1,1):palette<1.5?float3(.97,1.035,1.015):palette<2.5?float3(.90,.99,1.10):float3(1.07,1.015,.97));

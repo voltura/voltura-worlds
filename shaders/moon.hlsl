@@ -9,6 +9,9 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  float moonDistance,coverage,earthDistance,earthCoverage;float3 n,en;
  moonSphere(origin,ray,0,1,moonDistance,coverage,n);
  moonSphere(origin,ray,float3(0,0,moonEarthDistance),moonEarthRadius,earthDistance,earthCoverage,en);
+ #ifdef JOURNEY
+ earthCoverage=0; // Earth is a separate body in the shared scene.
+#endif
  float2 coord=moonUV(n),dx=moonGradient(ddx(coord)),dy=moonGradient(ddy(coord));
  // Earth's fixed orientation and cloud composite are sufficient at its
  // natural ~2-degree diameter; no full-size Earth textures or air integration.

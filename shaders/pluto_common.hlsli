@@ -4,9 +4,15 @@ float plutoClock(){return time*movement;}
 float3 plutoRY(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);}
 float3 plutoRX(float3 p,float a){float s,c;sincos(a,s,c);return float3(p.x,c*p.y-s*p.z,s*p.y+c*p.z);}
 float2 plutoScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+
  float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;
  float t=plutoClock();
  return (p-float2(.075+sin(t*.0011)*.009*flow,.008+sin(t*.0014)*.006*flow))/.375;
+
+#endif
 }
 float3 plutoBody(float3 n){return plutoRY(plutoRX(n,-radians(25)), -plutoClock()*(2*plutoPi/900));}
 float2 plutoUV(float3 body){return float2(.5+atan2(body.x,body.z)/(2*plutoPi),.5-asin(clamp(body.y,-1,1))/plutoPi);}

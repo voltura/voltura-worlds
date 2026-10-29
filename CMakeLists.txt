@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(VolturaWorlds VERSION 0.5.2 LANGUAGES CXX RC)
+project(VolturaWorlds VERSION 0.6.0 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -117,6 +117,16 @@ shader(bloom_fold PS ps_6_0)
 shader(bloom_backdrop PS ps_6_0)
 shader(fullscreen VS vs_6_0)
 shader(body_statistics PS ps_6_0)
+foreach(BODY sun mercury venus earth moon mars jupiter saturn uranus neptune pluto)
+  set(EXTRA_JOURNEY_DEPS "${CMAKE_SOURCE_DIR}/shaders/${BODY}.hlsl")
+  file(GLOB JOURNEY_INCLUDES "${CMAKE_SOURCE_DIR}/shaders/*.hlsli")
+  add_custom_command(OUTPUT "${SHADER_DIR}/journey_${BODY}.cso"
+    COMMAND "${DXC}" -T ps_6_0 -E PS -O3 -Ges -Fo "${SHADER_DIR}/journey_${BODY}.cso" "${CMAKE_SOURCE_DIR}/shaders/journey_${BODY}.hlsl"
+    DEPENDS "shaders/journey_${BODY}.hlsl" ${EXTRA_JOURNEY_DEPS} ${JOURNEY_INCLUDES} VERBATIM)
+  list(APPEND SHADER_OUTPUTS "${SHADER_DIR}/journey_${BODY}.cso")
+endforeach()
+shader(journey_sky PS ps_6_0)
+
 shader(aurora PS ps_6_0)
 shader(silk PS ps_6_0)
 shader(eclipse PS ps_6_0)

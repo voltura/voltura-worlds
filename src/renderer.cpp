@@ -1,6 +1,8 @@
 #include "renderer.h"
 #include "video.h"
 #include "dds.h"
+#include "solar_journey.h"
+#include <algorithm>
 #include <d3dcompiler.h>
 #include <d3d12sdklayers.h>
 #include <wincodec.h>
@@ -80,6 +82,9 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  pipeline(L"jupiter.cso",false,true,jupiter_);pipeline(L"jupiter_space.cso",false,false,jupiterSpace_);
  pipeline(L"moon.cso",false,true,moon_);pipeline(L"moon_space.cso",false,false,moonSpace_);
  pipeline(L"sun.cso",false,false,sun_);
+ const wchar_t* journeyShaders[]={L"journey_sun.cso",L"journey_mercury.cso",L"journey_venus.cso",L"journey_earth.cso",L"journey_moon.cso",L"journey_mars.cso",L"journey_jupiter.cso",L"journey_saturn.cso",L"journey_uranus.cso",L"journey_neptune.cso",L"journey_pluto.cso"};
+ for(size_t i=0;i<journeyPipelines_.size();++i)pipeline(journeyShaders[i],false,true,journeyPipelines_[i]);
+ pipeline(L"journey_sky.cso",false,false,journeySky_);
  pipeline(L"pluto.cso",false,true,pluto_);pipeline(L"pluto_space.cso",false,false,plutoSpace_);
  pipeline(L"mercury.cso",false,true,mercuryPlanet_);pipeline(L"mercury_space.cso",false,false,mercurySpace_);
  pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);
@@ -893,7 +898,15 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
 }
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Aurora&&auroraArtwork_){idle();releaseAsset(auroraArtwork_);}
- prepareBodyStatistics(assignment,int(data.palette));
+ const bool journey=assignment.scene==Scene::SolarSystemJourney;
+ JourneyFrame tour{};if(journey)tour=journeyFrame(data.time,data.flow,float(width_)/height_);
+ Assignment cardAssignment=assignment;
+ if(journey){cardAssignment.scene=journeyBodies[tour.stop].scene;cardAssignment.showBodyStatistics=assignment.journeyShowBodyStatistics;}
+ prepareBodyStatistics(cardAssignment,int(data.palette));
+ if(lastScene_==Scene::SolarSystemJourney&&!journey){
+  idle();
+  for(auto* resource:{std::addressof(earthColor_),std::addressof(earthClouds_),std::addressof(earthMaterial_),std::addressof(moonColor_),std::addressof(moonNormal_),std::addressof(moonEarth_),std::addressof(marsColor_),std::addressof(marsNormal_),std::addressof(mercuryColor_),std::addressof(mercuryNormal_),std::addressof(jupiterColor_),std::addressof(jupiterAtmosphere_),std::addressof(saturnColor_),std::addressof(plutoColor_),std::addressof(sunImage_),std::addressof(sunProminence_),std::addressof(starTexture_)})if(*resource)releaseAsset(*resource);
+ }
  if(assignment.scene!=Scene::Video&&video_){idle();video_.reset();videoPath_.clear();videoView_=nullptr;videoBytes_=0;}
 
  if(lastScene_!=assignment.scene&&(lastScene_==Scene::Orbit||lastScene_==Scene::Mars||lastScene_==Scene::Earth||lastScene_==Scene::Moon||lastScene_==Scene::Jupiter||lastScene_==Scene::Saturn||lastScene_==Scene::Mercury||lastScene_==Scene::Neptune||lastScene_==Scene::Venus||lastScene_==Scene::Uranus||lastScene_==Scene::Pluto||lastScene_==Scene::Sun||lastScene_==Scene::ForestWater||lastScene_==Scene::TropicalParadise||lastScene_==Scene::TropicalIsland)){
@@ -921,6 +934,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  bool geometry=assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom;
  if(geometry&&orbitSamples_==1)makeDepthTarget();
  else if(depth_){idle();depth_.Reset();depthTargetBytes_=0;}
+ if(journey){loadSun();loadMercury();loadEarth();loadMoon();loadMars();loadJupiter();loadSaturn();loadPluto();loadStars(true);}
  if(assignment.scene==Scene::Neptune||assignment.scene==Scene::Venus||assignment.scene==Scene::Uranus)loadStars(true);
  if(assignment.scene==Scene::Saturn)loadSaturn();
  if(assignment.scene==Scene::Pluto)loadPluto();
@@ -958,7 +972,41 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  const float clear[]={.002f,.003f,.006f,1};list_->ClearRenderTargetView(rtv,clear,0,nullptr);if(usesDepth)list_->ClearDepthStencilView(dsv,D3D12_CLEAR_FLAG_DEPTH,1,0,0,nullptr);
  D3D12_VIEWPORT vp{0,0,float(width_),float(height_),0,1};D3D12_RECT sc{0,0,(LONG)width_,(LONG)height_};list_->RSSetViewports(1,&vp);list_->RSSetScissorRects(1,&sc);list_->SetGraphicsRootSignature(root_.Get());list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  auto draw=[&](ID3D12PipelineState* state,float pass,unsigned count,unsigned instances=1){data.pass=pass;list_->SetPipelineState(state);list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->DrawInstanced(count,instances,0,0);};
- if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
+ if(journey){
+  // Project every body through one camera. The material shaders retain their
+  // analytic globe/ring coverage and are composited from far to near.
+  using Vec=std::array<float,3>;
+  auto sub=[](Vec a,Vec b){return Vec{a[0]-b[0],a[1]-b[1],a[2]-b[2]};};
+  auto dot=[](Vec a,Vec b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];};
+  auto cross=[](Vec a,Vec b){return Vec{a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};};
+  auto norm=[&](Vec a){float len=std::sqrt(dot(a,a));for(auto& v:a)v/=std::max(len,.00001f);return a;};
+  Vec forward=norm(sub(tour.target,tour.camera)),right=norm(cross(forward,Vec{0,1,0})),up=cross(right,forward);
+  FrameData base=data;
+  // Time is already integrated with Movement; frozen time freezes materials too.
+  // Keep movement=1 for their clock even at zero speed, suppressing only audio.
+  base.movement=1;if(assignment.params.movement==0)base.reaction=0;
+  data=base;for(int i=0;i<3;i++)data.spare[i]=forward[i];
+  list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(journeySky_.Get(),0,3);
+  struct Projected {size_t index;float depth,x,y,radius;};std::vector<Projected> visible;
+  const float shortEdge=float(std::min(width_,height_)),focal=1.06066017f;
+  for(size_t i=0;i<journeyBodies.size();++i){
+   const auto& body=journeyBodies[i];Vec offset=sub(Vec{body.x,body.y,body.z},tour.camera);
+   float depth=dot(offset,forward);if(depth<=body.radius)continue;
+   float x=focal*dot(offset,right)/depth,y=focal*dot(offset,up)/depth;
+   float radius=focal*body.radius/depth,extent=radius*(body.scene==Scene::Saturn?2.4f:1.5f);
+   if(std::abs(x)>float(width_)/shortEdge*.5f+extent||std::abs(y)>float(height_)/shortEdge*.5f+extent||radius*shortEdge<.35f)continue;
+   visible.push_back({i,depth,x,y,radius});
+  }
+  std::sort(visible.begin(),visible.end(),[](const auto& a,const auto& b){return a.depth>b.depth;});
+  constexpr unsigned slots[]={414,408,82,396,399,393,402,405,82,82,411};
+  for(const auto& body:visible){
+   data=base;data.spare[8]=body.x;data.spare[9]=body.y;data.spare[10]=body.radius;
+   if(body.radius*shortEdge<24){data.detail=std::min(data.detail,.35f);data.spare[0]=0;}
+   list_->SetGraphicsRootDescriptorTable(2,gpu(slots[body.index]));draw(journeyPipelines_[body.index].Get(),0,3);
+  }
+  data=base;
+ }
+ else if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}
  else if(assignment.scene==Scene::Bloom){draw(bloomBackdrop_.Get(),0,3);draw(bloomSurface_.Get(),0,512*192*6);}
  else if(assignment.scene==Scene::TropicalIsland){
   list_->SetGraphicsRootDescriptorTable(2,gpu(423));
@@ -1013,7 +1061,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  transition(target,D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
  rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=size_t(frameIndex_)*rtvStride_;list_->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
  outputConstants();list_->SetGraphicsRootDescriptorTable(2,gpu(66));draw(output_.hdr?postHdr_.Get():post_.Get(),assignment.scene==Scene::Orbit?1.f:0.f,3);
- drawBodyStatistics(assignment);
+ drawBodyStatistics(cardAssignment,journey?tour.opacity:1.f);
  endGpuStage(postTiming);
  transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(!composedDesktop_||!present);if(present){if(nonblocking_||composedDesktop_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
 }

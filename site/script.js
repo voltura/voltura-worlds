@@ -25,7 +25,8 @@
     sun: ['22', 'Sun', 'Ultraviolet light. Plasma in motion.'],
     forest_water: ['23', 'Forest Water', 'Woodland reflections. Ripples beneath drifting leaves.'],
     tropical_paradise: ['24', 'Tropical Paradise', 'Jungle shade. Falling water. A turquoise escape.'],
-    tropical_island: ['25', 'Tropical Island', 'A sunlit beach. Turquoise waves. Palms in the breeze.']
+    tropical_island: ['25', 'Tropical Island', 'A sunlit beach. Turquoise waves. Palms in the breeze.'],
+    solar_system_journey: ['26', 'Solar System Journey', 'One continuous journey. Eleven celestial bodies. Discover each on arrival.']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');
@@ -66,9 +67,10 @@
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();
-      video.poster = `assets/${name}.jpg?v=0.5.0`;
+      const revision = name === 'solar_system_journey' ? '0.6.0' : '0.5.0';
+      video.poster = `assets/${name}.jpg?v=${revision}`;
       video.setAttribute('aria-label', `${title}: native animated wallpaper`);
-      video.querySelector('source').src = `assets/${name}.mp4?v=0.5.0`;
+      video.querySelector('source').src = `assets/${name}.mp4?v=${revision}`;
       video.load();
       play();
     });

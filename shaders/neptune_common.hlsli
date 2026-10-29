@@ -6,10 +6,16 @@ float neptuneClock(){return time*movement;}
 float3 neptuneRY(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);}
 float2 neptuneRotate(float2 p,float a){float s,c;sincos(a,s,c);return float2(c*p.x-s*p.y,s*p.x+c*p.y);}
 float2 neptuneScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+
  float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;
  float t=neptuneClock();
  p=(p-float2(.075+sin(t*.0011)*.009*flow,.008+sin(t*.0014)*.006*flow))/.375;
  return neptuneRotate(p,radians(-28.3));
+
+#endif
 }
 float3 neptuneLight(){float2 p=neptuneRotate(float2(-.48,.22),radians(-28.3));return normalize(float3(p,.85));}
 float3 neptuneBody(float3 n){return neptuneRY(n,neptuneClock()*(2*neptunePi/900));}

@@ -18,10 +18,16 @@ float3 marsToWorld(float3 p){
  return marsRotateZ(p,radians(25.19));
 }
 float2 marsScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+
  float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);
  p.y=-p.y;
  float t=marsClock();
  return (p-float2(.075+sin(t*.0011)*.009*flow,.008+sin(t*.0014)*.006*flow))/.375;
+
+#endif
 }
 float3 marsGrade(float3 c){
  // Exposure/white-balance variations retain the source geography and colors.

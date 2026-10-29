@@ -20,3 +20,11 @@ float2 orbitSunUV(){return float2(.5+.5793464/(resolution.x/resolution.y),.23647
 float3 colorA(){return palette<.5?float3(.025,.65,.9):palette<1.5?float3(.1,.7,.35):palette<2.5?float3(.7,.13,.04):float3(.45,.45,.55);}
 float3 colorB(){return palette<.5?float3(.6,.04,.65):palette<1.5?float3(.08,.2,.85):palette<2.5?float3(.9,.5,.08):float3(.6,.65,.75);}
 
+
+#ifdef JOURNEY
+// Projected center (short-edge units, y up) and globe radius supplied per body.
+float2 journeyScreen(float2 uv){
+ float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;
+ return (p-spare2.xy)/max(spare2.z,.000001);
+}
+#endif

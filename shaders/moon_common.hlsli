@@ -13,6 +13,9 @@ void moonCamera(float2 uv,out float3 origin,out float3 ray){
  float3 forward=-outward,right=normalize(cross(forward,float3(0,1,0))),up=cross(right,forward);
  float2 center=float2(.075+sin(a)*.009*flow,.008+sin(2*a)*.006*flow);
  float2 q=(uv-.5)*resolution/min(resolution.x,resolution.y);q.y=-q.y;q-=center;
+#ifdef JOURNEY
+ q=journeyScreen(uv)*.375;
+#endif
  // At distance 3, tan(angular radius)=1/sqrt(8). Radius fills .375
  // of the shorter viewport dimension, independently of aspect ratio.
  ray=normalize(forward+(right*q.x+up*q.y)/(.375*sqrt(8.0)));

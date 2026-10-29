@@ -3,7 +3,18 @@ static const float jupiterPolar=66854.0/71492.0;
 static const float jupiterScaleHeight=27.0/71492.0;
 static const float jupiterSolar=1.0/(5.204*5.204);
 float jupiterClock(){return time*movement;}
-float jupiterAngle(){return spare1.z>0?0:frac(jupiterClock()/900)*(2*jupiterPi);}
+float jupiterAngle(){
+#ifdef JOURNEY
+ // The storm sits at longitude 38 degrees, facing us when this angle is zero.
+ // Center that view on Jupiter's 25-second visit (stop 6, 37 seconds per leg).
+ // A continuous sweep repeats with the 407-second tour, including later laps,
+ // and retains the original rotation speed around arrival without a reset.
+ const float tour=11*37,visitMiddle=6*37+12.5;
+ return sin((jupiterClock()-visitMiddle)*(2*jupiterPi/tour))*(tour/900);
+#else
+ return spare1.z>0?0:frac(jupiterClock()/900)*(2*jupiterPi);
+#endif
+}
 float3 jupiterRY(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);}
 float3 jupiterRX(float3 p,float a){float s,c;sincos(a,s,c);return float3(p.x,c*p.y-s*p.z,s*p.y+c*p.z);}
 float3 jupiterRZ(float3 p,float a){float s,c;sincos(a,s,c);return float3(c*p.x-s*p.y,s*p.x+c*p.y,p.z);}
@@ -12,8 +23,14 @@ float jupiterPitch(){return radians(8)+sin(jupiterAngle())*.012*flow;}
 float3 jupiterToBody(float3 p){return jupiterRY(jupiterRX(jupiterRZ(p,-radians(3.13)),-jupiterPitch()),-jupiterSpin());}
 float3 jupiterToWorld(float3 p){return jupiterRZ(jupiterRX(jupiterRY(p,jupiterSpin()),jupiterPitch()),radians(3.13));}
 float2 jupiterScreen(float2 uv){
+#ifdef JOURNEY
+ return journeyScreen(uv);
+#else
+
  float2 p=(uv-.5)*resolution/min(resolution.x,resolution.y);p.y=-p.y;
  float a=jupiterAngle();return (p-float2(.075+sin(a)*.009*flow,.008+sin(2*a)*.006*flow))/.375;
+
+#endif
 }
 float3 jupiterLight(){
  // Near-frontal sunlight keeps the illuminated disc close to the real
