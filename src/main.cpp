@@ -758,9 +758,9 @@ void notifyReadyUpdate(){
  NOTIFYICONDATAW notification{sizeof(notification)};
  notification.hWnd=controller;notification.uID=1;notification.uFlags=NIF_INFO;
  notification.dwInfoFlags=NIIF_INFO|NIIF_RESPECT_QUIET_TIME;
- wcscpy_s(notification.szInfoTitle,L"Voltura Worlds update ready");
- auto message=L"Version "+version+L" is downloaded and verified. Click to restart and install the update.";
- wcscpy_s(notification.szInfo,message.c_str());
+ auto title=L"Voltura Worlds "+version+L" update ready";
+ wcscpy_s(notification.szInfoTitle,title.c_str());
+ wcscpy_s(notification.szInfo,L"Click to install the update.");
  if(Shell_NotifyIconW(NIM_MODIFY,&notification)){
   notifiedUpdateVersion=version;updateNotificationVersion=std::move(version);
  }
