@@ -27,12 +27,28 @@ std::vector<std::pair<std::wstring,std::wstring>> AudioCapture::devices(){
  for(UINT i=0;i<count;i++){ComPtr<IMMDevice>d;if(FAILED(collection->Item(i,&d))||!d)continue;TaskString id;if(FAILED(d->GetId(&id.value))||!id.value)continue;std::wstring name=id.value;ComPtr<IPropertyStore> props;if(SUCCEEDED(d->OpenPropertyStore(STGM_READ,&props))){PropertyValue property;auto& v=property.value;if(SUCCEEDED(props->GetValue(PKEY_Device_FriendlyName,&v))&&v.vt==VT_LPWSTR&&v.pwszVal)name=v.pwszVal;}result.emplace_back(id.value,name);}return result;
 }
 static AudioFeatures analyze(const std::array<float,1024>& samples,unsigned cursor,float rate,float& previous){
+ // The transform shape never changes. Share its window, permutation and weights
+ // across endpoints/channels instead of rebuilding them for every audio hop.
+ struct Plan {
+  std::array<float,1024> window;
+  std::array<unsigned,1024> reversed;
+  std::array<std::complex<float>,1023> twiddles;
+  Plan(){
+   for(unsigned i=0;i<1024;i++){
+    window[i]=.5f-.5f*std::cos(6.2831853f*float(i)/1023);
+    unsigned value=i,index=0;for(unsigned bit=0;bit<10;bit++){index=(index<<1)|(value&1);value>>=1;}reversed[i]=index;
+   }
+   for(unsigned len=2;len<=1024;len*=2){float angle=-6.2831853f/len;std::complex<float> step{std::cos(angle),std::sin(angle)},w=1;for(unsigned j=0;j<len/2;j++){twiddles[len/2-1+j]=w;w*=step;}}
+  }
+ };
+ static const Plan plan;
  std::array<std::complex<float>,1024> bins;float power=0;
- for(unsigned i=0;i<1024;i++){float v=samples[(cursor+i)%1024];power+=v*v;bins[i]=v*(.5f-.5f*std::cos(6.2831853f*float(i)/1023));}
- for(unsigned i=1,j=0;i<1024;i++){unsigned bit=512;for(;j&bit;bit>>=1)j^=bit;j^=bit;if(i<j)std::swap(bins[i],bins[j]);}
- for(unsigned len=2;len<=1024;len*=2){float angle=-6.2831853f/len;std::complex<float> step(std::cos(angle),std::sin(angle));for(unsigned i=0;i<1024;i+=len){std::complex<float>w=1;for(unsigned j=0;j<len/2;j++){auto u=bins[i+j],v=bins[i+j+len/2]*w;bins[i+j]=u+v;bins[i+j+len/2]=u-v;w*=step;}}}
- auto band=[&](float lo,float hi){float energy=0;int count=0;for(unsigned i=1;i<512;i++){float hz=i*rate/1024;if(hz>=lo&&hz<hi){energy+=std::norm(bins[i])/(1024.f*1024.f);count++;}}return std::clamp((10*std::log10(energy/std::max(count,1)+1e-10f)+65)/55,0.f,1.f);};
- float rms=std::sqrt(power/1024);float energy=std::clamp((20*std::log10(rms+1e-7f)+55)/50,0.f,1.f);float transient=std::clamp((energy-previous)*5,0.f,1.f);previous=energy;return {band(30,250),band(250,3500),band(3500,16000),energy,transient};
+ for(unsigned i=0;i<1024;i++){float v=samples[(cursor+i)%1024];power+=v*v;bins[plan.reversed[i]]=v*plan.window[i];}
+ for(unsigned len=2;len<=1024;len*=2)for(unsigned i=0;i<1024;i+=len)for(unsigned j=0;j<len/2;j++){auto u=bins[i+j],v=bins[i+j+len/2]*plan.twiddles[len/2-1+j];bins[i+j]=u+v;bins[i+j+len/2]=u-v;}
+ std::array<float,3> energies{};std::array<unsigned,3> counts{};
+ for(unsigned i=1;i<512;i++){float hz=i*rate/1024;int band=hz<30||hz>=16000?-1:hz<250?0:hz<3500?1:2;if(band>=0){energies[band]+=std::norm(bins[i])/(1024.f*1024.f);++counts[band];}}
+ auto band=[&](unsigned index){return std::clamp((10*std::log10(energies[index]/std::max(counts[index],1u)+1e-10f)+65)/55,0.f,1.f);};
+ float rms=std::sqrt(power/1024);float energy=std::clamp((20*std::log10(rms+1e-7f)+55)/50,0.f,1.f);float transient=std::clamp((energy-previous)*5,0.f,1.f);previous=energy;return {band(0),band(1),band(2),energy,transient};
 }
 void AudioCapture::run(std::stop_token stop,const std::wstring& requested){
  while(!stop.stop_requested()){

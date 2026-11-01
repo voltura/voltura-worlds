@@ -213,6 +213,10 @@ void Renderer::validateDebugMessages(){
 }
 void Renderer::targets(){
  makePresentationBuffers(output_.format());
+}
+void Renderer::makeSceneTargets(){
+ if(hdr_&&bloomTargets_[0]&&bloomTargets_[1])return;
+ idle();hdr_.Reset();for(auto& target:bloomTargets_)target.Reset();
  D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;d.Width=width_;d.Height=height_;d.DepthOrArraySize=1;d.MipLevels=1;d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;d.SampleDesc.Count=1;d.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
  auto h=heap(D3D12_HEAP_TYPE_DEFAULT);
  check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,nullptr,IID_PPV_ARGS(&hdr_)),"Create HDR scene target");hdr_->SetName(L"Linear HDR artwork");
@@ -427,21 +431,27 @@ void Renderer::loadDds(const std::filesystem::path& file,ComPtr<ID3D12Resource>&
  check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate bounded compressed upload");
  for(size_t i=0;i<image.mips.size();i++)if(rows[i]!=image.mips[i].rows||image.mips[i].rowBytes>footprints[i].Footprint.RowPitch||footprints[i].Footprint.RowPitch>uploadBytes)throw std::runtime_error("Invalid compressed footprint");
  BYTE* mapped{};D3D12_RANGE none{};check(upload->Map(0,&none,reinterpret_cast<void**>(&mapped)),"Map compressed upload");
+ UINT64 used=0;bool recording=false;
+ auto flush=[&](){if(recording){submit();idle();recording=false;}used=0;};
  for(UINT i=0;i<desc.MipLevels;i++){
   const auto& footprint=footprints[i].Footprint;
-  unsigned capacity=static_cast<unsigned>(uploadBytes/footprint.RowPitch);
   for(unsigned row=0;row<rows[i];){
+   UINT64 offset=(used+D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1)&~UINT64(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1);
+   if(offset+footprint.RowPitch>uploadBytes){flush();offset=0;}
+   unsigned capacity=static_cast<unsigned>((uploadBytes-offset)/footprint.RowPitch);
    unsigned count=std::min(capacity,rows[i]-row);
    for(unsigned chunkRow=0;chunkRow<count;chunkRow++)
-    std::memcpy(mapped+size_t(chunkRow)*footprint.RowPitch,sourceFile.data+image.mips[i].offset+size_t(row+chunkRow)*image.mips[i].rowBytes,image.mips[i].rowBytes);
-   D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;source.PlacedFootprint.Footprint=footprint;source.PlacedFootprint.Footprint.Height=std::min(count*4,footprint.Height-row*4);
+    std::memcpy(mapped+offset+size_t(chunkRow)*footprint.RowPitch,sourceFile.data+image.mips[i].offset+size_t(row+chunkRow)*image.mips[i].rowBytes,image.mips[i].rowBytes);
+   D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;source.PlacedFootprint.Offset=offset;source.PlacedFootprint.Footprint=footprint;source.PlacedFootprint.Footprint.Height=std::min(count*4,footprint.Height-row*4);
    dest.pResource=ready.Get();dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dest.SubresourceIndex=i;
-   begin();list_->CopyTextureRegion(&dest,0,row*4,0,&source,nullptr);submit();idle();
-   // The fence must complete before this mapped staging region is overwritten.
-   row+=count;
+   if(!recording){begin();recording=true;}
+   list_->CopyTextureRegion(&dest,0,row*4,0,&source,nullptr);
+   // Each copy owns a distinct aligned staging range until the batch fence
+   // completes. Small mip levels share one submission and one GPU wait.
+   used=offset+UINT64(count)*footprint.RowPitch;row+=count;
   }
  }
- upload->Unmap(0,nullptr);begin();transition(ready.Get(),D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);submit();idle();
+ upload->Unmap(0,nullptr);if(!recording)begin();transition(ready.Get(),D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);submit();idle();
  D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=desc.Format;srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;srv.Texture2D.MipLevels=desc.MipLevels;device_->CreateShaderResourceView(ready.Get(),&srv,cpu(slot));
  texture=std::move(ready);retainTexture(cacheKey,texture,slot);
 }
@@ -483,15 +493,26 @@ void Renderer::loadTexture(const std::filesystem::path& file,ComPtr<ID3D12Resour
  }
  D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=width;desc.Height=height;desc.DepthOrArraySize=1;desc.MipLevels=static_cast<UINT16>(levels.size());desc.Format=grayscale?DXGI_FORMAT_R8_UNORM:DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.SampleDesc.Count=1;
  ComPtr<ID3D12Resource> ready;auto hp=heap(D3D12_HEAP_TYPE_DEFAULT);check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&ready)),"Allocate artwork texture");ready->SetName(file.filename().c_str());
- std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(levels.size());UINT64 bytes{};device_->GetCopyableFootprints(&desc,0,desc.MipLevels,0,footprints.data(),nullptr,nullptr,&bytes);auto uploadHeap=heap(D3D12_HEAP_TYPE_UPLOAD);auto buffer=bufferDesc(bytes);ComPtr<ID3D12Resource> upload;check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate artwork upload");
+ std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(levels.size());UINT64 bytes{};device_->GetCopyableFootprints(&desc,0,desc.MipLevels,0,footprints.data(),nullptr,nullptr,&bytes);bytes=std::min<UINT64>(bytes,4*1024*1024);auto uploadHeap=heap(D3D12_HEAP_TYPE_UPLOAD);auto buffer=bufferDesc(bytes);ComPtr<ID3D12Resource> upload;check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate bounded artwork upload");
  BYTE* mapped{};D3D12_RANGE none{};check(upload->Map(0,&none,reinterpret_cast<void**>(&mapped)),"Map artwork upload");
- for(size_t i=0;i<levels.size();i++){
-  const auto& fp=footprints[i];size_t rowBytes=size_t(fp.Footprint.Width)*channels;
-  for(UINT y=0;y<fp.Footprint.Height;y++)std::memcpy(mapped+fp.Offset+size_t(y)*fp.Footprint.RowPitch,levels[i].data()+size_t(y)*rowBytes,rowBytes);
+ UINT64 used=0;bool recording=false;
+ for(UINT i=0;i<desc.MipLevels;i++){
+  const auto& fp=footprints[i].Footprint;size_t rowBytes=size_t(fp.Width)*channels;
+  if(fp.RowPitch>bytes)throw std::runtime_error("Artwork upload row exceeds staging capacity");
+  for(UINT row=0;row<fp.Height;){
+   UINT64 offset=(used+D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1)&~UINT64(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1);
+   if(offset+fp.RowPitch>bytes){submit();idle();recording=false;used=offset=0;}
+   UINT count=std::min<UINT>(UINT((bytes-offset)/fp.RowPitch),fp.Height-row);
+   for(UINT y=0;y<count;y++)std::memcpy(mapped+offset+size_t(y)*fp.RowPitch,levels[i].data()+size_t(row+y)*rowBytes,rowBytes);
+   if(!recording){begin();recording=true;}
+   D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;source.PlacedFootprint.Offset=offset;source.PlacedFootprint.Footprint=fp;source.PlacedFootprint.Footprint.Height=count;
+   dest.pResource=ready.Get();dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dest.SubresourceIndex=i;
+   list_->CopyTextureRegion(&dest,0,row,0,&source,nullptr);used=offset+UINT64(count)*fp.RowPitch;row+=count;
+  }
+  // The staging copy now owns these pixels; discard decoded mip storage early.
+  std::vector<BYTE>().swap(levels[i]);
  }
- upload->Unmap(0,nullptr);
- begin();D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;dest.pResource=ready.Get();dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
- for(UINT i=0;i<desc.MipLevels;i++){source.PlacedFootprint=footprints[i];dest.SubresourceIndex=i;list_->CopyTextureRegion(&dest,0,0,0,&source,nullptr);}
+ upload->Unmap(0,nullptr);if(!recording)begin();
  transition(ready.Get(),D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);submit();idle();
  D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=desc.Format;srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;srv.Texture2D.MipLevels=desc.MipLevels;device_->CreateShaderResourceView(ready.Get(),&srv,cpu(slot));
  texture=std::move(ready);retainTexture(cacheKey,texture,slot);
@@ -897,6 +918,11 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
  video_->consumed();
 }
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
+ // Video is drawn directly to the presentation buffer. It needs neither the
+ // full-resolution FP16 scene nor the two bloom intermediates.
+ if(assignment.scene==Scene::Video){
+  if(hdr_){idle();hdr_.Reset();for(auto& target:bloomTargets_)target.Reset();}
+ }else makeSceneTargets();
  if(assignment.scene!=Scene::Aurora&&auroraArtwork_){idle();releaseAsset(auroraArtwork_);}
  const bool journey=assignment.scene==Scene::SolarSystemJourney;
  JourneyFrame tour{};if(journey)tour=journeyFrame(data.time,data.flow,float(width_)/height_);
@@ -987,7 +1013,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   base.movement=1;if(assignment.params.movement==0)base.reaction=0;
   data=base;for(int i=0;i<3;i++)data.spare[i]=forward[i];
   list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(journeySky_.Get(),0,3);
-  struct Projected {size_t index;float depth,x,y,radius;};std::vector<Projected> visible;
+  struct Projected {size_t index;float depth,x,y,radius;};std::array<Projected,journeyBodies.size()> visible;size_t visibleCount=0;
   const float shortEdge=float(std::min(width_,height_)),focal=1.06066017f;
   for(size_t i=0;i<journeyBodies.size();++i){
    const auto& body=journeyBodies[i];Vec offset=sub(Vec{body.x,body.y,body.z},tour.camera);
@@ -995,15 +1021,27 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
    float x=focal*dot(offset,right)/depth,y=focal*dot(offset,up)/depth;
    float radius=focal*body.radius/depth,extent=radius*(body.scene==Scene::Saturn?2.4f:1.5f);
    if(std::abs(x)>float(width_)/shortEdge*.5f+extent||std::abs(y)>float(height_)/shortEdge*.5f+extent||radius*shortEdge<.35f)continue;
-   visible.push_back({i,depth,x,y,radius});
+   visible[visibleCount++]={i,depth,x,y,radius};
   }
-  std::sort(visible.begin(),visible.end(),[](const auto& a,const auto& b){return a.depth>b.depth;});
+  std::sort(visible.begin(),visible.begin()+visibleCount,[](const auto& a,const auto& b){return a.depth>b.depth;});
   constexpr unsigned slots[]={414,408,82,396,399,393,402,405,82,82,411};
-  for(const auto& body:visible){
+  for(size_t i=0;i<visibleCount;i++){
+   const auto& body=visible[i];
+   // The materials use an orthographic globe in projected short-edge units.
+   // Bound rasterization as well as visibility: distant bodies should shade
+   // their own pixels, rather than running a full-screen material per body.
+   // Saturn's outer ring is 2.322 radii; the Sun ends at 1.48. Leave an
+   // additional two pixels for derivative-based edge coverage.
+   float extent=body.radius*(journeyBodies[body.index].scene==Scene::Saturn?2.4f:1.5f)*shortEdge+2;
+   float centerX=width_*.5f+body.x*shortEdge,centerY=height_*.5f-body.y*shortEdge;
+   auto bounded=[](float value,unsigned limit){return LONG(std::clamp(value,0.f,float(limit)));};
+   D3D12_RECT bounds{bounded(std::floor(centerX-extent),width_),bounded(std::floor(centerY-extent),height_),bounded(std::ceil(centerX+extent),width_),bounded(std::ceil(centerY+extent),height_)};
+   list_->RSSetScissorRects(1,&bounds);
    data=base;data.spare[8]=body.x;data.spare[9]=body.y;data.spare[10]=body.radius;
    if(body.radius*shortEdge<24){data.detail=std::min(data.detail,.35f);data.spare[0]=0;}
    list_->SetGraphicsRootDescriptorTable(2,gpu(slots[body.index]));draw(journeyPipelines_[body.index].Get(),0,3);
   }
+  list_->RSSetScissorRects(1,&sc);
   data=base;
  }
  else if(assignment.scene==Scene::Aurora){list_->SetGraphicsRootDescriptorTable(2,gpu(69));draw(aurora_.Get(),0,3);}

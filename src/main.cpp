@@ -223,8 +223,8 @@ shellmenu::State currentMenuState(){
  }
  return state;
 }
-void syncControls(){
- std::lock_guard lock(stateMutex);syncSurfaceVisibility();desktopMenu.publish(currentMenuState());if(!library)return;
+void syncControls(bool refreshHidden=false){
+ std::lock_guard lock(stateMutex);syncSurfaceVisibility();desktopMenu.publish(currentMenuState());if(!library||(!refreshHidden&&!IsWindowVisible(library)))return;
  std::wstring statusError=lastError;if(!settingsError.empty()){if(!statusError.empty())statusError+=L" | ";statusError+=settingsError;}
  if(!renderSetupError.empty()){if(!statusError.empty())statusError+=L" | ";statusError+=renderSetupError;}
  auto retry=GetDlgItem(library,retryId);
@@ -387,6 +387,7 @@ void startRendering(){
     struct Runtime {
      HRESULT initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
      HANDLE timer=CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_ALL_ACCESS);
+     Runtime(){if(!timer)timer=CreateWaitableTimerW(nullptr,FALSE,nullptr);}
      ~Runtime(){if(timer)CloseHandle(timer);if(SUCCEEDED(initialized))CoUninitialize();}
     } runtime;
     auto wakeTimer=runtime.timer;
@@ -400,6 +401,7 @@ void startRendering(){
      std::vector<Scene> scenes(indices.size(),Scene::Off),failedScenes(indices.size(),Scene::Off);std::vector<std::wstring> failedVideos(indices.size());
      const auto ownedAdapter=context->luid;
      AdapterPerformance adapter;bool reported=false;
+     std::vector<PerformanceState*> inputs;inputs.reserve(performance.size());for(auto& p:performance)inputs.push_back(&p);
      auto seconds=[](){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();};
      adapter.lastEvaluation=seconds();
      auto publish=[&](size_t index,bool failed,const std::wstring& errorText){
@@ -444,7 +446,7 @@ void startRendering(){
         renderer.setPaused(a.scene!=Scene::Video);renderer.resize(renderWidth,renderHeight);
         if(a.scene==Scene::Smoke)renderer.setGrid(perf.detail==0?64:perf.detail==1?80:96);
         double elapsed=previous[n]>0?std::max(0.,now-previous[n]):0;previous[n]=now;clocks[n]+=elapsed*(a.scene==Scene::SolarSystemJourney?a.params.movement:1.f);
-        auto features=audio.features();FrameData data;data.time=float(clocks[n]);data.dt=boundedDelta(float(elapsed));data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene)||(a.scene==Scene::Sun||a.scene==Scene::SolarSystemJourney))data.spare[0]=float(perf.detail);
+        auto features=a.reaction==Reaction::Off||a.scene==Scene::Video?AudioFeatures{}:audio.features();FrameData data;data.time=float(clocks[n]);data.dt=boundedDelta(float(elapsed));data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene)||(a.scene==Scene::Sun||a.scene==Scene::SolarSystemJourney))data.spare[0]=float(perf.detail);
         bool missed=elapsed>1.5/perf.fps();
         renderer.render(a,data);auto after=seconds();perf.sample(after,renderer.gpuMs(),missed);perf.deadline.submitted(compositorPaced?now:after,perf.fps());
         if(after-now>.25){perf.restart(after);previous[n]=after;} // Ignore uploads and expensive resource changes.
@@ -462,7 +464,7 @@ void startRendering(){
         if(removed){for(size_t k=0;k<renderers.size();k++){renderers[k].reset();retryAt[k]=now+5;failedScenes[k]=performance[k].scene;performance[k].restart(now);publish(indices[k],true,L"Graphics device unavailable. Retrying automatically.");}context.reset();}
        }
       }
-      auto now=seconds();std::vector<PerformanceState*> inputs;for(auto& p:performance)inputs.push_back(&p);
+      auto now=seconds();
       if(renderDiagnostics&&now-adapter.lastEvaluation>=1){for(size_t n=0;n<performance.size();n++){const auto& p=performance[n];renderDiagnostic("cadence display="+std::to_string(indices[n])+" samples="+std::to_string(p.frames)+" longGaps="+std::to_string(p.misses)+" gpuMsTotal="+std::to_string(p.gpuSum));}}
       adapter.evaluate(now,inputs);
       if(now>=statusAt){statusAt=now+1;std::lock_guard lock(stateMutex);for(size_t n=0;n<indices.size();n++){
@@ -479,9 +481,9 @@ void startRendering(){
       for(size_t n=0;n<performance.size();n++)composedActive|=performance[n].active&&renderers[n]&&renderers[n]->compositorPresentation();
       compositorPaced=composedActive&&DCompositionWaitForCompositorClock(0,nullptr,50)==WAIT_OBJECT_0;
       if(compositorPaced)continue;
-      double delay=.05;for(auto& p:performance)if(p.active)delay=std::min(delay,std::max(.001,p.deadline.next-seconds()));
+      double delay=.1;for(auto& p:performance)if(p.active)delay=std::min(delay,std::max(.001,p.deadline.next-seconds()));
       LARGE_INTEGER due{};due.QuadPart=-LONGLONG(delay*10000000);
-      if(wakeTimer&&SetWaitableTimer(wakeTimer,&due,0,nullptr,nullptr,FALSE))WaitForSingleObject(wakeTimer,60);else std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      if(wakeTimer&&SetWaitableTimer(wakeTimer,&due,0,nullptr,nullptr,FALSE))WaitForSingleObject(wakeTimer,110);else std::this_thread::sleep_for(std::chrono::duration<double>(delay));
      }
     }
     }catch(const std::exception& e){
@@ -493,7 +495,7 @@ void startRendering(){
    while(!stop.stop_requested()){
     bool listen=false;std::wstring device;
     {std::lock_guard lock(stateMutex);device=settings.audioDevice;for(const auto& surface:surfaces){auto a=assignmentFor(settings,surface.monitor.id);auto pause=pauseState;pause.covered=surface.covered;listen|=a.scene!=Scene::Off&&a.scene!=Scene::Video&&a.reaction!=Reaction::Off&&!shouldPause(pause,settings.pauseBattery);}}
-    audio.configure(listen,device);std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    audio.configure(listen,device);std::this_thread::sleep_for(std::chrono::milliseconds(100));
    }
    for(auto& worker:workers)worker.request_stop();for(auto& worker:workers)worker.join();
    }
@@ -668,7 +670,7 @@ LRESULT CALLBACK libraryProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
 void showLibrary(){
- if(library){ShowWindow(library,SW_RESTORE);SetForegroundWindow(library);return;}
+ if(library){syncControls(true);ShowWindow(library,SW_RESTORE);SetForegroundWindow(library);return;}
  uiDpi=GetDpiForSystem();
  library=CreateWindowExW(WS_EX_APPWINDOW|WS_EX_COMPOSITED,L"VolturaWorldLibrary",appCaption().c_str(),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_VSCROLL|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,px(780),px(500),nullptr,nullptr,instance,nullptr);
  if(!library)throw std::runtime_error("Cannot open Worlds library.");
@@ -697,7 +699,7 @@ void showLibrary(){
  control(L"STATIC",L"Performance will appear during playback.",SS_NOPREFIX,30,668,690,48,performanceStatusId);
  addingAdvanced=false;addingFooter=true;
  control(L"BUTTON",L"Apply to all displays",WS_TABSTOP,30,330,170,36,applyAllId);control(L"BUTTON",L"Pause",WS_TABSTOP,210,330,130,36,pauseId);control(L"BUTTON",L"Retry now",WS_TABSTOP,350,330,190,36,retryId);control(L"BUTTON",L"Exit Voltura Worlds",WS_TABSTOP,550,330,170,36,communityId);
- statusLabel=control(L"STATIC",L"",0,30,386,690,55,0);addingFooter=false;syncControls();resizeLibrary();ShowWindow(library,SW_SHOW);SetForegroundWindow(library);
+ statusLabel=control(L"STATIC",L"",0,30,386,690,55,0);addingFooter=false;syncControls(true);resizeLibrary();ShowWindow(library,SW_SHOW);SetForegroundWindow(library);
  }catch(...){DestroyWindow(library);library=statusLabel=nullptr;layoutItems.clear();addingAdvanced=addingFooter=layingOut=false;audioDevices.clear();throw;}
 }
 HICON createTrayIcon(){
