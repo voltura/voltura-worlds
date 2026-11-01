@@ -3,6 +3,7 @@
 #include <atomic>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <windows.h>
 
 namespace wu {
@@ -16,6 +17,7 @@ class Updates {
     void sessionEnd();
     void close(bool install, bool restart = false);
     bool ready() const;
+    std::wstring readyVersion() const;
     ~Updates();
 };
 bool enabled();

@@ -72,6 +72,7 @@ unsigned renderGeneration=0;std::atomic<bool> renderSetupFailed{false};
 UINT taskbarCreated{};AudioCapture audio;HANDLE singleInstance{};
 ULONGLONG nextDesktopRetry{},nextUpdateCheck{},previousRandomTick{};
 wu::Updates updates;bool automaticUpdates=false,sessionEnding=false,restartForUpdate=false;
+std::wstring notifiedUpdateVersion,updateNotificationVersion;
 shellmenu::Server desktopMenu;
 struct LayoutItem{HWND hwnd;int x,y,w,h;bool advanced,footer;int sx{},sy{},sw{},sh{};};
 std::vector<LayoutItem> layoutItems;bool advancedOpen=false,addingAdvanced=false,addingFooter=false,layingOut=false,sideExpansion=false;
@@ -747,6 +748,27 @@ HICON createTrayIcon(){
  return icon;
 }
 void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP|NIF_SHOWTIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,appCaption().c_str());trayRegistered=Shell_NotifyIconW(NIM_ADD,&n)||Shell_NotifyIconW(NIM_MODIFY,&n);if(trayRegistered){n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);}if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
+void notifyReadyUpdate(){
+ if(!automaticUpdates||sessionEnding||!trayRegistered)return;
+ auto version=updates.readyVersion();if(version.empty()||version==notifiedUpdateVersion)return;
+ // Defer during presentations, quiet time or absence rather than repeatedly
+ // posting a notification that Windows will discard without showing.
+ QUERY_USER_NOTIFICATION_STATE state{};
+ if(SUCCEEDED(SHQueryUserNotificationState(&state))&&state!=QUNS_ACCEPTS_NOTIFICATIONS)return;
+ NOTIFYICONDATAW notification{sizeof(notification)};
+ notification.hWnd=controller;notification.uID=1;notification.uFlags=NIF_INFO;
+ notification.dwInfoFlags=NIIF_INFO|NIIF_RESPECT_QUIET_TIME;
+ wcscpy_s(notification.szInfoTitle,L"Voltura Worlds update ready");
+ auto message=L"Version "+version+L" is downloaded and verified. Click to restart and install the update.";
+ wcscpy_s(notification.szInfo,message.c_str());
+ if(Shell_NotifyIconW(NIM_MODIFY,&notification)){
+  notifiedUpdateVersion=version;updateNotificationVersion=std::move(version);
+ }
+}
+void dismissUpdateNotification(){
+ updateNotificationVersion.clear();
+ if(trayRegistered){NOTIFYICONDATAW notification{sizeof(notification)};notification.hWnd=controller;notification.uID=1;notification.uFlags=NIF_INFO;Shell_NotifyIconW(NIM_MODIFY,&notification);}
+}
 void prepareTrayMenu(HWND owner,POINT point){
  // Windows scales native menus using their owner. Keep the hidden controller
  // on the invocation monitor, including after HDMI reconnects or scale changes.
@@ -772,7 +794,7 @@ void invokeMenuCommand(const std::wstring& command,const std::wstring& displayId
  if(command==L"pause"||command==L"resume"){{std::lock_guard lock(stateMutex);pauseState.manual=command==L"pause";}syncControls();return;}
  if(command==L"automatic-on"||command==L"automatic-off"){
   bool next=command==L"automatic-on";wu::setEnabled(next);automaticUpdates=next;
-  if(!next)updates.cancel();else nextUpdateCheck=GetTickCount64()+5000;syncControls();return;
+  if(!next){updates.cancel();dismissUpdateNotification();}else nextUpdateCheck=GetTickCount64()+5000;syncControls();return;
  }
  if(displayId.empty())return;
  for(size_t i=0;i<std::size(visualizations);i++)if(command==visualizations[i].id){selectVisualization(int(i),displayId);return;}
@@ -795,7 +817,13 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   return 0;
  }
  case trayMessage:
-  if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();
+  if(LOWORD(l)==NIN_BALLOONUSERCLICK){
+   if(sessionEnding)return 0;
+   // A dismissed or stale notification cannot apply an invalidated update.
+   if(automaticUpdates&&!sessionEnding&&!updateNotificationVersion.empty()&&updates.readyVersion()==updateNotificationVersion)invokeMenuCommand(L"restart-update",{});
+   else showLibrary();
+  }
+  else if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();
   else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){
    POINT point{};GetCursorPos(&point);prepareTrayMenu(hwnd,point);
    shellmenu::State state;std::wstring displayId;
@@ -825,6 +853,7 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
 
   if(!trayRegistered)addTray(false);
   if(automaticUpdates&&!sessionEnding&&GetTickCount64()>=nextUpdateCheck){nextUpdateCheck=GetTickCount64()+3600000;updates.check();}
+  notifyReadyUpdate();
   bool reconnect=renderSetupFailed;
   if(!previewMode)reconnect|=surfaces.empty()||std::any_of(surfaces.begin(),surfaces.end(),[](const Surface& s){return !wallpaperAttached(s.hwnd);});
   if(GetTickCount64()>=nextDesktopRetry&&reconnect)createSurfaces();

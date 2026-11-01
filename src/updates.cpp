@@ -750,6 +750,12 @@ bool Updates::ready() const {
     std::lock_guard guard(state->mutex);
     return !state->cancel && state->ready.has_value();
 }
+std::wstring Updates::readyVersion() const {
+    if (!state) return {};
+    std::lock_guard guard(state->mutex);
+    if (state->cancel || state->closing || !state->ready) return {};
+    return wide(state->ready->version.text());
+}
 bool enabled() { return automaticUpdatesAllowed(cacheRoot(executable())); }
 void setEnabled(bool value) {
     auto profile = cacheRoot(executable()).parent_path().parent_path() / L"preferences.ini";
