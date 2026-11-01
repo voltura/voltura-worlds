@@ -24,6 +24,9 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  float disc=b*b-a*c;
  float r=sqrt(max(1-disc/a,.000001));
  float edge=max(fwidth(r),.000001),coverage=saturate((1-r)/edge+.5);
+ float hazeWidth=.0025+.0025*density;
+ float outer=saturate((1+hazeWidth*4-r)/edge+.5);
+ clip(outer-.00001);
  float3 body=o+d*((-b-sqrt(max(disc,0)))/a);
  float3 n=uranusToWorld(normalize(body*metric));
  float mu=dot(n,uranusLight()),view=max(n.z,.001);
@@ -33,10 +36,7 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  float diffuse=incidence*(.72+.28/max(incidence+view,.08));
  float3 albedo=uranusClouds(normalize(body));
  float3 color=albedo*diffuse*1.5;
- float hazeWidth=.0025+.0025*density;
  float shell=exp(-max(r-1,0)/hazeWidth);
- float outer=saturate((1+hazeWidth*4-r)/edge+.5);
- clip(outer-.00001);
  float limb=pow(1-saturate(view),3);
  float3 haze=float3(.43,.70,.76)*(.045+.035*density)*day;
  color+=haze*limb;

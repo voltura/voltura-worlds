@@ -43,12 +43,14 @@ struct Server::Impl {
   SECURITY_ATTRIBUTES security{sizeof(security),descriptor,FALSE};
   Handle pipe(CreateNamedPipeW(name.c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED|FILE_FLAG_FIRST_PIPE_INSTANCE,PIPE_TYPE_MESSAGE|PIPE_READMODE_MESSAGE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,1,sizeof(Response),sizeof(Request),0,&security));
   LocalFree(descriptor);if(pipe.value==INVALID_HANDLE_VALUE)return;
+  Handle stopped(CreateEventW(nullptr,TRUE,FALSE,nullptr));if(!stopped.value)return;
+  std::stop_callback wakeOnStop(stop,[event=stopped.value]{SetEvent(event);});
   while(!stop.stop_requested()){
    Handle event(CreateEventW(nullptr,TRUE,FALSE,nullptr));if(!event.value)break;
    OVERLAPPED operation{};operation.hEvent=event;bool connected=ConnectNamedPipe(pipe,&operation)!=FALSE;
    if(!connected){auto error=GetLastError();if(error==ERROR_PIPE_CONNECTED)connected=true;else if(error==ERROR_IO_PENDING){
-    while(!stop.stop_requested()&&WaitForSingleObject(event,50)==WAIT_TIMEOUT){}
-    DWORD done=0;if(stop.stop_requested())CancelIoEx(pipe,&operation);
+    HANDLE waits[]={event.value,stopped.value};auto result=WaitForMultipleObjects(2,waits,FALSE,INFINITE);
+    DWORD done=0;if(result!=WAIT_OBJECT_0||stop.stop_requested())CancelIoEx(pipe,&operation);
     connected=GetOverlappedResult(pipe,&operation,&done,TRUE)!=FALSE;
    }}
    if(connected&&!stop.stop_requested()){

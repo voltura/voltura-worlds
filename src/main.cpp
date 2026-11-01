@@ -396,6 +396,7 @@ void startRendering(){
     {
      std::vector<std::unique_ptr<Renderer>> renderers(indices.size());std::vector<PerformanceState> performance(indices.size());
      std::vector<double> clocks(indices.size(),0),previous(indices.size(),0),retryAt(indices.size(),0),insetAt(indices.size(),0),outputAt(indices.size(),0);
+     std::vector<Assignment> assignmentSnapshots(indices.size());std::vector<Monitor> monitorSnapshots(indices.size());
      std::vector<OutputConfig> outputConfigs(indices.size());std::vector<OutputPreference> outputPreferences(indices.size(),OutputPreference::Auto);std::vector<bool> outputVideo(indices.size(),false);std::vector<unsigned> outputSeen(indices.size(),0);
      double statusAt=0;bool compositorPaced=false;
      std::vector<Scene> scenes(indices.size(),Scene::Off),failedScenes(indices.size(),Scene::Off);std::vector<std::wstring> failedVideos(indices.size());
@@ -410,8 +411,8 @@ void startRendering(){
      };
      while(!token.stop_requested()){
       for(size_t n=0;n<indices.size();n++){
-       const size_t i=indices[n];auto now=seconds();Assignment a;PauseState pause;Monitor monitor;HWND window;bool preview,hadFailure;
-       {std::lock_guard lock(stateMutex);a=assignmentFor(settings,surfaces[i].monitor.id);if(surfaces[i].pendingVideoSpeed)a.videoSettings.speed=*surfaces[i].pendingVideoSpeed;pause=pauseState;pause.covered=surfaces[i].covered;pause.battery=settings.pauseBattery&&pause.battery;monitor=surfaces[i].monitor;window=surfaces[i].hwnd;preview=previewMode;hadFailure=surfaces[i].renderingFailed;}
+       const size_t i=indices[n];auto now=seconds();auto& a=assignmentSnapshots[n];auto& monitor=monitorSnapshots[n];PauseState pause;HWND window;bool preview,hadFailure;
+       {std::lock_guard lock(stateMutex);auto found=std::find_if(settings.displays.begin(),settings.displays.end(),[&](const auto& item){return item.first==surfaces[i].monitor.id;});if(found!=settings.displays.end())a=found->second;else a=Assignment{};if(surfaces[i].pendingVideoSpeed)a.videoSettings.speed=*surfaces[i].pendingVideoSpeed;pause=pauseState;pause.covered=surfaces[i].covered;pause.battery=settings.pauseBattery&&pause.battery;monitor=surfaces[i].monitor;window=surfaces[i].hwnd;preview=previewMode;hadFailure=surfaces[i].renderingFailed;}
        auto& perf=performance[n];bool changed=perf.configure(a.performance,monitor.refreshHz,a.scene,now);
        if(retryAt[n]&&(a.scene!=failedScenes[n]||a.video!=failedVideos[n]))retryAt[n]=0;
        bool active=a.scene!=Scene::Off&&IsWindow(window)&&!shouldPause(pause,true)&&retryAt[n]<=now;bool wasActive=perf.active;perf.setActive(active,now);
@@ -545,7 +546,9 @@ void createSurfaces(){
  {std::lock_guard lock(stateMutex);lastError.clear();}
  // Apply coverage before the worker can allocate/render its first frame. The
  // periodic refresh otherwise leaves a startup interval rendering behind apps.
- for(auto& surface:surfaces)surface.covered=!previewMode&&monitorCovered(surface.monitor,GetCurrentProcessId());
+ std::vector<Monitor> coverageMonitors;for(const auto& surface:surfaces)coverageMonitors.push_back(surface.monitor);
+ auto covered=previewMode?std::vector<bool>(surfaces.size(),false):monitorsCovered(coverageMonitors,GetCurrentProcessId());
+ for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];
  startRendering();if(library){SendDlgItemMessageW(library,monitorId,CB_RESETCONTENT,0,0);int choice=0;for(size_t i=0;i<surfaces.size();i++){auto& s=surfaces[i];ui::appendComboChoice(GetDlgItem(library,monitorId),s.monitor.name.c_str());if(s.monitor.id==selectedMonitorId)choice=int(i);}selectedMonitorId=surfaces[choice].monitor.id;SendDlgItemMessageW(library,monitorId,CB_SETCURSEL,choice,0);syncControls();}
 }
 void showLibrary();
@@ -826,7 +829,7 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(!previewMode)reconnect|=surfaces.empty()||std::any_of(surfaces.begin(),surfaces.end(),[](const Surface& s){return !wallpaperAttached(s.hwnd);});
   if(GetTickCount64()>=nextDesktopRetry&&reconnect)createSurfaces();
   auto now=GetTickCount64();auto elapsed=previousRandomTick?now-previousRandomTick:0;previousRandomTick=now;
-  SYSTEM_POWER_STATUS power{};bool powerKnown=GetSystemPowerStatus(&power)!=FALSE;std::vector<bool> covered;for(auto& s:surfaces)covered.push_back(!previewMode&&monitorCovered(s.monitor,GetCurrentProcessId()));{std::lock_guard lock(stateMutex);if(powerKnown)pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}advanceRandomVisualizations(elapsed);syncControls();}return 0;
+  SYSTEM_POWER_STATUS power{};bool powerKnown=GetSystemPowerStatus(&power)!=FALSE;std::vector<Monitor> coverageMonitors;for(const auto& s:surfaces)coverageMonitors.push_back(s.monitor);auto covered=previewMode?std::vector<bool>(surfaces.size(),false):monitorsCovered(coverageMonitors,GetCurrentProcessId());{std::lock_guard lock(stateMutex);if(powerKnown)pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}advanceRandomVisualizations(elapsed);syncControls();}return 0;
  case WM_WTSSESSION_CHANGE:{std::lock_guard lock(stateMutex);if(w==WTS_SESSION_LOCK)pauseState.locked=true;if(w==WTS_SESSION_UNLOCK){pauseState.locked=false;previousRandomTick=GetTickCount64();}}return 0;
  case WM_POWERBROADCAST:{std::lock_guard lock(stateMutex);if(w==PBT_APMSUSPEND)pauseState.suspended=true;if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND){pauseState.suspended=false;previousRandomTick=GetTickCount64();++outputRevision;}if(w==PBT_POWERSETTINGCHANGE){auto p=reinterpret_cast<POWERBROADCAST_SETTING*>(l);if(p->PowerSetting==GUID_CONSOLE_DISPLAY_STATE&&p->DataLength==sizeof(DWORD)){DWORD state;memcpy(&state,p->Data,sizeof(state));pauseState.asleep=state==0;if(!pauseState.asleep)previousRandomTick=GetTickCount64();}}}return TRUE;
  case WM_DISPLAYCHANGE:{
@@ -1118,7 +1121,7 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
     Settings snapshot;
     {
      std::unique_lock lock(stateMutex);
-     saveCv.wait_for(lock,std::chrono::milliseconds(300),[&]{return savePending||!running;});
+     saveCv.wait(lock,[&]{return savePending||!running;});
      if(!savePending){if(!running)break;continue;}
      snapshot=settings;savePending=false;
     }
@@ -1137,6 +1140,6 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
   if(!importFile.empty())importWorld(importFile);
   MSG msg;while(GetMessageW(&msg,nullptr,0,0)>0){HWND root=GetAncestor(msg.hwnd,GA_ROOT);wchar_t name[64]{};GetClassNameW(root,name,64);if((!wcscmp(name,L"VolturaWorldImport")||!wcscmp(name,L"VolturaSavedPresets"))&&IsDialogMessageW(root,&msg))continue;if(library&&IsDialogMessageW(library,&msg))continue;TranslateMessage(&msg);DispatchMessageW(&msg);}if(powerNotify)UnregisterPowerSettingNotification(powerNotify);
  }catch(const std::exception& e){error(e);result=1;}
- desktopMenu.stop();renderThread.request_stop();if(renderThread.joinable())renderThread.join();running=false;saveCv.notify_all();if(saveThread.joinable())saveThread.join();closeWorldImports();audio.configure(false,{});for(auto& s:surfaces)if(IsWindow(s.hwnd))DestroyWindow(s.hwnd);if(library&&IsWindow(library))DestroyWindow(library);if(font)DeleteObject(font);if(headingFont)DeleteObject(headingFont);if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return result;
+ desktopMenu.stop();renderThread.request_stop();if(renderThread.joinable())renderThread.join();{std::lock_guard lock(stateMutex);running=false;}saveCv.notify_all();if(saveThread.joinable())saveThread.join();closeWorldImports();audio.configure(false,{});for(auto& s:surfaces)if(IsWindow(s.hwnd))DestroyWindow(s.hwnd);if(library&&IsWindow(library))DestroyWindow(library);if(font)DeleteObject(font);if(headingFont)DeleteObject(headingFont);if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return result;
 }
 

@@ -2,7 +2,7 @@
 #include <dwmapi.h>
 namespace worlds {
 std::vector<Monitor> enumerateMonitors(){
- struct Enumeration {std::vector<Monitor> monitors;std::exception_ptr failure;};Enumeration state;
+ struct Enumeration {std::vector<Monitor> monitors;std::exception_ptr failure;std::vector<DISPLAYCONFIG_PATH_INFO> paths;};Enumeration state;state.paths=activeDisplayPaths();
  auto enumerated=EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR h,HDC,LPRECT,LPARAM p)->BOOL{
   auto& state=*reinterpret_cast<Enumeration*>(p);
   try{
@@ -10,7 +10,7 @@ std::vector<Monitor> enumerateMonitors(){
   DISPLAY_DEVICEW device{};device.cb=sizeof(device);std::wstring id=info.szDevice,name=info.szDevice;
   if(EnumDisplayDevicesW(info.szDevice,0,&device,EDD_GET_DEVICE_INTERFACE_NAME)){if(device.DeviceID[0])id=device.DeviceID;name=device.DeviceString;}
   Monitor monitor{h,info.rcMonitor,id,name};
-  for(const auto& path:activeDisplayPaths()){
+  for(const auto& path:state.paths){
    DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};source.header={DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,sizeof(source),path.sourceInfo.adapterId,path.sourceInfo.id};
    if(DisplayConfigGetDeviceInfo(&source.header)==ERROR_SUCCESS&&!wcscmp(source.viewGdiDeviceName,info.szDevice)){
     monitor.adapter=path.sourceInfo.adapterId;auto rate=path.targetInfo.refreshRate;
@@ -61,27 +61,34 @@ bool wallpaperAttached(HWND hwnd){
  HWND parent=GetParent(hwnd);wchar_t name[32]{};
  return IsWindow(parent)&&GetClassNameW(parent,name,32)&&!wcscmp(name,L"WorkerW")&&!FindWindowExW(parent,nullptr,L"SHELLDLL_DefView",nullptr);
 }
-bool monitorCovered(const Monitor& m,DWORD own){
- struct Coverage{HRGN remaining;DWORD own;};Coverage ctx{CreateRectRgn(m.rect.left,m.rect.top,m.rect.right,m.rect.bottom),own};
- if(!ctx.remaining)return false;
+std::vector<bool> monitorsCovered(const std::vector<Monitor>& monitors,DWORD own){
+ struct Coverage {
+  std::vector<HRGN> remaining;DWORD own;
+  HRGN covered=CreateRectRgn(0,0,0,0),shape=CreateRectRgn(0,0,0,0);
+  ~Coverage(){for(auto region:remaining)if(region)DeleteObject(region);if(covered)DeleteObject(covered);if(shape)DeleteObject(shape);}
+ } ctx{{},own};
+ std::vector<bool> result(monitors.size(),false);ctx.remaining.reserve(monitors.size());
+ if(!ctx.covered||!ctx.shape)return result;
+ for(const auto& m:monitors)ctx.remaining.push_back(CreateRectRgn(m.rect.left,m.rect.top,m.rect.right,m.rect.bottom));
  EnumWindows([](HWND hwnd,LPARAM param)->BOOL{
   auto& c=*reinterpret_cast<Coverage*>(param);DWORD pid{};GetWindowThreadProcessId(hwnd,&pid);
   if(pid==c.own||!IsWindowVisible(hwnd)||IsIconic(hwnd))return TRUE;
-  // DirectComposition windows can be opaque without a redirection bitmap.
-  // Only explicit transparency/layering excludes a visible window here.
+  // Query each window once for all displays. Explicit transparency/layering
+  // excludes it; DirectComposition itself does not imply transparency.
   auto style=GetWindowLongPtrW(hwnd,GWL_EXSTYLE);if(style&(WS_EX_LAYERED|WS_EX_TRANSPARENT))return TRUE;
   DWORD cloaked{};if(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_CLOAKED,&cloaked,sizeof(cloaked)))&&cloaked)return TRUE;
   wchar_t name[128]{};GetClassNameW(hwnd,name,128);if(!wcscmp(name,L"Progman")||!wcscmp(name,L"WorkerW")||!wcscmp(name,L"Shell_TrayWnd")||!wcscmp(name,L"Shell_SecondaryTrayWnd"))return TRUE;
   RECT r{};if(FAILED(DwmGetWindowAttribute(hwnd,DWMWA_EXTENDED_FRAME_BOUNDS,&r,sizeof(r))))GetWindowRect(hwnd,&r);
-  HRGN covered=CreateRectRgn(r.left,r.top,r.right,r.bottom);if(!covered)return TRUE;
-  // An explicitly shaped window can have holes that leave the wallpaper visible.
-  // Its region uses window coordinates, while coverage uses screen coordinates.
-  HRGN shape=CreateRectRgn(0,0,0,0);if(!shape){DeleteObject(covered);return TRUE;}
-  {RECT bounds{};if(GetWindowRgn(hwnd,shape)!=ERROR&&GetWindowRect(hwnd,&bounds)){
-   if(OffsetRgn(shape,bounds.left,bounds.top)==ERROR||CombineRgn(covered,covered,shape,RGN_AND)==ERROR){DeleteObject(shape);DeleteObject(covered);return TRUE;}
-  }DeleteObject(shape);}
-  int result=CombineRgn(c.remaining,c.remaining,covered,RGN_DIFF);DeleteObject(covered);return result!=NULLREGION;
+  if(!SetRectRgn(c.covered,r.left,r.top,r.right,r.bottom))return TRUE;
+  // Reuse scratch regions across windows; shaped windows retain their holes.
+  RECT bounds{};if(GetWindowRgn(hwnd,c.shape)!=ERROR&&GetWindowRect(hwnd,&bounds)){
+   if(OffsetRgn(c.shape,bounds.left,bounds.top)==ERROR||CombineRgn(c.covered,c.covered,c.shape,RGN_AND)==ERROR)return TRUE;
+  }
+  bool uncovered=false;
+  for(auto region:c.remaining)if(region){int combined=CombineRgn(region,region,c.covered,RGN_DIFF);uncovered|=combined!=NULLREGION;}
+  return uncovered;
  },reinterpret_cast<LPARAM>(&ctx));
- RECT remaining{};bool covered=GetRgnBox(ctx.remaining,&remaining)==NULLREGION;DeleteObject(ctx.remaining);return covered;
+ for(size_t i=0;i<ctx.remaining.size();i++)if(ctx.remaining[i]){RECT box{};result[i]=GetRgnBox(ctx.remaining[i],&box)==NULLREGION;}
+ return result;
 }
 }

@@ -19,5 +19,5 @@ std::vector<Monitor> enumerateMonitors();
 HWND findWallpaperParent();
 bool attachWallpaper(HWND,const Monitor&,HWND,bool visible=true);
 bool wallpaperAttached(HWND);
-bool monitorCovered(const Monitor&,DWORD ownProcess);
+std::vector<bool> monitorsCovered(const std::vector<Monitor>&,DWORD ownProcess);
 }

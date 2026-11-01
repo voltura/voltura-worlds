@@ -69,24 +69,28 @@ void AudioCapture::run(std::stop_token stop,const std::wstring& requested){
    TaskString id;device->GetId(&id.value);std::wstring active=id.value?id.value:L"";
    bool floating=format->wFormatTag==WAVE_FORMAT_IEEE_FLOAT;
    if(format->wFormatTag==WAVE_FORMAT_EXTENSIBLE&&format->cbSize>=22)floating=reinterpret_cast<WAVEFORMATEXTENSIBLE*>(format)->SubFormat==KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-   std::vector<std::array<float,1024>> samples(format->nChannels);std::vector<float> previous(format->nChannels);unsigned cursor=0,pending=0;auto last=std::chrono::steady_clock::now(),deviceCheck=last;bool silent=false;
+   std::vector<std::array<float,1024>> samples(format->nChannels);std::vector<float> previous(format->nChannels);std::vector<unsigned> nonzero(format->nChannels);unsigned cursor=0,pending=0;auto last=std::chrono::steady_clock::now(),deviceCheck=last;bool silent=false;
    while(!stop.stop_requested()&&SUCCEEDED(hr)){
     WaitForSingleObject(event,100);auto now=std::chrono::steady_clock::now();
     if(requested.empty()&&now-deviceCheck>std::chrono::seconds(1)){ComPtr<IMMDevice> current;if(FAILED(enumerator->GetDefaultAudioEndpoint(eRender,eConsole,&current)))break;TaskString next;current->GetId(&next.value);bool changed=!next.value||active!=next.value;if(changed)break;deviceCheck=now;}
     UINT packet{};hr=capture->GetNextPacketSize(&packet);while(!stop.stop_requested()&&SUCCEEDED(hr)&&packet){BYTE* bytes{};UINT count{};DWORD flags{};hr=capture->GetBuffer(&bytes,&count,&flags,nullptr,nullptr);if(FAILED(hr))break;
-     if(silent||(flags&AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY)){for(auto& channel:samples)channel.fill(0);cursor=pending=0;std::fill(previous.begin(),previous.end(),0.f);silent=false;}
+     if(silent||(flags&AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY)){for(auto& channel:samples)channel.fill(0);cursor=pending=0;std::fill(previous.begin(),previous.end(),0.f);std::fill(nonzero.begin(),nonzero.end(),0u);silent=false;}
      for(UINT f=0;f<count;f++){
       for(unsigned c=0;c<format->nChannels;c++){
        float value=0;if(!(flags&AUDCLNT_BUFFERFLAGS_SILENT)){
         auto data=bytes+size_t(f)*format->nBlockAlign+c*(format->wBitsPerSample/8);
         if(floating&&format->wBitsPerSample==32)memcpy(&value,data,4);else if(floating&&format->wBitsPerSample==64){double v;memcpy(&v,data,8);value=float(v);}else if(!floating&&format->wBitsPerSample==8)value=(int(*data)-128)/128.f;else if(!floating&&format->wBitsPerSample==16){int16_t v;memcpy(&v,data,2);value=v/32768.f;}else if(!floating&&format->wBitsPerSample==32){int32_t v;memcpy(&v,data,4);value=v/2147483648.f;}else if(!floating&&format->wBitsPerSample==24){int32_t v=int32_t(data[0])|(int32_t(data[1])<<8)|(int32_t(data[2])<<16);if(v&0x800000)v|=int32_t(0xff000000);value=v/8388608.f;}
-       }samples[c][cursor]=std::isfinite(value)?value:0;
+       }value=std::isfinite(value)?value:0;
+       // Exact digital silence has a known zero spectrum. Track the rolling
+       // window so unused surround channels need no FFT, without thresholds
+       // that could discard quiet music or opposite-phase channel content.
+       if(samples[c][cursor]!=0)--nonzero[c];if(value!=0)++nonzero[c];samples[c][cursor]=value;
       }
       cursor=(cursor+1)%1024;if(++pending>=256){
        pending=0;AudioFeatures features;
        // Combine magnitudes after analysis so opposite channel phases cannot
        // cancel audible audio, and quiet surround channels do not dilute it.
-       for(size_t c=0;c<samples.size();c++){auto channel=analyze(samples[c],cursor,float(format->nSamplesPerSec),previous[c]);features.bass=std::max(features.bass,channel.bass);features.mid=std::max(features.mid,channel.mid);features.treble=std::max(features.treble,channel.treble);features.energy=std::max(features.energy,channel.energy);features.transient=std::max(features.transient,channel.transient);}
+       for(size_t c=0;c<samples.size();c++){if(!nonzero[c]){previous[c]=0;continue;}auto channel=analyze(samples[c],cursor,float(format->nSamplesPerSec),previous[c]);features.bass=std::max(features.bass,channel.bass);features.mid=std::max(features.mid,channel.mid);features.treble=std::max(features.treble,channel.treble);features.energy=std::max(features.energy,channel.energy);features.transient=std::max(features.transient,channel.transient);}
        std::lock_guard lock(mutex_);latest_=features;
       }
      }hr=capture->ReleaseBuffer(count);last=now;if(SUCCEEDED(hr))hr=capture->GetNextPacketSize(&packet);

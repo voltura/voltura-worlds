@@ -83,6 +83,8 @@ public:
  void setFlowmapRenewal(float seconds){flowmapRenewal_=seconds;}
  unsigned flowmapRenewals()const{return flowmapRenewals_;}
 private:
+ std::array<bool,size_t(Scene::SolarSystemJourney)+1> pipelinesReady_{};
+ void loadPipelines(Scene);
  void prepareBodyStatistics(const Assignment&,int palette);
  void drawBodyStatistics(const Assignment&,float opacity=1);
  std::array<ComPtr<ID3D12PipelineState>,11> journeyPipelines_;

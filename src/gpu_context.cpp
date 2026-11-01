@@ -8,6 +8,9 @@ namespace worlds {
 std::shared_ptr<GpuContext> GpuContext::acquire(LUID preferred,bool debug,bool allowFallback){
  static std::mutex mutex;static std::map<std::tuple<LONG,DWORD,bool>,std::weak_ptr<GpuContext>> contexts;
  std::lock_guard lock(mutex);
+ // A second display on the same adapter can reuse its device immediately.
+ // Renderer refreshes a stale presentation factory when needed.
+ if(preferred.HighPart||preferred.LowPart){auto found=contexts.find({preferred.HighPart,preferred.LowPart,debug});if(found!=contexts.end())if(auto existing=found->second.lock();existing&&!existing->removed())return existing;}
  static bool debugEnabled=false;
  if(debug&&!debugEnabled){debugEnabled=true;Microsoft::WRL::ComPtr<ID3D12Debug> layer;if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&layer))))layer->EnableDebugLayer();}
  Microsoft::WRL::ComPtr<IDXGIFactory6> factory;

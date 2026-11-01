@@ -59,13 +59,23 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  samplers[2].ShaderRegister=2;samplers[2].AddressU=samplers[2].AddressV=samplers[2].AddressW=D3D12_TEXTURE_ADDRESS_MODE_WRAP;
  rp[5].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;rp[5].Constants={1,0,4};rp[5].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
  D3D12_ROOT_SIGNATURE_DESC rd{6,rp,3,samplers,D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};ComPtr<ID3DBlob> blob,error;
- check(D3D12SerializeRootSignature(&rd,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&error),"Serialize root signature");if(!context_->root)check(device_->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&context_->root)),"Create root signature");root_=context_->root;
+ if(!context_->root){check(D3D12SerializeRootSignature(&rd,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&error),"Serialize root signature");check(device_->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&context_->root)),"Create root signature");}root_=context_->root;
  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS colorSupport{DXGI_FORMAT_R16G16B16A16_FLOAT,2,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS depthSupport{DXGI_FORMAT_D32_FLOAT,2,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
  D3D12_FEATURE_DATA_FORMAT_SUPPORT resolveSupport{DXGI_FORMAT_R16G16B16A16_FLOAT};
  if(!forceSingleSample&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&resolveSupport,sizeof(resolveSupport)))&&(resolveSupport.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE)&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&colorSupport,sizeof(colorSupport)))&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&depthSupport,sizeof(depthSupport)))&&colorSupport.NumQualityLevels&&depthSupport.NumQualityLevels)orbitSamples_=2;
- auto full=shader(dir,L"fullscreen.cso"),ov=shader(dir,L"orbit.cso"),bv=shader(dir,L"bloom_mesh.cso");
- auto pipeline=[&](const wchar_t* file,bool geometry,bool alpha,ComPtr<ID3D12PipelineState>& output,bool display=false,unsigned samples=1,bool folded=false,DXGI_FORMAT displayFormat=DXGI_FORMAT_R8G8B8A8_UNORM){std::wstring key=dir.wstring()+L"/"+file+L":"+std::to_wstring(geometry)+std::to_wstring(alpha)+std::to_wstring(display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT)+L":"+std::to_wstring(samples)+std::to_wstring(folded);
+ D3D12_QUERY_HEAP_DESC qd{D3D12_QUERY_HEAP_TYPE_TIMESTAMP,QueryStride*2,0};check(device_->CreateQueryHeap(&qd,IID_PPV_ARGS(&query_)),"Create timing queries");auto hp=heap(D3D12_HEAP_TYPE_READBACK);auto bd=bufferDesc(QueryStride*2*sizeof(uint64_t));check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&bd,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&queryReadback_)),"Create timing readback");queue_->GetTimestampFrequency(&frequency_);
+ targets();
+ D3D12_SHADER_RESOURCE_VIEW_DESC nullFine{};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;nullFine.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE3D;nullFine.Texture3D.MipLevels=1;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(380));
+ nullFine={};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;nullFine.Buffer.NumElements=1;nullFine.Buffer.StructureByteStride=8;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(381));
+ setupHandles.complete=true;
+}
+void Renderer::loadPipelines(Scene scene){
+ auto index=size_t(scene);if(index>=pipelinesReady_.size())throw std::runtime_error("Invalid World pipeline selection");if(pipelinesReady_[index])return;
+ auto dir=assetDirectory_.parent_path()/L"shaders";
+ auto full=shader(dir,L"fullscreen.cso");std::vector<char> ov,bv;
+ if(scene==Scene::Orbit)ov=shader(dir,L"orbit.cso");if(scene==Scene::Bloom)bv=shader(dir,L"bloom_mesh.cso");
+ auto pipeline=[&](const wchar_t* file,bool geometry,bool alpha,ComPtr<ID3D12PipelineState>& output,bool display=false,unsigned samples=1,bool folded=false,DXGI_FORMAT displayFormat=DXGI_FORMAT_R8G8B8A8_UNORM){if(output)return;std::wstring key=dir.wstring()+L"/"+file+L":"+std::to_wstring(geometry)+std::to_wstring(alpha)+std::to_wstring(display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT)+L":"+std::to_wstring(samples)+std::to_wstring(folded);
   if(auto found=context_->pipelines.find(key);found!=context_->pipelines.end()){output=found->second;return;}
   auto ps=shader(dir,file);D3D12_GRAPHICS_PIPELINE_STATE_DESC pd{};pd.pRootSignature=root_.Get();pd.VS={folded?bv.data():geometry?ov.data():full.data(),folded?bv.size():geometry?ov.size():full.size()};pd.PS={ps.data(),ps.size()};pd.SampleMask=UINT_MAX;pd.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;pd.NumRenderTargets=1;pd.RTVFormats[0]=display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT;pd.DSVFormat=DXGI_FORMAT_D32_FLOAT;pd.SampleDesc.Count=samples;pd.RasterizerState.MultisampleEnable=samples>1;
   pd.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;pd.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;pd.RasterizerState.DepthClipEnable=TRUE;
@@ -74,44 +84,43 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
   check(device_->CreateGraphicsPipelineState(&pd,IID_PPV_ARGS(&output)),"Create scene pipeline");context_->pipelines[key]=output;};
  // Earth and Mars use analytic coverage on fullscreen triangles; duplicate samples
  // add no edge information. Keep the exact same HDR format and shader shading.
- pipeline(L"earth.cso",false,true,earth_);pipeline(L"earth_space.cso",false,false,earthSpace_);
- pipeline(L"saturn.cso",false,false,saturn_);
- pipeline(L"uranus.cso",false,true,uranus_);pipeline(L"uranus_space.cso",false,false,uranusSpace_);
- pipeline(L"neptune.cso",false,true,neptune_);pipeline(L"neptune_space.cso",false,false,neptuneSpace_);
- pipeline(L"venus.cso",false,true,venus_);pipeline(L"venus_space.cso",false,false,venusSpace_);
- pipeline(L"jupiter.cso",false,true,jupiter_);pipeline(L"jupiter_space.cso",false,false,jupiterSpace_);
- pipeline(L"moon.cso",false,true,moon_);pipeline(L"moon_space.cso",false,false,moonSpace_);
- pipeline(L"sun.cso",false,false,sun_);
+ if(scene==Scene::Earth){pipeline(L"earth.cso",false,true,earth_);pipeline(L"earth_space.cso",false,false,earthSpace_);}
+ if(scene==Scene::Saturn){pipeline(L"saturn.cso",false,false,saturn_);}
+ if(scene==Scene::Uranus){pipeline(L"uranus.cso",false,true,uranus_);pipeline(L"uranus_space.cso",false,false,uranusSpace_);}
+ if(scene==Scene::Neptune){pipeline(L"neptune.cso",false,true,neptune_);pipeline(L"neptune_space.cso",false,false,neptuneSpace_);}
+ if(scene==Scene::Venus){pipeline(L"venus.cso",false,true,venus_);pipeline(L"venus_space.cso",false,false,venusSpace_);}
+ if(scene==Scene::Jupiter){pipeline(L"jupiter.cso",false,true,jupiter_);pipeline(L"jupiter_space.cso",false,false,jupiterSpace_);}
+ if(scene==Scene::Moon){pipeline(L"moon.cso",false,true,moon_);pipeline(L"moon_space.cso",false,false,moonSpace_);}
+ if(scene==Scene::Sun){pipeline(L"sun.cso",false,false,sun_);}
  const wchar_t* journeyShaders[]={L"journey_sun.cso",L"journey_mercury.cso",L"journey_venus.cso",L"journey_earth.cso",L"journey_moon.cso",L"journey_mars.cso",L"journey_jupiter.cso",L"journey_saturn.cso",L"journey_uranus.cso",L"journey_neptune.cso",L"journey_pluto.cso"};
- for(size_t i=0;i<journeyPipelines_.size();++i)pipeline(journeyShaders[i],false,true,journeyPipelines_[i]);
- pipeline(L"journey_sky.cso",false,false,journeySky_);
- pipeline(L"pluto.cso",false,true,pluto_);pipeline(L"pluto_space.cso",false,false,plutoSpace_);
- pipeline(L"mercury.cso",false,true,mercuryPlanet_);pipeline(L"mercury_space.cso",false,false,mercurySpace_);
- pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);
- pipeline(L"video.cso",false,false,videoPipeline_,true);
- pipeline(L"body_statistics.cso",false,true,bodyStatisticsPipeline_,true);
- pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);
- pipeline(L"aurora.cso",false,false,aurora_);pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);pipeline(L"smoke.cso",false,false,smoke_);pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);
- pipeline(L"post.cso",false,false,postHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
- pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
- pipeline(L"forest_water.cso",false,false,forestWater_);
- pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);
- pipeline(L"tropical_island.cso",false,false,tropicalIsland_);
- pipeline(L"tropical_island_coast.cso",false,false,islandCoastPipeline_);
- pipeline(L"tropical_island_composite.cso",false,false,islandComposite_);
+ if(scene==Scene::SolarSystemJourney)for(size_t i=0;i<journeyPipelines_.size();++i)pipeline(journeyShaders[i],false,true,journeyPipelines_[i]);
+ if(scene==Scene::SolarSystemJourney)pipeline(L"journey_sky.cso",false,false,journeySky_);
+ if(scene==Scene::Pluto){pipeline(L"pluto.cso",false,true,pluto_);pipeline(L"pluto_space.cso",false,false,plutoSpace_);}
+ if(scene==Scene::Mercury){pipeline(L"mercury.cso",false,true,mercuryPlanet_);pipeline(L"mercury_space.cso",false,false,mercurySpace_);}
+ if(scene==Scene::Mars){pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);}
+ if(scene==Scene::Video){pipeline(L"video.cso",false,false,videoPipeline_,true);}
+ if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsPipeline_,true);
+ if(scene==Scene::Bloom){pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);}
+ if(scene==Scene::Aurora)pipeline(L"aurora.cso",false,false,aurora_);
+ if(scene==Scene::Orbit){pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);}
+ if(scene==Scene::Smoke)pipeline(L"smoke.cso",false,false,smoke_);
+ if(scene!=Scene::Video){pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);}
+ if(scene!=Scene::Video)pipeline(L"post.cso",false,false,postHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
+ if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
+ if(scene==Scene::ForestWater){pipeline(L"forest_water.cso",false,false,forestWater_);}
+ if(scene==Scene::TropicalParadise){pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);}
+ if(scene==Scene::TropicalIsland){pipeline(L"tropical_island.cso",false,false,tropicalIsland_);}
+ if(scene==Scene::TropicalIsland){pipeline(L"tropical_island_coast.cso",false,false,islandCoastPipeline_);}
+ if(scene==Scene::TropicalIsland){pipeline(L"tropical_island_composite.cso",false,false,islandComposite_);}
  const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"plastic_metal.cso",L"ripples.cso"};
- for(unsigned i=0;i<proceduralWorlds_.size();i++)pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);
+ if(scene>=Scene::Silk&&scene<=Scene::Ripples){unsigned i=unsigned(scene)-unsigned(Scene::Silk);pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);}
  auto computePipeline=[&](const wchar_t* file,ComPtr<ID3D12PipelineState>& output){
   auto key=dir.wstring()+L"/compute/"+file;
   if(auto it=context_->pipelines.find(key);it!=context_->pipelines.end()){output=it->second;return;}
   auto code=shader(dir,file);D3D12_COMPUTE_PIPELINE_STATE_DESC cd{};cd.pRootSignature=root_.Get();cd.CS={code.data(),code.size()};check(device_->CreateComputePipelineState(&cd,IID_PPV_ARGS(&output)),"Create shared compute pipeline");context_->pipelines[key]=output;
  };
- computePipeline(L"fluid.cso",fluid_);computePipeline(L"smoke_coordinates.cso",coordinatePipeline_);computePipeline(L"smoke_detail.cso",detailPipeline_);
- D3D12_QUERY_HEAP_DESC qd{D3D12_QUERY_HEAP_TYPE_TIMESTAMP,QueryStride*2,0};check(device_->CreateQueryHeap(&qd,IID_PPV_ARGS(&query_)),"Create timing queries");auto hp=heap(D3D12_HEAP_TYPE_READBACK);auto bd=bufferDesc(QueryStride*2*sizeof(uint64_t));check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&bd,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&queryReadback_)),"Create timing readback");queue_->GetTimestampFrequency(&frequency_);
- targets();
- D3D12_SHADER_RESOURCE_VIEW_DESC nullFine{};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;nullFine.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE3D;nullFine.Texture3D.MipLevels=1;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(380));
- nullFine={};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;nullFine.Buffer.NumElements=1;nullFine.Buffer.StructureByteStride=8;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(381));
- setupHandles.complete=true;
+ if(scene==Scene::Smoke){computePipeline(L"fluid.cso",fluid_);computePipeline(L"smoke_coordinates.cso",coordinatePipeline_);computePipeline(L"smoke_detail.cso",detailPipeline_);}
+ pipelinesReady_[index]=true;
 }
 Renderer::~Renderer(){
  try{if(compositionTarget_){compositionTarget_->SetRoot(nullptr);compositionDevice_->Commit();}if(compositionContext11_){compositionContext11_->ClearState();compositionContext11_->Flush();}idle();}catch(...){}
@@ -918,6 +927,7 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
  video_->consumed();
 }
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
+ loadPipelines(assignment.scene);
  // Video is drawn directly to the presentation buffer. It needs neither the
  // full-resolution FP16 scene nor the two bloom intermediates.
  if(assignment.scene==Scene::Video){
@@ -926,9 +936,9 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene!=Scene::Aurora&&auroraArtwork_){idle();releaseAsset(auroraArtwork_);}
  const bool journey=assignment.scene==Scene::SolarSystemJourney;
  JourneyFrame tour{};if(journey)tour=journeyFrame(data.time,data.flow,float(width_)/height_);
- Assignment cardAssignment=assignment;
- if(journey){cardAssignment.scene=journeyBodies[tour.stop].scene;cardAssignment.showBodyStatistics=assignment.journeyShowBodyStatistics;}
- prepareBodyStatistics(cardAssignment,int(data.palette));
+ Assignment journeyCard;const Assignment* cardAssignment=&assignment;
+ if(journey){journeyCard=assignment;cardAssignment=&journeyCard;journeyCard.scene=journeyBodies[tour.stop].scene;journeyCard.showBodyStatistics=assignment.journeyShowBodyStatistics;}
+ prepareBodyStatistics(*cardAssignment,int(data.palette));
  if(lastScene_==Scene::SolarSystemJourney&&!journey){
   idle();
   for(auto* resource:{std::addressof(earthColor_),std::addressof(earthClouds_),std::addressof(earthMaterial_),std::addressof(moonColor_),std::addressof(moonNormal_),std::addressof(moonEarth_),std::addressof(marsColor_),std::addressof(marsNormal_),std::addressof(mercuryColor_),std::addressof(mercuryNormal_),std::addressof(jupiterColor_),std::addressof(jupiterAtmosphere_),std::addressof(saturnColor_),std::addressof(plutoColor_),std::addressof(sunImage_),std::addressof(sunProminence_),std::addressof(starTexture_)})if(*resource)releaseAsset(*resource);
@@ -1099,7 +1109,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  transition(target,D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
  rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=size_t(frameIndex_)*rtvStride_;list_->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
  outputConstants();list_->SetGraphicsRootDescriptorTable(2,gpu(66));draw(output_.hdr?postHdr_.Get():post_.Get(),assignment.scene==Scene::Orbit?1.f:0.f,3);
- drawBodyStatistics(cardAssignment,journey?tour.opacity:1.f);
+ drawBodyStatistics(*cardAssignment,journey?tour.opacity:1.f);
  endGpuStage(postTiming);
  transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(!composedDesktop_||!present);if(present){if(nonblocking_||composedDesktop_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
 }

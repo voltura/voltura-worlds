@@ -30,6 +30,9 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  float discriminant=b*b-a*c;
  float radial=sqrt(max(1-discriminant/a,.0000001));
  float edge=max(fwidth(radial),.000001),coverage=saturate((1-radial)/edge+.5);
+ // The atmosphere has finite coverage. Reject empty sky before cloud
+ // backtraces, storm sampling and optical-depth evaluation.
+ clip(1+8*jupiterScaleHeight+edge-radial);
  float distance=(-b-sqrt(max(discriminant,0)))/a;
  float3 body=origin+ray*distance,bodyNormal=normalize(body*metric);
  float2 coord=jupiterUV(bodyNormal);

@@ -1,6 +1,8 @@
 #include "package.h"
 #include "video_format.h"
 #include "json.hpp"
+#include "crc32.h"
+#include <span>
 #include <fstream>
 #include <map>
 #include <set>
@@ -11,7 +13,7 @@
 namespace worlds {
 using Bytes=std::vector<unsigned char>;
 static constexpr size_t limit=100ull*1024*1024;
-static uint32_t crc(const Bytes& b){uint32_t c=~0u;for(auto v:b){c^=v;for(int i=0;i<8;i++)c=(c>>1)^(0xedb88320u&uint32_t(-int(c&1)));}return ~c;}
+static uint32_t crc(std::span<const unsigned char> bytes){return ~crc32Update(~0u,bytes.data(),bytes.size());}
 static uint16_t u16(const Bytes& b,size_t i){if(i+2>b.size())throw std::runtime_error("Truncated package");return uint16_t(b[i]|(b[i+1]<<8));}
 static uint32_t u32(const Bytes& b,size_t i){return uint32_t(u16(b,i))|(uint32_t(u16(b,i+2))<<16);}
 static void put16(Bytes& b,uint16_t v){b.push_back((unsigned char)v);b.push_back((unsigned char)(v>>8));}
@@ -79,8 +81,11 @@ void writePackage(const std::filesystem::path& file,const WorldPackage& p){
  if(p.assignment.scene==Scene::Video&&p.assignment.videoSettings!=VideoSettings{})throw std::runtime_error("Video positioning and speed require World package version 2.");
  if(p.assignment.scene==Scene::Video&&!legacyAvcMp4(p.video))throw std::runtime_error("World version 1 supports only SDR H.264 MP4 video.");
  validate(p);const auto& a=p.assignment;const auto& v=a.params;nlohmann::json j={{"format","voltura-world"},{"version",1},{"title",p.title},{"description",p.description},{"attribution",p.attribution},{"scene",sceneName(a.scene)},{"reaction",int(a.reaction)},{"fit",a.fit},{"parameters",{{"brightness",v.brightness},{"movement",v.movement},{"detail",v.detail},{"flow",v.flow},{"turbulence",v.turbulence},{"density",v.density},{"strength",v.strength},{"palette",v.palette}}}};
- auto text=j.dump(2);std::map<std::string,Bytes> files{{"manifest.json",Bytes(text.begin(),text.end())},{"preview.png",p.preview}};if(a.scene==Scene::Video)files["video.mp4"]=p.video;
- Bytes b,central;for(auto& [name,data]:files){uint32_t offset=(uint32_t)b.size(),size=(uint32_t)data.size(),checksum=crc(data);
+ auto text=j.dump(2);std::map<std::string,std::span<const unsigned char>> files{{"manifest.json",{reinterpret_cast<const unsigned char*>(text.data()),text.size()}},{"preview.png",p.preview}};if(a.scene==Scene::Video)files["video.mp4"]=p.video;
+ size_t capacity=22;for(const auto& [name,data]:files){if(data.size()>limit)throw std::runtime_error("Package exceeds 100 MiB");capacity+=76+2*name.size()+data.size();if(capacity>limit)throw std::runtime_error("Package exceeds 100 MiB");}
+ // Borrow immutable input and reserve the final ZIP once, avoiding a second
+ // full video copy and repeated growth of the assembled package.
+ Bytes b,central;b.reserve(capacity);for(auto& [name,data]:files){uint32_t offset=(uint32_t)b.size(),size=(uint32_t)data.size(),checksum=crc(data);
   put32(b,0x04034b50);put16(b,20);put16(b,0);put16(b,0);put16(b,0);put16(b,0);put32(b,checksum);put32(b,size);put32(b,size);put16(b,(uint16_t)name.size());put16(b,0);b.insert(b.end(),name.begin(),name.end());b.insert(b.end(),data.begin(),data.end());
   put32(central,0x02014b50);put16(central,20);put16(central,20);put16(central,0);put16(central,0);put16(central,0);put16(central,0);put32(central,checksum);put32(central,size);put32(central,size);put16(central,(uint16_t)name.size());put16(central,0);put16(central,0);put16(central,0);put16(central,0);put32(central,0);put32(central,offset);central.insert(central.end(),name.begin(),name.end());
  }

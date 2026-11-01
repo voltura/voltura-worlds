@@ -2,6 +2,7 @@
 #include "random_cycle.h"
 #include "video_format.h"
 #include "json.hpp"
+#include "crc32.h"
 #include <bcrypt.h>
 #include <wincodec.h>
 #include <wrl/client.h>
@@ -17,7 +18,7 @@ using Json=nlohmann::json;
 constexpr uint64_t maximum=100ull*1024*1024;
 void require(bool ok,const char* message){if(!ok)throw std::runtime_error(message);}
 void cancelled(std::stop_token stop){if(stop.stop_requested())throw std::runtime_error("Operation cancelled.");}
-uint32_t checksum(uint32_t crc,const char* bytes,size_t n){for(size_t i=0;i<n;i++){crc^=static_cast<unsigned char>(bytes[i]);for(int k=0;k<8;k++)crc=(crc>>1)^(0xedb88320u&uint32_t(-int(crc&1)));}return crc;}
+uint32_t checksum(uint32_t crc,const char* bytes,size_t n){return crc32Update(crc,reinterpret_cast<const uint8_t*>(bytes),n);}
 uint32_t get(std::istream& in,int n){uint32_t value=0;for(int i=0;i<n;i++){int c=in.get();require(c!=EOF,"Truncated World package.");value|=uint32_t(c)<<(i*8);}return value;}
 void put(std::ostream& out,uint32_t value,int n){for(int i=0;i<n;i++)out.put(char(value>>(i*8)));}
 struct Entry {std::string name;uint32_t size{},crc{},local{},offset{};};
