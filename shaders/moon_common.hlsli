@@ -3,7 +3,16 @@ static const float moonEarthDistance=384400.0/1737.4;
 static const float moonEarthRadius=6371.0/1737.4;
 float moonClock(){return time*movement;}
 float moonAngle(){return frac(moonClock()/900)*(2*moonPi);}
-float3 moonLight(){float a=radians(60+(turbulence-1)*30);return float3(sin(a),0,cos(a));}
+float3 moonLight(){
+#ifdef JOURNEY
+ // Keep a gibbous phase throughout every tour, independent of the material's
+ // rotating view. A fixed light can otherwise hide the Moon on later loops.
+ float a=moonAngle()+radians(35+(turbulence-1)*30);
+#else
+ float a=radians(60+(turbulence-1)*30);
+#endif
+ return float3(sin(a),0,cos(a));
+}
 float2 moonUV(float3 p){return float2(atan2(p.x,p.z)/(2*moonPi)+.5,.5-asin(clamp(p.y,-1,1))/moonPi);}
 float2 moonGradient(float2 v){v.x-=round(v.x);return v;}
 void moonCamera(float2 uv,out float3 origin,out float3 ray){

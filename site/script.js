@@ -67,7 +67,7 @@
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();
-      const revision = name === 'solar_system_journey' ? '0.6.0' : '0.5.0';
+      const revision = name === 'solar_system_journey' ? '0.6.5' : '0.5.0';
       video.poster = `assets/${name}.jpg?v=${revision}`;
       video.setAttribute('aria-label', `${title}: native animated wallpaper`);
       video.querySelector('source').src = `assets/${name}.mp4?v=${revision}`;
