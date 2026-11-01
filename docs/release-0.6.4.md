@@ -2,7 +2,7 @@
 
 Update notifications use the approved concise wording:
 
-**Voltura Worlds <version> update ready**
+**Voltura Worlds &lt;version&gt; update ready**
 
 Click to install the update.
 
