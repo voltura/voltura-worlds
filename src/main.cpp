@@ -853,12 +853,18 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
 int captureMode(const std::vector<std::wstring>& args){
- bool presentFrames=std::find(args.begin(),args.end(),L"--present")!=args.end();
+ bool compositionProfile=std::find(args.begin(),args.end(),L"--composition-profile")!=args.end();
+ bool presentFrames=compositionProfile||std::find(args.begin(),args.end(),L"--present")!=args.end();
+ if(std::find(args.begin(),args.end(),L"--composition-copy")!=args.end())SetEnvironmentVariableW(L"VOLTURA_WORLDS_COMPOSITION_COPY",L"1");
+ if(std::find(args.begin(),args.end(),L"--composition-surface")!=args.end())SetEnvironmentVariableW(L"VOLTURA_WORLDS_COMPOSITION_SURFACE",L"1");
  bool validateStars=std::find(args.begin(),args.end(),L"--validate-star-layer")!=args.end();
  auto option=[&](const wchar_t* key,const std::wstring& fallback){auto it=std::find(args.begin(),args.end(),key);return it!=args.end()&&it+1!=args.end()?*(it+1):fallback;};
  auto out=std::filesystem::absolute(option(L"--capture-dir",L"artifacts/native"));std::filesystem::create_directories(out);Scene scene=parseScene(utf8(option(L"--scene",L"aurora")));unsigned width=std::stoul(option(L"--width",L"1280")),height=std::stoul(option(L"--height",L"720"));int frames=std::stoi(option(L"--frames",L"180")),record=std::stoi(option(L"--record",L"0"));if(width<64||height<64||width>7680||height>4320||frames<1||frames>36000||record<0||record>900)throw std::runtime_error("Invalid capture limits");
- HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,L"VolturaWorldSurface",L"Voltura Worlds native validation",WS_POPUP,0,0,width,height,nullptr,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create validation surface");
- if(presentFrames)ShowWindow(hwnd,SW_SHOWNOACTIVATE);
+ if(compositionProfile&&(record||std::find(args.begin(),args.end(),L"--validate-paused-frame")!=args.end()||std::find(args.begin(),args.end(),L"--smoke-render-diagnostics")!=args.end()))throw std::runtime_error("Composition profiling records timing, not framebuffer readbacks.");
+ HWND compositionHost=compositionProfile?CreateWindowExW(WS_EX_TOOLWINDOW,L"VolturaWorldSurface",L"Voltura Worlds composition profile",WS_POPUP,0,0,width,height,nullptr,nullptr,instance,nullptr):nullptr;
+ if(compositionProfile&&!compositionHost)throw std::runtime_error("Cannot create composition profiling host");
+ HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW,L"VolturaWorldSurface",L"Voltura Worlds native validation",compositionProfile?WS_CHILD:WS_POPUP,0,0,width,height,compositionHost,nullptr,instance,nullptr);if(!hwnd)throw std::runtime_error("Cannot create validation surface");
+ if(presentFrames&&!compositionProfile)ShowWindow(hwnd,SW_SHOWNOACTIVATE);
  {Renderer renderer(hwnd,width,height,exeDir/L"shaders",std::find(args.begin(),args.end(),L"--debug-gpu")!=args.end(),std::find(args.begin(),args.end(),L"--single-sample")!=args.end());renderer.setGrid(std::stoul(option(L"--grid",L"64")));Assignment a;a.scene=scene;a.showBodyStatistics=std::find(args.begin(),args.end(),L"--show-body-statistics")!=args.end();if(scene==Scene::Video){a.video=option(L"--video-file",L"");if(a.video.empty())throw std::runtime_error("Video capture requires --video-file");a.fit=std::find(args.begin(),args.end(),L"--fit")!=args.end();a.videoSettings={std::stod(option(L"--video-x",L"0.5")),std::stod(option(L"--video-y",L"0.5")),std::stod(option(L"--video-speed",L"1"))};if(!validVideoSettings(a.videoSettings))throw std::runtime_error("Invalid diagnostic video settings");}bool diagnosticHdr=std::find(args.begin(),args.end(),L"--hdr-output")!=args.end();
  if(diagnosticHdr){auto nits=[&](const wchar_t* flag,const wchar_t* fallback){auto value=option(flag,fallback);size_t consumed=0;float n=std::stof(value,&consumed);if(consumed!=value.size())throw std::runtime_error("Invalid HDR diagnostic luminance");return n;};float w=nits(L"--hdr-white",L"203"),p=nits(L"--hdr-peak",L"400");if(!usableLuminance(w)||!usableLuminance(p)||w>p||scene==Scene::Video||record)throw std::runtime_error("Invalid HDR diagnostic configuration");auto cfg=resolveOutput(OutputPreference::Auto,false,true,w,p);renderer.configureOutput(cfg);if(!renderer.output().hdr)throw std::runtime_error("Diagnostic FP16 unavailable");}
  FrameData data;data.dt=1.f/60;std::vector<double> timings;auto started=std::chrono::steady_clock::now();
@@ -1009,7 +1015,7 @@ int captureMode(const std::vector<std::wstring>& args){
   auto timingWarmupOption=option(L"--timing-warmup",L"11");size_t timingConsumed{};int timingWarmup=std::stoi(timingWarmupOption,&timingConsumed);
   if(timingConsumed!=timingWarmupOption.size()||timingWarmup<0||timingWarmup>36000)throw std::runtime_error("Timing warmup must be an integer from 0 to 36000 frames");
   for(int i=0;i<frames;i++){data.time+=data.dt;renderer.render(a,data,presentFrames);if(presentFrames||scene==Scene::Video)std::this_thread::sleep_for(std::chrono::milliseconds(16));if(i>=timingWarmup){timings.push_back(renderer.gpuMs());if(profileStages)for(unsigned stage=0;stage<14;stage++)stageTimings[stage].push_back(renderer.gpuStageMs()[stage]);}}
-  renderer.capture(out/(wide(sceneName(scene))+L".png"));
+  if(!compositionProfile)renderer.capture(out/(wide(sceneName(scene))+L".png"));
   if(std::find(args.begin(),args.end(),L"--validate-paused-frame")!=args.end()){
    if(scene!=Scene::Smoke&&scene!=Scene::Jupiter)throw std::runtime_error("Paused-frame diagnostic requires Smoke or Jupiter");
    FrameData frozen=data;frozen.dt=0;
@@ -1029,6 +1035,9 @@ int captureMode(const std::vector<std::wstring>& args){
    if(validateStars){data.time+=7;data.movement=float(i+1);data.energy=float(i%2);data.reaction=1;data.palette=float(i%4);}
    renderer.render(a,data,false);wchar_t name[64];swprintf_s(name,L"frame-%05d.png",i);renderer.capture(out/name);}
   renderer.validateDebugMessages();PROCESS_MEMORY_COUNTERS_EX memory{};GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory));std::sort(timings.begin(),timings.end());double p95=timings.empty()?0:timings[size_t((timings.size()-1)*.95)];nlohmann::json report={{"scene",sceneName(scene)},{"width",width},{"height",height},{"warmupFrames",frames},{"adapter",utf8(renderer.adapterName())},{"gpuP95Ms",p95},{"privateBytes",memory.PrivateUsage},{"estimatedGpuBytes",renderer.allocations()},{"outputMode",renderer.output().hdr?"diagnostic FP16 scRGB":"SDR"},{"referenceWhiteNits",renderer.output().white},{"peakNits",renderer.output().peak},{"grid",renderer.gridSize()},{"densityGrid",renderer.densityGridSize()},{"densityDimensions",renderer.densityDimensions()},{"sceneSamples",renderer.sceneSamples()},{"pressureMultigrid",multigrid},{"elapsedSeconds",std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()},{"evidence","Native D3D12 offscreen readback; not physical desktop or presentation performance"}};
+  if(compositionProfile)report["evidence"]="Native hidden DirectComposition GPU timestamp profile; no framebuffer readback, physical display or power measurement";
+  report["mutableGpuBytes"]=renderer.mutableAllocations();
+  report["presentationPath"]=renderer.compositionSwapChain()?"DirectComposition native swap chain":renderer.directComposition()?"DirectComposition direct target":renderer.compositorPresentation()?"DirectComposition copy":"Swap chain";
   report["gpuMedianMs"]=timings.empty()?0:timings[timings.size()/2];
   report["textureGpuBytes"]=renderer.textureAllocations();
   report["startTimeOffsetSeconds"]=startTime;
@@ -1047,7 +1056,7 @@ int captureMode(const std::vector<std::wstring>& args){
   if(smokeFilaments)report["smokeFilaments"]="Persistent fluid-advected gold tracers; experimental overlay";
   if(fineAtlas){report["fineLighting"]=fineLighting;report["fineCurlStrength"]=fineCurl;report["fineAtlas"]=true;report["fineAtlasGrid"]=256;report["fineAtlasResidentTiles"]=fineAtlasFront?3840:512;report["fineAtlasRegion"]=fineAtlasFront?"x [0.25,0.75], y [0.125,0.875], z [0.25,0.5625]":"[0.375,0.625] cubed";}
   std::ofstream f(out/L"metrics.json");f<<report.dump(2);
- }DestroyWindow(hwnd);return 0;
+ }DestroyWindow(hwnd);if(compositionHost)DestroyWindow(compositionHost);return 0;
 }
 }
 int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){

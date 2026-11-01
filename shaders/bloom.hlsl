@@ -4,7 +4,9 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  float3 result=0;
  if(pass<.5){
   [unroll]for(int y=0;y<4;y++)[unroll]for(int x=0;x<4;x++){
-   float3 c=source.SampleLevel(linearClamp,uv+(float2(x,y)-1.5)/resolution,0).rgb;
+   // Integral 4:1 reduction lands on exact source texel centers.
+   // Bypass sampler interpolation there; retain filtering for odd sizes.
+   float3 c=all(fmod(resolution,4)==0)?source.Load(int3(int2(pixel.xy)*4+int2(x,y),0)).rgb:source.SampleLevel(linearClamp,uv+(float2(x,y)-1.5)/resolution,0).rgb;
    float peak=max(c.r,max(c.g,c.b));
    // A soft shoulder admits highlights continuously as they cross the knee.
    // Keep extraction in RGB so saturated emitters do not acquire white halos.

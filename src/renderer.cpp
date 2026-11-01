@@ -18,6 +18,28 @@ void check(HRESULT hr,const char* op){if(FAILED(hr)){std::ostringstream s;s<<op<
 static std::vector<char> shader(const std::filesystem::path& dir,const wchar_t* name){std::ifstream f(dir/name,std::ios::binary|std::ios::ate);if(!f)throw std::runtime_error("Precompiled shader missing");auto n=f.tellg();std::vector<char>b((size_t)n);f.seekg(0);f.read(b.data(),n);return b;}
 static D3D12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE type){D3D12_HEAP_PROPERTIES h{};h.Type=type;return h;}
 static D3D12_RESOURCE_DESC bufferDesc(uint64_t size){D3D12_RESOURCE_DESC d{};d.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;d.Width=size;d.Height=1;d.DepthOrArraySize=1;d.MipLevels=1;d.SampleDesc.Count=1;d.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;return d;}
+struct Projected {size_t index;float depth,x,y,radius;};
+struct JourneyProjection {std::array<float,3> forward{};std::array<Projected,journeyBodies.size()> visible{};size_t count=0;};
+static JourneyProjection projectJourney(const JourneyFrame& tour,unsigned width_,unsigned height_){
+  using Vec=std::array<float,3>;
+  auto sub=[](Vec a,Vec b){return Vec{a[0]-b[0],a[1]-b[1],a[2]-b[2]};};
+  auto dot=[](Vec a,Vec b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];};
+  auto cross=[](Vec a,Vec b){return Vec{a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};};
+  auto norm=[&](Vec a){float len=std::sqrt(dot(a,a));for(auto& v:a)v/=std::max(len,.00001f);return a;};
+  Vec forward=norm(sub(tour.target,tour.camera)),right=norm(cross(forward,Vec{0,1,0})),up=cross(right,forward);
+  std::array<Projected,journeyBodies.size()> visible{};size_t visibleCount=0;
+  const float shortEdge=float(std::min(width_,height_)),focal=1.06066017f;
+  for(size_t i=0;i<journeyBodies.size();++i){
+   const auto& body=journeyBodies[i];Vec offset=sub(Vec{body.x,body.y,body.z},tour.camera);
+   float depth=dot(offset,forward);if(depth<=body.radius)continue;
+   float x=focal*dot(offset,right)/depth,y=focal*dot(offset,up)/depth;
+   float radius=focal*body.radius/depth,extent=radius*(body.scene==Scene::Saturn?2.4f:1.5f);
+   if(std::abs(x)>float(width_)/shortEdge*.5f+extent||std::abs(y)>float(height_)/shortEdge*.5f+extent||radius*shortEdge<.35f)continue;
+   visible[visibleCount++]={i,depth,x,y,radius};
+  }
+  std::sort(visible.begin(),visible.begin()+visibleCount,[](const auto& a,const auto& b){return a.depth>b.depth;});
+ return {forward,visible,visibleCount};
+}
 Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& dir,bool debug,bool forceSingleSample,std::shared_ptr<GpuContext> context):window_(hwnd),width_(w),height_(h){
  // A failed constructor does not run ~Renderer. Release native handles on
  // partial setup failure as well as through the normal destructor.
@@ -27,6 +49,22 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  if(!context_->factory||!context_->factory->IsCurrent()){ComPtr<IDXGIFactory6> refreshed;check(CreateDXGIFactory2(0,IID_PPV_ARGS(&refreshed)),"Refresh DXGI factory");context_->factory=refreshed;}
  factory_=context_->factory;device_=context_->device;queue_=context_->queue;adapterName_=context_->adapterName;
  composedDesktop_=(GetWindowLongPtrW(hwnd,GWL_STYLE)&WS_CHILD)!=0&&GetEnvironmentVariableW(L"VOLTURA_WORLDS_DIRECT_PRESENTATION",nullptr,0)==0;
+ if(composedDesktop_&&GetEnvironmentVariableW(L"VOLTURA_WORLDS_COMPOSITION_COPY",nullptr,0)==0&&GetEnvironmentVariableW(L"VOLTURA_WORLDS_COMPOSITION_SURFACE",nullptr,0)==0){
+  // Native D3D12 composition needs no D3D11 translation device or surface copy.
+  // Keep surface presentation available for drivers that reject this path.
+  try{
+   DXGI_SWAP_CHAIN_DESC1 desc{};desc.Width=w;desc.Height=h;desc.Format=output_.format();desc.SampleDesc.Count=1;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;desc.BufferCount=2;desc.SwapEffect=DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;desc.Scaling=DXGI_SCALING_STRETCH;desc.AlphaMode=DXGI_ALPHA_MODE_IGNORE;desc.Flags=DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+   ComPtr<IDXGISwapChain1> chain;check(factory_->CreateSwapChainForComposition(queue_.Get(),&desc,nullptr,&chain),"Create D3D12 composition swap chain");check(chain.As(&swap_),"Query composition swap chain");
+   check(swap_->SetColorSpace1(output_.colorSpace()),"Set composition output color space");check(swap_->SetMaximumFrameLatency(1),"Set composition frame latency");latency_=swap_->GetFrameLatencyWaitableObject();
+   check(DCompositionCreateDevice2(nullptr,IID_PPV_ARGS(&compositionDevice_)),"Create native desktop compositor");
+   check(compositionDevice_->CreateTargetForHwnd(hwnd,FALSE,&compositionTarget_),"Create native desktop target");check(compositionDevice_->CreateVisual(&compositionVisual_),"Create native desktop visual");
+   check(compositionTarget_->SetRoot(compositionVisual_.Get()),"Set native desktop root");check(compositionVisual_->SetContent(swap_.Get()),"Set native desktop content");
+   compositionSwapChain_=true;composedDesktop_=false;updateCompositionTransform();
+  }catch(...){
+   if(context_->removed())throw;
+   compositionVisual_.Reset();compositionTarget_.Reset();compositionDevice_.Reset();swap_.Reset();if(latency_){CloseHandle(latency_);latency_=nullptr;}compositionSwapChain_=false;composedDesktop_=true;
+  }
+ }
  if(composedDesktop_){
   IUnknown* queues[]={queue_.Get()};
   check(D3D11On12CreateDevice(device_.Get(),D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,queues,1,0,&compositionDevice11_,&compositionContext11_,nullptr),"Create desktop composition bridge");
@@ -35,9 +73,10 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
   check(DCompositionCreateDevice(dxgi.Get(),IID_PPV_ARGS(&compositionDevice_)),"Create desktop compositor");
   check(compositionDevice_->CreateTargetForHwnd(hwnd,FALSE,&compositionTarget_),"Create desktop composition target");
   check(compositionDevice_->CreateVisual(&compositionVisual_),"Create desktop visual");
+  directComposition_=SUCCEEDED(compositionBridge_.As(&compositionBridge2_))&&GetEnvironmentVariableW(L"VOLTURA_WORLDS_COMPOSITION_COPY",nullptr,0)==0;
   check(compositionTarget_->SetRoot(compositionVisual_.Get()),"Set desktop visual");
   makeCompositionSurface(output_.format());
- }else{
+ }else if(!compositionSwapChain_){
  DXGI_SWAP_CHAIN_DESC1 sd{};sd.Width=w;sd.Height=h;sd.Format=DXGI_FORMAT_R8G8B8A8_UNORM;sd.SampleDesc.Count=1;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;sd.BufferCount=2;sd.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;sd.Scaling=DXGI_SCALING_STRETCH;sd.Flags=DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
  ComPtr<IDXGISwapChain1> sw;check(factory_->CreateSwapChainForHwnd(queue_.Get(),hwnd,&sd,nullptr,nullptr,&sw),"Create wallpaper swap chain");check(sw.As(&swap_),"Query swap chain");factory_->MakeWindowAssociation(hwnd,DXGI_MWA_NO_ALT_ENTER);check(swap_->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709),"Set SDR color space");swap_->SetMaximumFrameLatency(1);latency_=swap_->GetFrameLatencyWaitableObject();
  }
@@ -64,7 +103,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS depthSupport{DXGI_FORMAT_D32_FLOAT,2,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
  D3D12_FEATURE_DATA_FORMAT_SUPPORT resolveSupport{DXGI_FORMAT_R16G16B16A16_FLOAT};
  if(!forceSingleSample&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&resolveSupport,sizeof(resolveSupport)))&&(resolveSupport.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE)&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&colorSupport,sizeof(colorSupport)))&&SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&depthSupport,sizeof(depthSupport)))&&colorSupport.NumQualityLevels&&depthSupport.NumQualityLevels)orbitSamples_=2;
- D3D12_QUERY_HEAP_DESC qd{D3D12_QUERY_HEAP_TYPE_TIMESTAMP,QueryStride*2,0};check(device_->CreateQueryHeap(&qd,IID_PPV_ARGS(&query_)),"Create timing queries");auto hp=heap(D3D12_HEAP_TYPE_READBACK);auto bd=bufferDesc(QueryStride*2*sizeof(uint64_t));check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&bd,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&queryReadback_)),"Create timing readback");queue_->GetTimestampFrequency(&frequency_);
+ D3D12_QUERY_HEAP_DESC qd{D3D12_QUERY_HEAP_TYPE_TIMESTAMP,QueryStride*2,0};check(device_->CreateQueryHeap(&qd,IID_PPV_ARGS(&query_)),"Create timing queries");auto hp=heap(D3D12_HEAP_TYPE_READBACK);auto bd=bufferDesc(QueryStride*2*sizeof(uint64_t));check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&bd,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&queryReadback_)),"Create timing readback");queue_->GetTimestampFrequency(&frequency_);D3D12_RANGE timingRange{0,QueryStride*2*sizeof(uint64_t)};check(queryReadback_->Map(0,&timingRange,reinterpret_cast<void**>(&queryTimes_)),"Map persistent GPU timings");
  targets();
  D3D12_SHADER_RESOURCE_VIEW_DESC nullFine{};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;nullFine.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE3D;nullFine.Texture3D.MipLevels=1;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(380));
  nullFine={};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;nullFine.Buffer.NumElements=1;nullFine.Buffer.StructureByteStride=8;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(381));
@@ -105,7 +144,8 @@ void Renderer::loadPipelines(Scene scene){
  if(scene==Scene::Orbit){pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);}
  if(scene==Scene::Smoke)pipeline(L"smoke.cso",false,false,smoke_);
  if(scene!=Scene::Video){pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);}
- if(scene!=Scene::Video)pipeline(L"post.cso",false,false,postHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
+ if(scene!=Scene::Video)pipeline(L"post_hdr.cso",false,false,postHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
+ if(scene==Scene::Orbit){pipeline(L"post_orbit.cso",false,false,postOrbit_,true);pipeline(L"post_orbit_hdr.cso",false,false,postOrbitHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);}
  if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
  if(scene==Scene::ForestWater){pipeline(L"forest_water.cso",false,false,forestWater_);}
  if(scene==Scene::TropicalParadise){pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);}
@@ -123,10 +163,13 @@ void Renderer::loadPipelines(Scene scene){
  pipelinesReady_[index]=true;
 }
 Renderer::~Renderer(){
+ abandonCompositionFrame();
  try{if(compositionTarget_){compositionTarget_->SetRoot(nullptr);compositionDevice_->Commit();}if(compositionContext11_){compositionContext11_->ClearState();compositionContext11_->Flush();}idle();}catch(...){}
+ if(queryTimes_){D3D12_RANGE none{};queryReadback_->Unmap(0,&none);queryTimes_=nullptr;}
  if(event_)CloseHandle(event_);if(latency_)CloseHandle(latency_);
 }
 void Renderer::releasePresentationBuffers(){
+ abandonCompositionFrame();
  for(auto& source:compositionSources_)source.Reset();
  if(compositionContext11_){compositionContext11_->ClearState();compositionContext11_->Flush();}
  for(auto& buffer:buffers_)buffer.Reset();
@@ -135,14 +178,18 @@ void Renderer::makeCompositionSurface(DXGI_FORMAT format){
  ComPtr<IDCompositionSurface> surface;
  check(compositionDevice_->CreateSurface(width_,height_,format,DXGI_ALPHA_MODE_IGNORE,&surface),"Create desktop composition surface");
  check(compositionVisual_->SetContent(surface.Get()),"Set desktop composition content");
- RECT client{};GetClientRect(window_,&client);
- D2D_MATRIX_3X2_F transform{float(std::max(1L,client.right))/width_,0,0,float(std::max(1L,client.bottom))/height_,0,0};
- check(compositionVisual_->SetTransform(transform),"Scale desktop composition content");
+ updateCompositionTransform();
  // Publish the replacement and its transform with the first completed frame.
  // Committing an empty surface here would briefly replace the visible image.
  compositionSurface_=std::move(surface);compositionIndex_=0;
 }
+void Renderer::updateCompositionTransform(){
+ RECT client{};GetClientRect(window_,&client);
+ D2D_MATRIX_3X2_F transform{float(std::max(1L,client.right))/width_,0,0,float(std::max(1L,client.bottom))/height_,0,0};
+ check(compositionVisual_->SetTransform(transform),"Scale desktop composition content");compositionCommitPending_=true;
+}
 void Renderer::makePresentationBuffers(DXGI_FORMAT format){
+ if(directComposition_)return;
  auto view=rtv_->GetCPUDescriptorHandleForHeapStart();
  for(unsigned i=0;i<2;i++){
   if(composedDesktop_){
@@ -156,7 +203,41 @@ void Renderer::makePresentationBuffers(DXGI_FORMAT format){
   device_->CreateRenderTargetView(buffers_[i].Get(),nullptr,view);view.ptr+=rtvStride_;
  }
 }
+void Renderer::abandonCompositionFrame()noexcept{
+ if(!compositionDrawing_)return;
+ try{idle();}catch(...){}
+ if(compositionDestination_)compositionBridge2_->ReturnUnderlyingResource(compositionDestination_.Get(),0,nullptr,nullptr);
+ compositionSurface_->EndDraw();compositionDestination_.Reset();compositionDrawing_=false;
+ for(auto& buffer:buffers_)buffer.Reset();
+}
+void Renderer::preparePresentationTarget(){
+ presentationOffset_={};if(!directComposition_)return;
+ // DirectComposition may supply a different atlas surface and offset on each
+ // frame. Check it out only for this update; never retain it after EndDraw.
+ check(compositionSurface_->BeginDraw(nullptr,IID_PPV_ARGS(&compositionDestination_),&presentationOffset_),"Begin direct desktop frame");
+ compositionDrawing_=true;
+ auto unwrapped=compositionBridge2_->UnwrapUnderlyingResource(compositionDestination_.Get(),queue_.Get(),IID_PPV_ARGS(&buffers_[frameIndex_]));
+ if(FAILED(unwrapped)){
+  // Some drivers cannot expose their composition surface through 11-on-12.
+  // Retain the established copy path for those devices.
+  auto ended=compositionSurface_->EndDraw();compositionDestination_.Reset();compositionDrawing_=false;check(ended,"End unsupported direct frame");
+  directComposition_=false;presentationOffset_={};makePresentationBuffers(output_.format());return;
+ }
+ auto view=rtv_->GetCPUDescriptorHandleForHeapStart();view.ptr+=size_t(frameIndex_)*rtvStride_;
+ device_->CreateRenderTargetView(buffers_[frameIndex_].Get(),nullptr,view);
+}
 bool Renderer::tryPresent(){
+ if(directComposition_){
+  // The completed list writes the compositor's texture directly. Return it
+  // with the queue fence before EndDraw; the translation layer owns reuse.
+  ID3D12CommandList* rendered[]={list_.Get()};queue_->ExecuteCommandLists(1,rendered);
+  check(queue_->Signal(fence_.Get(),++fenceValue_),"Fence direct desktop frame");frames_[frameIndex_].fence=fenceValue_;
+  UINT64 value=fenceValue_;ID3D12Fence* fences[]={fence_.Get()};
+  check(compositionBridge2_->ReturnUnderlyingResource(compositionDestination_.Get(),1,&value,fences),"Return desktop render target");
+  buffers_[frameIndex_].Reset();compositionDestination_.Reset();
+  auto ended=compositionSurface_->EndDraw();compositionDrawing_=false;check(ended,"End direct desktop frame");
+  check(compositionDevice_->Commit(),"Commit direct desktop frame");compositionIndex_=(frameIndex_+1)%2;return true;
+ }
  if(composedDesktop_){
   ComPtr<ID3D11Texture2D> destination;POINT offset{};
   check(compositionSurface_->BeginDraw(nullptr,IID_PPV_ARGS(&destination),&offset),"Begin desktop composition frame");
@@ -181,7 +262,7 @@ bool Renderer::tryPresent(){
  // nonblocking submission so one display cannot stall the other displays.
  auto result=swap_->Present(1,DXGI_PRESENT_DO_NOT_WAIT);
  pendingPresent_=result==DXGI_ERROR_WAS_STILL_DRAWING;
- if(!pendingPresent_)check(result,"Present wallpaper without blocking");return !pendingPresent_;
+ if(!pendingPresent_){check(result,"Present wallpaper without blocking");if(compositionSwapChain_&&compositionCommitPending_){check(compositionDevice_->Commit(),"Publish native desktop content");compositionCommitPending_=false;}}return !pendingPresent_;
 }
 bool Renderer::ready(){
  if(context_->removed())throw std::runtime_error("Graphics device removed");
@@ -267,7 +348,7 @@ void Renderer::makeDepthTarget(){
 }
 void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();releasePresentationBuffers();depth_.Reset();depthTargetBytes_=0;hdr_.Reset();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;for(auto& b:bloomTargets_)b.Reset();auto resizeOutput=[&](){if(composedDesktop_){auto oldWidth=width_,oldHeight=height_;width_=w;height_=h;try{makeCompositionSurface(output_.format());}catch(...){width_=oldWidth;height_=oldHeight;throw;}return;}check(swap_->ResizeBuffers(2,w,h,output_.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Resize wallpaper");check(swap_->SetColorSpace1(output_.colorSpace()),"Restore output color space");};
  try{resizeOutput();}catch(...){if(context_->removed()||!output_.hdr)throw;output_.hdr=false;output_.reason=L"HDR presentation unavailable";resizeOutput();}
- width_=w;height_=h;pendingPresent_=false;targets();}
+ width_=w;height_=h;pendingPresent_=false;if(compositionSwapChain_)updateCompositionTransform();targets();}
 void Renderer::outputConstants(){float values[]={output_.hdr?1.f:0.f,output_.white/80.f,output_.peak/output_.white,0};list_->SetGraphicsRoot32BitConstants(5,4,values,0);}
 bool Renderer::configureOutput(const OutputConfig& requested,bool retry){
  if(outputConfigured_&&requested==requestedOutput_&&!retry)return false;
@@ -635,16 +716,14 @@ void Renderer::transition(ID3D12Resource* resource,D3D12_RESOURCE_STATES from,D3
 void Renderer::begin(){
  frameIndex_=composedDesktop_?compositionIndex_:swap_->GetCurrentBackBufferIndex();auto& f=frames_[frameIndex_];wait(f.fence);
  if(f.fence){
-  uint64_t* times{};size_t base=frameIndex_*QueryStride;
-  D3D12_RANGE range{base*sizeof(uint64_t),(base+QueryStride)*sizeof(uint64_t)};
+  const uint64_t* times=queryTimes_;size_t base=frameIndex_*QueryStride;
   gpuStageMs_.fill(0);
-  if(SUCCEEDED(queryReadback_->Map(0,&range,reinterpret_cast<void**>(&times)))){
+  if(times){
    auto a=times[base],b=times[base+1];if(b>=a&&frequency_)gpuMs_=double(b-a)*1000/double(frequency_);
    for(unsigned slot=0;slot<stageCount_[frameIndex_];slot++){
     auto start=times[base+2+slot*2],end=times[base+3+slot*2];
     if(end>=start&&frequency_)gpuStageMs_[stageIds_[frameIndex_][slot]]+=double(end-start)*1000/double(frequency_);
    }
-   D3D12_RANGE none{};queryReadback_->Unmap(0,&none);
   }
  }
  stageCount_[frameIndex_]=0;
@@ -663,10 +742,10 @@ void Renderer::resolveFrameTiming(){
  list_->EndQuery(query_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frameIndex_*QueryStride+1);
  list_->ResolveQueryData(query_.Get(),D3D12_QUERY_TYPE_TIMESTAMP,frameIndex_*QueryStride,2+stageCount_[frameIndex_]*2,queryReadback_.Get(),frameIndex_*QueryStride*sizeof(uint64_t));
 }
-void Renderer::submit(bool completeTiming){
+void Renderer::submit(bool completeTiming,bool deferExecution){
  if(completeTiming)resolveFrameTiming();
  check(list_->Close(),"Close graphics list");
- if(!completeTiming)return; // Desktop submission starts after BeginDraw.
+ if(!completeTiming||deferExecution)return; // Desktop presentation owns execution.
  ID3D12CommandList* lists[]={list_.Get()};queue_->ExecuteCommandLists(1,lists);check(queue_->Signal(fence_.Get(),++fenceValue_),"Submit graphics fence");frames_[frameIndex_].fence=fenceValue_;
 }
 void Renderer::advectCoordinates(FrameData& data,bool initialize){
@@ -909,24 +988,25 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
   device_->CreateShaderResourceView(source,&view,cpu(240));for(unsigned index=241;index<243;index++)device_->CreateShaderResourceView(nullptr,&view,cpu(index));
   auto desc=source->GetDesc();videoBytes_=device_->GetResourceAllocationInfo(0,1,&desc).SizeInBytes;videoView_=source;
  }
- begin();ID3D12DescriptorHeap* heaps[]={views_.Get()};list_->SetDescriptorHeaps(1,heaps);
+ begin();ID3D12DescriptorHeap* heaps[]={views_.Get()};list_->SetDescriptorHeaps(1,heaps);preparePresentationTarget();
  auto target=buffers_[frameIndex_].Get();transition(target,D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
  auto view=rtv_->GetCPUDescriptorHandleForHeapStart();view.ptr+=frameIndex_*rtvStride_;list_->OMSetRenderTargets(1,&view,FALSE,nullptr);
- const float black[]={0,0,0,1};list_->ClearRenderTargetView(view,black,0,nullptr);
+ const float black[]={0,0,0,1};D3D12_RECT outputRect{presentationOffset_.x,presentationOffset_.y,presentationOffset_.x+LONG(width_),presentationOffset_.y+LONG(height_)};if(!source)list_->ClearRenderTargetView(view,black,1,&outputRect);
  if(source){
   transition(source,D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-  D3D12_VIEWPORT viewport{0,0,float(width_),float(height_),0,1};D3D12_RECT scissor{0,0,LONG(width_),LONG(height_)};list_->RSSetViewports(1,&viewport);list_->RSSetScissorRects(1,&scissor);
+  D3D12_VIEWPORT viewport{float(presentationOffset_.x),float(presentationOffset_.y),float(width_),float(height_),0,1};D3D12_RECT scissor=outputRect;list_->RSSetViewports(1,&viewport);list_->RSSetScissorRects(1,&scissor);
   data.width=float(width_);data.height=float(height_);auto info=video_->info();data.spare[0]=float(info.width);data.spare[1]=float(info.height);if(std::abs(info.displayAspect-double(info.width)/info.height)>1e-6){data.spare[0]=float(info.displayAspect);data.spare[1]=1;}data.spare[2]=assignment.fit?1.f:0.f;data.spare[3]=float(assignment.videoSettings.positionX);data.spare[4]=float(assignment.videoSettings.positionY);
   list_->SetGraphicsRootSignature(root_.Get());list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->SetGraphicsRootDescriptorTable(2,gpu(240));list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);list_->SetPipelineState(videoPipeline_.Get());list_->DrawInstanced(3,1,0,0);
   transition(source,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_COMMON);
  }
- transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(!composedDesktop_||!present);
- if(present){if(nonblocking_||composedDesktop_)tryPresent();else check(swap_->Present(1,0),"Present video wallpaper");}
+ transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(directComposition_||!composedDesktop_||!present,directComposition_&&present);
+ if(present){if(nonblocking_||composedDesktop_||compositionSwapChain_)tryPresent();else check(swap_->Present(1,0),"Present video wallpaper");}
  // Desktop presentation submits the sampling commands inside tryPresent().
  // Queue the decoder's reuse fence only after that GPU work is submitted.
  video_->consumed();
 }
 void Renderer::render(const Assignment& assignment,FrameData data,bool present){
+ if(directComposition_&&!present)throw std::runtime_error("Direct desktop rendering requires presentation; use a swap-chain target for readback.");
  loadPipelines(assignment.scene);
  // Video is drawn directly to the presentation buffer. It needs neither the
  // full-resolution FP16 scene nor the two bloom intermediates.
@@ -935,7 +1015,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  }else makeSceneTargets();
  if(assignment.scene!=Scene::Aurora&&auroraArtwork_){idle();releaseAsset(auroraArtwork_);}
  const bool journey=assignment.scene==Scene::SolarSystemJourney;
- JourneyFrame tour{};if(journey)tour=journeyFrame(data.time,data.flow,float(width_)/height_);
+ JourneyFrame tour{};JourneyProjection projection{};if(journey){tour=journeyFrame(data.time,data.flow,float(width_)/height_);projection=projectJourney(tour,width_,height_);}
  Assignment journeyCard;const Assignment* cardAssignment=&assignment;
  if(journey){journeyCard=assignment;cardAssignment=&journeyCard;journeyCard.scene=journeyBodies[tour.stop].scene;journeyCard.showBodyStatistics=assignment.journeyShowBodyStatistics;}
  prepareBodyStatistics(*cardAssignment,int(data.palette));
@@ -970,7 +1050,17 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  bool geometry=assignment.scene==Scene::Orbit||assignment.scene==Scene::Bloom;
  if(geometry&&orbitSamples_==1)makeDepthTarget();
  else if(depth_){idle();depth_.Reset();depthTargetBytes_=0;}
- if(journey){loadSun();loadMercury();loadEarth();loadMoon();loadMars();loadJupiter();loadSaturn();loadPluto();loadStars(true);}
+ if(journey){
+  // Keep all visible bodies plus the next arrival resident, rather than the
+  // entire tour. Preloading the next stop preserves its approach and arrival.
+  std::array<bool,journeyBodies.size()> needed{};needed[tour.stop]=needed[(tour.stop+1)%needed.size()]=true;
+  for(size_t i=0;i<projection.count;i++)needed[projection.visible[i].index]=true;
+  bool waited=false;
+  for(auto [body,texture]:{std::pair{size_t(0),std::addressof(sunImage_)},{0,std::addressof(sunProminence_)},{1,std::addressof(mercuryColor_)},{1,std::addressof(mercuryNormal_)},{3,std::addressof(earthColor_)},{3,std::addressof(earthClouds_)},{3,std::addressof(earthMaterial_)},{4,std::addressof(moonColor_)},{4,std::addressof(moonNormal_)},{4,std::addressof(moonEarth_)},{5,std::addressof(marsColor_)},{5,std::addressof(marsNormal_)},{6,std::addressof(jupiterColor_)},{6,std::addressof(jupiterAtmosphere_)},{7,std::addressof(saturnColor_)},{10,std::addressof(plutoColor_)}}){
+   if(!needed[body]&&*texture){if(!waited){idle();waited=true;}releaseAsset(*texture);}
+  }
+  if(needed[0])loadSun();if(needed[1])loadMercury();if(needed[3])loadEarth();if(needed[4])loadMoon();if(needed[5])loadMars();if(needed[6])loadJupiter();if(needed[7])loadSaturn();if(needed[10])loadPluto();loadStars(true);
+ }
  if(assignment.scene==Scene::Neptune||assignment.scene==Scene::Venus||assignment.scene==Scene::Uranus)loadStars(true);
  if(assignment.scene==Scene::Saturn)loadSaturn();
  if(assignment.scene==Scene::Pluto)loadPluto();
@@ -1003,7 +1093,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  unsigned renderTiming=beginGpuStage(11);
  bool multisample=geometry&&orbitSamples_>1;
  bool usesDepth=geometry;
- auto target=buffers_[frameIndex_].Get();if(!multisample)transition(hdr_.Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
+ preparePresentationTarget();auto target=buffers_[frameIndex_].Get();if(!multisample)transition(hdr_.Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
  auto rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=(multisample?5:2)*rtvStride_;auto dsv=dsv_->GetCPUDescriptorHandleForHeapStart();if(multisample)dsv.ptr+=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);list_->OMSetRenderTargets(1,&rtv,FALSE,usesDepth?&dsv:nullptr);
  const float clear[]={.002f,.003f,.006f,1};list_->ClearRenderTargetView(rtv,clear,0,nullptr);if(usesDepth)list_->ClearDepthStencilView(dsv,D3D12_CLEAR_FLAG_DEPTH,1,0,0,nullptr);
  D3D12_VIEWPORT vp{0,0,float(width_),float(height_),0,1};D3D12_RECT sc{0,0,(LONG)width_,(LONG)height_};list_->RSSetViewports(1,&vp);list_->RSSetScissorRects(1,&sc);list_->SetGraphicsRootSignature(root_.Get());list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1011,29 +1101,14 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(journey){
   // Project every body through one camera. The material shaders retain their
   // analytic globe/ring coverage and are composited from far to near.
-  using Vec=std::array<float,3>;
-  auto sub=[](Vec a,Vec b){return Vec{a[0]-b[0],a[1]-b[1],a[2]-b[2]};};
-  auto dot=[](Vec a,Vec b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];};
-  auto cross=[](Vec a,Vec b){return Vec{a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};};
-  auto norm=[&](Vec a){float len=std::sqrt(dot(a,a));for(auto& v:a)v/=std::max(len,.00001f);return a;};
-  Vec forward=norm(sub(tour.target,tour.camera)),right=norm(cross(forward,Vec{0,1,0})),up=cross(right,forward);
+  const auto& forward=projection.forward;
   FrameData base=data;
   // Time is already integrated with Movement; frozen time freezes materials too.
   // Keep movement=1 for their clock even at zero speed, suppressing only audio.
   base.movement=1;if(assignment.params.movement==0)base.reaction=0;
   data=base;for(int i=0;i<3;i++)data.spare[i]=forward[i];
   list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(journeySky_.Get(),0,3);
-  struct Projected {size_t index;float depth,x,y,radius;};std::array<Projected,journeyBodies.size()> visible;size_t visibleCount=0;
-  const float shortEdge=float(std::min(width_,height_)),focal=1.06066017f;
-  for(size_t i=0;i<journeyBodies.size();++i){
-   const auto& body=journeyBodies[i];Vec offset=sub(Vec{body.x,body.y,body.z},tour.camera);
-   float depth=dot(offset,forward);if(depth<=body.radius)continue;
-   float x=focal*dot(offset,right)/depth,y=focal*dot(offset,up)/depth;
-   float radius=focal*body.radius/depth,extent=radius*(body.scene==Scene::Saturn?2.4f:1.5f);
-   if(std::abs(x)>float(width_)/shortEdge*.5f+extent||std::abs(y)>float(height_)/shortEdge*.5f+extent||radius*shortEdge<.35f)continue;
-   visible[visibleCount++]={i,depth,x,y,radius};
-  }
-  std::sort(visible.begin(),visible.begin()+visibleCount,[](const auto& a,const auto& b){return a.depth>b.depth;});
+  const auto& visible=projection.visible;const auto visibleCount=projection.count;const float shortEdge=float(std::min(width_,height_));
   constexpr unsigned slots[]={414,408,82,396,399,393,402,405,82,82,411};
   for(size_t i=0;i<visibleCount;i++){
    const auto& body=visible[i];
@@ -1105,13 +1180,13 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   list_->SetGraphicsRootDescriptorTable(2,gpu(source));draw(bloom_.Get(),float(pass),3);
   transition(bloomTargets_[destination].Get(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
  }
- list_->RSSetViewports(1,&vp);
+ D3D12_VIEWPORT outputViewport{float(presentationOffset_.x),float(presentationOffset_.y),float(width_),float(height_),0,1};D3D12_RECT outputScissor{presentationOffset_.x,presentationOffset_.y,presentationOffset_.x+LONG(width_),presentationOffset_.y+LONG(height_)};list_->RSSetViewports(1,&outputViewport);list_->RSSetScissorRects(1,&outputScissor);
  transition(target,D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET);
  rtv=rtv_->GetCPUDescriptorHandleForHeapStart();rtv.ptr+=size_t(frameIndex_)*rtvStride_;list_->OMSetRenderTargets(1,&rtv,FALSE,nullptr);
- outputConstants();list_->SetGraphicsRootDescriptorTable(2,gpu(66));draw(output_.hdr?postHdr_.Get():post_.Get(),assignment.scene==Scene::Orbit?1.f:0.f,3);
+ data.spare[10]=float(presentationOffset_.x);data.spare[11]=float(presentationOffset_.y);outputConstants();list_->SetGraphicsRootDescriptorTable(2,gpu(66));auto postPipeline=assignment.scene==Scene::Orbit?(output_.hdr?postOrbitHdr_.Get():postOrbit_.Get()):(output_.hdr?postHdr_.Get():post_.Get());draw(postPipeline,assignment.scene==Scene::Orbit?1.f:0.f,3);
  drawBodyStatistics(*cardAssignment,journey?tour.opacity:1.f);
  endGpuStage(postTiming);
- transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(!composedDesktop_||!present);if(present){if(nonblocking_||composedDesktop_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
+ transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(directComposition_||!composedDesktop_||!present,directComposition_&&present);if(present){if(nonblocking_||composedDesktop_||compositionSwapChain_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
 }
 void Renderer::captureFluidFields(const std::filesystem::path& directory){
  if(!fluidReady_)throw std::runtime_error("Fluid diagnostics require an initialized Smoke scene");

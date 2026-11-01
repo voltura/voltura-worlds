@@ -1,7 +1,14 @@
 #include "common.hlsli"
+#ifndef WORLD_OUTPUT_HDR
+#define WORLD_OUTPUT_HDR 0
+#endif
+#ifndef WORLD_OUTPUT_ORBIT
+#define WORLD_OUTPUT_ORBIT 0
+#endif
 cbuffer OutputData:register(b1){float outputHdr,whiteScale,peakRatio,outputReserved;};
 Texture2D<float4> scene:register(t0);Texture2D<float4> bloom:register(t1);
 SamplerState linearClamp:register(s0);
+#if WORLD_OUTPUT_ORBIT
 // Orbit opaque HDR alpha stores normalized near-field blur radius.
 float nearBlurRadius(float2 uv){return scene.SampleLevel(linearClamp,uv,0).a*(10*resolution.y/1080);}
 float3 orbitFocus(float2 uv,float3 center){
@@ -23,11 +30,15 @@ float3 orbitFocus(float2 uv,float3 center){
  }
  return result/25;
 }
+#endif
 float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
  float3 c=scene.SampleLevel(linearClamp,uv,0).rgb;
- [branch]if(pass>.5)c=orbitFocus(uv,c);
+ #if WORLD_OUTPUT_ORBIT
+ c=orbitFocus(uv,c);
+ #endif
  c+=bloom.SampleLevel(linearClamp,uv,0).rgb*.28;
- if(pass>.5){
+ #if WORLD_OUTPUT_ORBIT
+ {
   float2 offset=(uv-orbitSunUV())*float2(resolution.x/resolution.y,1);
   float radius=length(offset);
   float halo=.00085/(radius*radius+.0008);
@@ -44,25 +55,33 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
   }
   c+=float3(1,.57,.23)*(halo+core+streak)*brightness;
  }
+ #endif
  c=max(c,0);
- if(outputHdr>.5)c=float3(isfinite(c.r)?min(c.r,65504):0,isfinite(c.g)?min(c.g,65504):0,isfinite(c.b)?min(c.b,65504):0);
+ #if WORLD_OUTPUT_HDR
+ c=float3(isfinite(c.r)?min(c.r,65504):0,isfinite(c.g)?min(c.g,65504):0,isfinite(c.b)?min(c.b,65504):0);
+ #endif
  // Blend a shared RGB gain into the shoulder to retain saturated light while
  // allowing the hottest intersections to approach white. Keep the old toe.
  float peak=max(c.r,max(c.g,c.b));
  float3 mapped=lerp(1-exp(-c),c*((1-exp(-peak))/max(peak,.00001)),.38);
- if(pass>.5){
+ #if WORLD_OUTPUT_ORBIT
+ {
   float3 exposed=max(c,0)*.85;
   mapped=(exposed*(2.51*exposed+.03))/(exposed*(2.43*exposed+.59)+.14);
  }
- if(outputHdr>.5){
+ #endif
+ #if WORLD_OUTPUT_HDR
+ {
   float H=max(peakRatio-1,0),e=max(peak-1,0);
   float h=H>0?H*(1-exp(-(e*e)/(H*(1+e)))):0;
   float3 result=(saturate(mapped)+h*c/max(peak,1e-5))*whiteScale;
   return float4(min(max(result,0),whiteScale*peakRatio),1);
  }
+ #else
  float3 encoded=pow(saturate(mapped),1/2.2);
  // Static sub-code-value dither prevents banding without temporal grain.
- float dither=(frac(52.9829189*frac(dot(pixel.xy,float2(.06711056,.00583715))))-.5)/255;
+ float dither=(frac(52.9829189*frac(dot(pixel.xy-spare2.zw,float2(.06711056,.00583715))))-.5)/255;
  return float4(saturate(encoded+dither),1);
+ #endif
 }
 

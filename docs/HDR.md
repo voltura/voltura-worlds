@@ -23,3 +23,11 @@ Evidence is stored under `artifacts/hdr/`. Offscreen timings are short native di
 - [Microsoft Advanced Color guidance](https://learn.microsoft.com/en-us/windows/win32/direct3darticles/high-dynamic-range)
 - [SDR reference-white units](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-displayconfig_sdr_white_level)
 - [SetColorSpace1](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiswapchain3-setcolorspace1)
+
+## Native composition presentation (0.6.2)
+
+Desktop output first tries a D3D12 composition swap chain, using the same SDR and FP16 scRGB formats and output color spaces. This avoids a D3D11 translation device and presentation copy. Surface presentation remains the compatibility fallback; where supported, its D3D11-on-12 surface is unwrapped for direct D3D12 rendering and returned with a completion fence. Both paths retain per-frame pacing and output fallback. A newly attached visual or changed transform is committed with the first completed frame.
+
+`VOLTURA_WORLDS_COMPOSITION_SURFACE=1` selects surface presentation for driver investigation. `VOLTURA_WORLDS_COMPOSITION_COPY=1` selects its original copy path. These are compatibility/diagnostic overrides, not saved quality settings.
+
+API references: [composition swap chains](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgifactory2-createswapchainforcomposition), [surface offsets and ownership](https://learn.microsoft.com/en-us/windows/win32/api/dcomp/nf-dcomp-idcompositionsurface-begindraw), [unwrap](https://learn.microsoft.com/en-us/windows/win32/api/d3d11on12/nf-d3d11on12-id3d11on12device2-unwrapunderlyingresource), and [fenced return](https://learn.microsoft.com/en-us/windows/win32/api/d3d11on12/nf-d3d11on12-id3d11on12device2-returnunderlyingresource).
