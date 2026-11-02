@@ -1,4 +1,4 @@
 # Optional texture processing, diagnostics and product-site media capture.
-Pillow==12.3.0
+Pillow==13.0.0
 numpy==2.5.4
 imageio-ffmpeg==0.6.0
