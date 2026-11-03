@@ -34,14 +34,15 @@ Intermediate frames and metrics stay in ignored `artifacts/site-media/`. Encoded
 
 ## Publish
 
-Source lives on `main`. The `gh-pages` branch contains only the contents of `site/`. After reviewing and committing the intended site changes:
+Source and website content live on `main`. The `.github/workflows/pages.yml` workflow publishes only `site/` to GitHub Pages when site content changes on `main`, or when manually dispatched. No separate publishing branch is needed.
+
+After publishing the signed release and committing its site links:
 
 ```powershell
 git push origin main
-git subtree push --prefix site origin gh-pages
 ```
 
-GitHub Pages builds from `gh-pages:/`. `site/.nojekyll` keeps the static files unchanged. There is no application binary in the website branch.
+GitHub Pages uses GitHub Actions as its publishing source. The `github-pages` environment allows deployments from `main`. `site/.nojekyll` keeps the static files unchanged. Only the website is uploaded; application binaries are distributed through Releases.
 
 ## Domain
 
