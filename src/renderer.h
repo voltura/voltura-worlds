@@ -85,7 +85,7 @@ public:
  void setFlowmapRenewal(float seconds){flowmapRenewal_=seconds;}
  unsigned flowmapRenewals()const{return flowmapRenewals_;}
 private:
- std::array<bool,size_t(Scene::SolarSystemJourney)+1> pipelinesReady_{};
+ std::array<bool,size_t(Scene::SwedishChristmas)+1> pipelinesReady_{};
  void loadPipelines(Scene);
  void prepareBodyStatistics(const Assignment&,int palette);
  void drawBodyStatistics(const Assignment&,float opacity=1);
@@ -204,6 +204,9 @@ private:
  ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
  ComPtr<ID3D12Resource> forestReflection_,tropicalArtwork_,islandArtwork_,islandSand_;
  ComPtr<ID3D12PipelineState> forestWater_,tropicalParadise_,tropicalIsland_,islandCoastPipeline_,islandComposite_;
+ ComPtr<ID3D12Resource> christmasNight_,christmasDay_;
+ ComPtr<ID3D12PipelineState> swedishChristmas_;
+ void loadSwedishChristmas();
  ComPtr<ID3D12Resource> islandCoast_;unsigned islandCoastWidth_=0,islandCoastHeight_=0;uint64_t islandCoastBytes_=0;
  void makeIslandCoastTarget(const Assignment&,const FrameData&);
  std::array<ComPtr<ID3D12PipelineState>,7> proceduralWorlds_;

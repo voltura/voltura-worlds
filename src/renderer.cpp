@@ -82,7 +82,7 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  }
  D3D12_DESCRIPTOR_HEAP_DESC hd{};hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;hd.NumDescriptors=7;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&rtv_)),"Create render views");rtvStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_DSV;hd.NumDescriptors=2;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&dsv_)),"Create depth views");
- hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=426;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
+ hd.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;hd.NumDescriptors=429;hd.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;check(device_->CreateDescriptorHeap(&hd,IID_PPV_ARGS(&views_)),"Create scene descriptors");descriptorStride_=device_->GetDescriptorHandleIncrementSize(hd.Type);
  check(device_->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence_)),"Create fence");event_=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!event_)throw std::runtime_error("Cannot create GPU wait event");
  for(auto& f:frames_)check(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&f.allocator)),"Create frame allocator");
  check(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,frames_[0].allocator.Get(),nullptr,IID_PPV_ARGS(&list_)),"Create command list");list_->Close();
@@ -148,6 +148,7 @@ void Renderer::loadPipelines(Scene scene){
  if(scene==Scene::Orbit){pipeline(L"post_orbit.cso",false,false,postOrbit_,true);pipeline(L"post_orbit_hdr.cso",false,false,postOrbitHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);}
  if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
  if(scene==Scene::ForestWater){pipeline(L"forest_water.cso",false,false,forestWater_);}
+ if(scene==Scene::SwedishChristmas)pipeline(L"swedish_christmas.cso",false,false,swedishChristmas_);
  if(scene==Scene::TropicalParadise){pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);}
  if(scene==Scene::TropicalIsland){pipeline(L"tropical_island.cso",false,false,tropicalIsland_);}
  if(scene==Scene::TropicalIsland){pipeline(L"tropical_island_coast.cso",false,false,islandCoastPipeline_);}
@@ -428,6 +429,18 @@ void Renderer::loadTropicalParadise(){
  loadTexture(assetDirectory_/L"tropical-paradise"/L"environment.png",tropicalArtwork_,420,4096);
  D3D12_SHADER_RESOURCE_VIEW_DESC empty{};empty.Format=DXGI_FORMAT_R8G8B8A8_UNORM;empty.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;empty.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;empty.Texture2D.MipLevels=1;
  device_->CreateShaderResourceView(nullptr,&empty,cpu(421));device_->CreateShaderResourceView(nullptr,&empty,cpu(422));
+}
+void Renderer::loadSwedishChristmas(){
+ if(christmasNight_&&christmasDay_)return;
+ const auto directory=assetDirectory_/L"swedish-christmas";
+ loadTexture(directory/L"night.jpg",christmasNight_,426,4096);
+ loadTexture(directory/L"day.jpg",christmasDay_,427,4096);
+ D3D12_SHADER_RESOURCE_VIEW_DESC spare{};
+ spare.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+ spare.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
+ spare.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+ spare.Texture2D.MipLevels=1;
+ device_->CreateShaderResourceView(nullptr,&spare,cpu(428));
 }
 void Renderer::loadForestWater(){
  if(forestReflection_)return;
@@ -1066,6 +1079,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Pluto)loadPluto();
  if(assignment.scene==Scene::Sun)loadSun();
  if(assignment.scene==Scene::ForestWater)loadForestWater();
+ if(assignment.scene==Scene::SwedishChristmas)loadSwedishChristmas();
  if(assignment.scene==Scene::TropicalParadise)loadTropicalParadise();
  if(assignment.scene==Scene::TropicalIsland){loadTropicalIsland();makeIslandCoastTarget(assignment,data);}
  if(assignment.scene==Scene::Mercury)loadMercury();
@@ -1145,6 +1159,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  }
  else if(assignment.scene==Scene::TropicalParadise){list_->SetGraphicsRootDescriptorTable(2,gpu(420));draw(tropicalParadise_.Get(),0,3);}
  else if(assignment.scene==Scene::ForestWater){list_->SetGraphicsRootDescriptorTable(2,gpu(417));draw(forestWater_.Get(),0,3);}
+ else if(assignment.scene==Scene::SwedishChristmas){list_->SetGraphicsRootDescriptorTable(2,gpu(426));draw(swedishChristmas_.Get(),0,3);}
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
  else if(assignment.scene==Scene::Uranus){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(uranusSpace_.Get(),0,3);draw(uranus_.Get(),0,3);}
  else if(assignment.scene==Scene::Neptune){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(neptuneSpace_.Get(),0,3);draw(neptune_.Get(),0,3);}

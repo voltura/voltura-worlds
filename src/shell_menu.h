@@ -22,6 +22,7 @@ inline constexpr Visualization visualizations[]={
  {Scene::ForestWater,L"Forest Water",L"forest-water"},
  {Scene::TropicalParadise,L"Tropical Paradise",L"tropical-paradise"},
  {Scene::TropicalIsland,L"Tropical Island",L"tropical-island"},
+ {Scene::SwedishChristmas,L"Swedish Christmas",L"swedish-christmas"},
  {Scene::SolarSystemJourney,L"Solar System Journey",L"solar_system_journey",true},
  {Scene::Off,L"Random",L"random"},{Scene::Off,L"Random Solar System",L"random-solar"},
  {Scene::Off,L"Off",L"off"},{Scene::Video,L"Imported video",L"video"}
@@ -93,7 +94,7 @@ inline const wchar_t* desktopTitle(DesktopGroup group){
 }
 // Each independently registered root must fit the observed 16-command budget.
 // Keep a short, stable set of shortcuts; the library exposes the full catalog.
-inline constexpr const wchar_t* desktopVisualizations[]={L"aurora",L"orbit",L"smoke",L"bloom",L"silk",L"forest-water",L"tropical-paradise",L"tropical-island"};
+inline constexpr const wchar_t* desktopVisualizations[]={L"aurora",L"orbit",L"smoke",L"bloom",L"silk",L"forest-water",L"tropical-paradise",L"tropical-island",L"swedish-christmas"};
 static_assert(std::size(desktopVisualizations)+3<=16,"Keep room for Random, imported video and Select more.");
 static_assert(std::size(solarOrder)+2<=16,"Split the Solar System desktop menu before adding more commands.");
 inline std::vector<Entry> desktopEntries(const State* state,const DisplayState* display,DesktopGroup group){

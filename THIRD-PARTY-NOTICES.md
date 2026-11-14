@@ -14,6 +14,8 @@ Tropical Paradise uses original generated tropical landscape artwork. Provenance
 
 Forest Water uses synthetic woodland artwork generated with OpenAI's built-in image generation tool. Provenance and the generation prompt are recorded in `assets/forest-water/ATTRIBUTION.md`; no footage from the reference video is bundled.
 
+Swedish Christmas uses two original generated landscape plates shared with the Voltura Julkalender. See `assets/swedish-christmas/ATTRIBUTION.md`.
+
 Mars uses NASA Ames/Viking/USGS colorized imagery, NASA MOLA topography and the shared NASA SVS star map. Exact source products, credits, hashes, conversion steps and public-domain notes are in `assets/mars/ATTRIBUTION.md` and `assets/mars/sources.json`.
 
 Orbit's NASA Blue Marble map is separately credited in `assets/orbit/ATTRIBUTION.md` and is not covered by the application code's MIT license. Aurora's generated texture-layer provenance is in `assets/aurora/PROVENANCE.md`.

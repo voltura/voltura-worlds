@@ -8,9 +8,9 @@
 
 ## Worlds and desktop controls
 
-Choose from **26 built-in Worlds**, independently on each display:
+Choose from **27 built-in Worlds**, independently on each display:
 
-- **Moving artwork:** Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Forest Water, Tropical Paradise and Tropical Island.
+- **Moving artwork:** Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Forest Water, Tropical Paradise, Tropical Island and Swedish Christmas.
 - **Solar System:** Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto and Sun, plus **Solar System Journey**.
 
 Each World has palettes, brightness and movement controls, scene-specific adjustments and optional Gentle or Expressive audio reaction. Playback analysis stays on your PC; audio is not recorded or uploaded. Solar System scenes combine observational imagery and artistic rendering; [source notices](THIRD-PARTY-NOTICES.md) explain their limits.
@@ -29,7 +29,7 @@ See [Using Worlds](docs/USING.md) for the full guide and [documentation](docs/RE
 
 ## Current release
 
-**Version 0.6.6** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.6/VolturaWorlds-Setup-0.6.6-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.6.6). Includes all **26 Worlds** and personal MP4 video wallpapers. Setup runs for your account. The optional Windows 11 compact desktop menu can request administrator approval to trust the public signing certificate. GitHub's source ZIP does not contain a built app.
+**Version 0.6.7** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.7/VolturaWorlds-Setup-0.6.7-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.6.7). Includes all **27 Worlds** and personal MP4 video wallpapers. Setup runs for your account. The optional Windows 11 compact desktop menu can request administrator approval to trust the public signing certificate. GitHub's source ZIP does not contain a built app.
 
 Pluto includes the original New Horizons heart region and artistically reconstructed far-side and southern terrain. Reconstructed detail is not additional spacecraft measurement. See [Pluto sources and limitations](assets/pluto/ATTRIBUTION.md).
 
