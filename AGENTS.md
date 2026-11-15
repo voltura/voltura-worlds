@@ -34,6 +34,12 @@ Follow [the release checklist](docs/RELEASING.md). Build once and package once w
 
 Regenerate previews only for changed visuals. After publication, check release metadata and changed site content. Keep reports brief and distinguish code review, build results, observed app behavior and anything still awaiting the user's visual assessment. Do not claim a UI or physical-display result that was not observed.
 
+## Keep the promo site in sync
+
+When a release adds a World, add it to the gallery picker and scene data, link its poster and clip, and update the gallery count and direct video fallback. A standalone preview does not appear in the picker. After publishing, verify the changed gallery entries, media URLs and download links on the live site.
+
+Keep the Pages workflow's artifact visibility check and the unique artifact name for each run attempt. If deployment fails, read the failed step before retrying. For an older run that uses the same artifact name on every attempt, start a fresh workflow run from `main` so duplicate artifacts cannot block deployment.
+
 ## Keep the workspace small
 
 Treat `artifacts/` as temporary scratch space. Capture only the frames and scenes needed for the current visual review, and remove intermediate recordings, raw GPU dumps and old revision outputs when finished. Keep final website media in `site/assets/`. Do not accumulate installer copies, historical build layouts or texture-download caches that are no longer needed. Preserve signing configuration, required build dependencies, source assets and Git history during cleanup.
