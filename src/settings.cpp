@@ -25,7 +25,8 @@ std::wstring describeError(const std::exception& error){
  try{return wide(error.what());}catch(const std::runtime_error&){return L"The operation failed. Its error message could not be decoded.";}
 }
 std::filesystem::path profilePath(){ PWSTR p{};if(FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&p)))throw std::runtime_error("User profile unavailable");std::filesystem::path r=p;CoTaskMemFree(p);return r/L"Voltura"/L"Worlds"; }
-Settings loadSettings(const std::filesystem::path& dir) {
+Settings loadSettings(const std::filesystem::path& dir,bool& replacedUnavailableScenes) {
+ replacedUnavailableScenes=false;
  Settings s;auto file=dir/L"settings.json";if(!std::filesystem::exists(file))return s;
  if(std::filesystem::file_size(file)>1024*1024)throw std::runtime_error("Settings exceed size limit");
  std::ifstream f(file,std::ios::binary);if(!f)throw std::runtime_error("Cannot read settings");
@@ -39,11 +40,15 @@ Settings loadSettings(const std::filesystem::path& dir) {
  if(s.audioDevice.find(L'\0')!=std::wstring::npos)throw std::runtime_error("Invalid audio device identifier");
  if(!j.at("displays").is_array()||j.at("displays").size()>32)throw std::runtime_error("Invalid monitor assignments");
  std::set<std::wstring> ids;
+ bool needsSave=false;
  for(auto& item:j.at("displays")){
   Assignment a;a.performance={s.quality,s.fps==30?FrameLimit::Fps30:FrameLimit::Fps60};
   if(item.contains("performance")){auto perf=item.at("performance");int quality=integer(perf.at("quality"),0,2),limit=integer(perf.at("frameLimit"),0,2);a.performance={Quality(quality),FrameLimit(limit)};}
   auto output=item.value("output",std::string("auto"));if(output!="auto"&&output!="sdr")throw std::runtime_error("Invalid display output");a.output=output=="sdr"?OutputPreference::Sdr:OutputPreference::Auto;
-  a.scene=parseScene(item.at("scene"));a.reaction=Reaction(integer(item.at("reaction"),0,2));
+  auto scene=findScene(item.at("scene").get<std::string>());
+  if(scene)a.scene=*scene;
+  else needsSave=true;
+  a.reaction=Reaction(integer(item.at("reaction"),0,2));
   auto p=item.at("parameters");a.params={p.at("brightness"),p.at("movement"),p.at("detail"),p.at("flow"),p.at("turbulence"),p.at("density"),p.at("strength"),integer(p.at("palette"),0,3)};
   if(!valid(a.params))throw std::runtime_error("Invalid scene parameters");a.video=wide(item.value("video",std::string{}));a.fit=item.value("fit",false);
   if(a.video.find(L'\0')!=std::wstring::npos)throw std::runtime_error("Invalid video path");
@@ -51,12 +56,14 @@ Settings loadSettings(const std::filesystem::path& dir) {
   a.showBodyStatistics=item.value("showBodyStatistics",false);
   a.journeyShowBodyStatistics=item.value("journeyShowBodyStatistics",true);
   auto pool=item.value("randomPool",std::string("all"));if(pool!="all"&&pool!="solarSystem")throw std::runtime_error("Invalid random pool");a.randomPool=pool=="solarSystem"?RandomPool::SolarSystem:RandomPool::All;
-  a.random=item.value("random",false);a.randomInterval=item.contains("randomInterval")?integer(item.at("randomInterval"),30,1800):300;
+  a.random=item.value("random",false)&&scene.has_value();a.randomInterval=item.contains("randomInterval")?integer(item.at("randomInterval"),30,1800):300;
   if(!validRandomInterval(a.randomInterval))throw std::runtime_error("Invalid random interval");
   if(a.random&&!validRandomScene(a.scene,a.randomPool))throw std::runtime_error("Scene is outside the selected random pool");
   auto id=wide(item.at("id"));if(id.empty()||id.find(L'\0')!=std::wstring::npos||!ids.insert(id).second)throw std::runtime_error("Invalid or duplicate monitor identifier");
   s.displays.emplace_back(std::move(id),a);
- }return s;
+ }
+ replacedUnavailableScenes=needsSave;
+ return s;
 }
 void saveSettings(const std::filesystem::path& dir,const Settings& s){
  if(int(s.quality)<0||int(s.quality)>2||(s.fps!=30&&s.fps!=60)||s.displays.size()>32)throw std::runtime_error("Invalid settings");

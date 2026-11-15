@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <vector>
 #include <mutex>
+#include <optional>
 #include <atomic>
 #include <chrono>
 #include <exception>
@@ -54,13 +55,14 @@ bool shouldPause(const PauseState&,bool pauseBattery);
 bool valid(const Parameters&);
 float boundedDelta(float seconds);
 std::filesystem::path profilePath();
-Settings loadSettings(const std::filesystem::path&);
+Settings loadSettings(const std::filesystem::path&,bool& replacedUnavailableScenes);
 void saveSettings(const std::filesystem::path&,const Settings&);
 Assignment assignmentFor(const Settings&,const std::wstring&);
 std::string utf8(const std::wstring&);
 std::wstring wide(const std::string&);
 std::wstring describeError(const std::exception&);
 std::string sceneName(Scene);
+std::optional<Scene> findScene(const std::string&);
 Scene parseScene(const std::string&);
 bool isProceduralWorld(Scene);
 }

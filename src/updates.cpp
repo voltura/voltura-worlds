@@ -649,6 +649,15 @@ bool startProcess(const fs::path &file, std::wstring arguments, PROCESS_INFORMAT
         DeleteProcThreadAttributeList(startup.lpAttributeList);
     return result;
 }
+bool relaunchWallpaper(const fs::path &target, bool deferUpdateCheck = false) {
+    PROCESS_INFORMATION launched{};
+    auto args = deferUpdateCheck ? L"--wallpaper --defer-update-check" : L"--wallpaper";
+    if (!startProcess(target, args, launched))
+        return false;
+    CloseHandle(launched.hThread);
+    CloseHandle(launched.hProcess);
+    return true;
+}
 bool readersRunning(const fs::path &target) {
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     need(snapshot.h != nullptr);
@@ -748,13 +757,7 @@ struct Updates::State {
 bool Updates::ready() const {
     if (!state) return false;
     std::lock_guard guard(state->mutex);
-    return !state->cancel && state->ready.has_value();
-}
-std::wstring Updates::readyVersion() const {
-    if (!state) return {};
-    std::lock_guard guard(state->mutex);
-    if (state->cancel || state->closing || !state->ready) return {};
-    return wide(state->ready->version.text());
+    return !state->cancel && !state->busy && state->ready.has_value();
 }
 bool enabled() { return automaticUpdatesAllowed(cacheRoot(executable())); }
 void setEnabled(bool value) {
@@ -954,37 +957,37 @@ void Updates::check() {
         work->busy = false;
     }
 }
-void Updates::close(bool install, bool restart) {
-    if (!state)
-        return;
-    auto work = state;
-    if (work->closing.exchange(true))
-        return;
-    work->cancel = true;
-    std::optional<Candidate> next;
-    {
-        std::lock_guard guard(work->mutex);
-        if (install)
-            next = work->ready;
-    }
-    if (next) {
-        // No filesystem scans, copying, verification, or network work on the reader close path.
-        PROCESS_INFORMATION process{};
-        auto args =
-            L"--apply-update \"" + next->target.wstring() + L"\" " + std::to_wstring(GetCurrentProcessId()) + (restart ? L" restart" : L"");
-        HANDLE signal = nullptr;
-        {
-            std::lock_guard guard(work->mutex);
-            if (work->sessionSignal)
-                signal = work->sessionSignal->h;
-        }
-        if (signal && startProcess(next->helper(), args, process, signal)) {
-            CloseHandle(process.hThread);
-            CloseHandle(process.hProcess);
+bool Updates::close(bool install, bool restart) {
+    if (!state || state->closing)
+        return !restart;
+    if (restart && state->busy)
+        return false;
+    bool launched = false;
+    if (install) {
+        std::lock_guard guard(state->mutex);
+        if (!state->cancel && state->ready && state->sessionSignal) {
+            const auto &next = *state->ready;
+            try {
+                PROCESS_INFORMATION process{};
+                auto args = L"--apply-update \"" + next.target.wstring() + L"\" " +
+                            std::to_wstring(GetCurrentProcessId()) + (restart ? L" restart" : L"");
+                launched = startProcess(next.helper(), args, process, state->sessionSignal->h);
+                if (launched) {
+                    CloseHandle(process.hThread);
+                    CloseHandle(process.hProcess);
+                }
+            } catch (...) {
+                // A failed handoff leaves a ready update available for a later attempt.
+            }
         }
     }
+    if (restart && !launched)
+        return false;
+    state->closing = true;
+    state->cancel = true;
     // Keep the signal until reader destruction: a late shutdown query during renderer teardown
     // must still cancel the helper. Its inherited handle bridges parent exit and helper startup.
+    return true;
 }
 bool updateReaderMayStart() {
     try {
@@ -1012,12 +1015,14 @@ int updateHelper(int argc, wchar_t **argv) {
     if (argc != 4 && !(argc == 5 && std::wstring_view(argv[4]) == L"restart"))
         return 1;
     SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
-    fs::path root;
+    fs::path root, target, self;
+    std::optional<Session> helperSession;
+    bool readerStopped = false;
     try {
-        fs::path target(argv[2]);
+        target = fs::path(argv[2]);
         need(target.is_absolute() && normalized(target.extension()) == L".exe" && ordinary(target));
         root = cacheRoot(target);
-        auto self = executable();
+        self = executable();
         need(normalized(self.parent_path().parent_path()) == normalized(root) &&
                  self.filename() == L"helper.exe" && ordinary(self),
              "Helper is outside its update cache");
@@ -1039,7 +1044,7 @@ int updateHelper(int argc, wchar_t **argv) {
                 need(WaitForSingleObject(parent, 0) == WAIT_OBJECT_0, "Cannot identify handoff parent");
         }
         auto cancelName = gateName(target) + L"-session";
-        Session session(cancelName.c_str());
+        auto &session = helperSession.emplace(cancelName.c_str());
         Lock gate(gateName(target));
         need(gate.owned, "Another update installation is active");
         Handle reopened(CreateEventW(nullptr, TRUE, FALSE, (gateName(target) + L"-reopened").c_str()));
@@ -1057,6 +1062,7 @@ int updateHelper(int argc, wchar_t **argv) {
             }
             need(GetTickCount64() < deadline, "Reader still open; installation deferred");
         }
+        readerStopped = true;
         // Verification happens on a worker so the hidden window services session-end requests.
         Handle payload(CreateFileW(next->payload().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
@@ -1111,16 +1117,21 @@ int updateHelper(int argc, wchar_t **argv) {
         need(fileVersion(target) == next->version && signer(target) == signer(self));
         writeAtomic(root / L"pending", "none\n");
         log(root, "Update installed successfully");
-        if (argc == 5 && session.pump() && !GetSystemMetrics(SM_SHUTTINGDOWN)) {
-            PROCESS_INFORMATION launched{};
-            if (startProcess(target, L"--wallpaper", launched)) {
-                CloseHandle(launched.hThread); CloseHandle(launched.hProcess);
-            }
-        }
+        if (argc == 5 && session.pump() && !GetSystemMetrics(SM_SHUTTINGDOWN))
+            need(relaunchWallpaper(target), "Update installed but Worlds could not restart");
         return 0;
     } catch (const std::exception &e) {
         if (!root.empty())
             log(root, e.what());
+        if (argc == 5 && readerStopped && helperSession->pump() && !GetSystemMetrics(SM_SHUTTINGDOWN)) {
+            try {
+                // Resume the installed wallpaper after a failed update without immediately retrying.
+                if (!readersRunning(target) && installed(target) && signer(target) == signer(self))
+                    need(relaunchWallpaper(target, true), "Worlds could not resume after the update attempt");
+            } catch (const std::exception &restartError) {
+                log(root, restartError.what());
+            }
+        }
         return 1;
     }
 }

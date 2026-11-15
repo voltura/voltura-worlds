@@ -2,11 +2,13 @@
 
 The per-user Windows 11 x64 app includes **27 built-in Worlds**: Aurora, Orbit, Smoke, Bloom, Silk, Eclipse, Lattice, Drift, Contour, Plastic metal, Ripples, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, Pluto, Sun, Forest Water, Tropical Paradise, Tropical Island, Swedish Christmas and Solar System Journey. C++20, Direct3D 12, HLSL. MIT licensed.
 
-Version **0.6.8** adds chimney smoke, twinkling tree lights, and snow sparkles to Swedish Christmas. The cottage scene moves from night to full daylight over 15 minutes of active playback. Pausing stops the transition, and choosing the scene again after switching away starts it at night.
+Version **0.6.9** starts normally when a saved scene is unavailable. Worlds switches the affected display to Aurora and saves that choice automatically.
+
+Swedish Christmas has drifting chimney smoke, twinkling tree lights, and snow sparkles. The cottage scene moves from night to full daylight over 15 minutes of active playback. Pausing stops the transition, and choosing the scene again after switching away starts it at night.
 
 The window title and tray icon tooltip show the running version. When upgrading from 0.1.10 or earlier, run the installer once; those versions cannot automatically upgrade to the current release.
 
-[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.8/VolturaWorlds-Setup-0.6.8-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.9/VolturaWorlds-Setup-0.6.9-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
 
 ## Solar System Journey
 
@@ -18,7 +20,7 @@ At **Movement = 1**, each visit lasts 25 seconds and each trip lasts 12 seconds,
 
 ## Install and try it
 
-Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.6.8-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
+Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.6.9-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. In the tray menu, the eleven bodies are grouped under **Solar System**. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. In the desktop right-click menu, **Off** is under **Voltura Worlds** controls. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 
@@ -36,7 +38,7 @@ Personal SDR videos can be imported, copied to the managed library, and looped s
 
 User settings and imported assets live in `%LOCALAPPDATA%\Voltura\Worlds`. Uninstall from Windows Settings; exit Worlds first. Uninstall asks whether to keep your library and preferences.
 
-Enable **Automatic updates** in the notification-area menu for background update downloads. Choose **Restart to update** when available, or **Exit Voltura Worlds** to install a verified download on exit. Updates are off by default. See [UPDATES.md](UPDATES.md).
+Enable **Automatic updates** in the notification-area menu. Worlds installs verified updates while its windows are closed and resumes the wallpaper automatically. Updates are off by default. See [Automatic updates](UPDATES.md).
 
 ## Desktop right-click menus
 

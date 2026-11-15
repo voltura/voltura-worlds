@@ -70,9 +70,9 @@ std::wstring lastError,settingsError,renderSetupError;bool previewMode=true,desk
 UINT menuDpi=96;HFONT menuFont{};
 unsigned renderGeneration=0;std::atomic<bool> renderSetupFailed{false};
 UINT taskbarCreated{};AudioCapture audio;HANDLE singleInstance{};
-ULONGLONG nextDesktopRetry{},nextUpdateCheck{},previousRandomTick{};
-wu::Updates updates;bool automaticUpdates=false,sessionEnding=false,restartForUpdate=false;
-std::wstring notifiedUpdateVersion,updateNotificationVersion;
+constexpr ULONGLONG updateCheckInterval=3600000;
+ULONGLONG nextDesktopRetry{},nextUpdateCheck{},nextUpdateRestart{},previousRandomTick{};
+wu::Updates updates;bool automaticUpdates=false,sessionEnding=false;
 shellmenu::Server desktopMenu;
 struct LayoutItem{HWND hwnd;int x,y,w,h;bool advanced,footer;int sx{},sy{},sw{},sh{};};
 std::vector<LayoutItem> layoutItems;bool advancedOpen=false,addingAdvanced=false,addingFooter=false,layingOut=false,sideExpansion=false;
@@ -748,26 +748,19 @@ HICON createTrayIcon(){
  return icon;
 }
 void addTray(bool promote=true){if(trayIcon)DestroyIcon(trayIcon);trayIcon=createTrayIcon();NOTIFYICONDATAW n{sizeof(n)};n.hWnd=controller;n.uID=1;n.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP|NIF_SHOWTIP;n.uCallbackMessage=trayMessage;n.hIcon=trayIcon?trayIcon:LoadIconW(instance,MAKEINTRESOURCEW(101));wcscpy_s(n.szTip,appCaption().c_str());trayRegistered=Shell_NotifyIconW(NIM_ADD,&n)||Shell_NotifyIconW(NIM_MODIFY,&n);if(trayRegistered){n.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&n);}if(promote){promotionAttempts=0;SetTimer(controller,2,250,nullptr);}}
-void notifyReadyUpdate(){
- if(!automaticUpdates||sessionEnding||!trayRegistered)return;
- auto version=updates.readyVersion();if(version.empty()||version==notifiedUpdateVersion)return;
- // Defer during presentations, quiet time or absence rather than repeatedly
- // posting a notification that Windows will discard without showing.
- QUERY_USER_NOTIFICATION_STATE state{};
- if(SUCCEEDED(SHQueryUserNotificationState(&state))&&state!=QUNS_ACCEPTS_NOTIFICATIONS)return;
- NOTIFYICONDATAW notification{sizeof(notification)};
- notification.hWnd=controller;notification.uID=1;notification.uFlags=NIF_INFO;
- notification.dwInfoFlags=NIIF_INFO|NIIF_RESPECT_QUIET_TIME;
- auto title=L"Voltura Worlds "+version+L" update ready";
- wcscpy_s(notification.szInfoTitle,title.c_str());
- wcscpy_s(notification.szInfo,L"Click to install the update.");
- if(Shell_NotifyIconW(NIM_MODIFY,&notification)){
-  notifiedUpdateVersion=version;updateNotificationVersion=std::move(version);
- }
+bool updateCanRestartQuietly(){
+ auto thread=GetCurrentThreadId();
+ GUITHREADINFO gui{sizeof(gui)};
+ if(!GetGUIThreadInfo(thread,&gui)||(gui.flags&(GUI_INMENUMODE|GUI_INMOVESIZE)))return false;
+ return EnumThreadWindows(thread,[](HWND window,LPARAM)->BOOL{
+  if(!IsWindowVisible(window))return TRUE;
+  return std::any_of(surfaces.begin(),surfaces.end(),[&](const Surface& surface){return surface.hwnd==window;});
+ },0)!=FALSE;
 }
-void dismissUpdateNotification(){
- updateNotificationVersion.clear();
- if(trayRegistered){NOTIFYICONDATAW notification{sizeof(notification)};notification.hWnd=controller;notification.uID=1;notification.uFlags=NIF_INFO;Shell_NotifyIconW(NIM_MODIFY,&notification);}
+bool restartForUpdate(){
+ if(!automaticUpdates||sessionEnding||!updates.close(true,true))return false;
+ DestroyWindow(controller);
+ return true;
 }
 void prepareTrayMenu(HWND owner,POINT point){
  // Windows scales native menus using their owner. Keep the hidden controller
@@ -790,11 +783,11 @@ void invokeMenuCommand(const std::wstring& command,const std::wstring& displayId
   SendDlgItemMessageW(library,visualizationId,CB_SHOWDROPDOWN,TRUE,0);return;
  }
  if(command==L"exit"){DestroyWindow(controller);return;}
- if(command==L"restart-update"){if(updates.ready()){restartForUpdate=true;DestroyWindow(controller);}return;}
+ if(command==L"restart-update"){restartForUpdate();return;}
  if(command==L"pause"||command==L"resume"){{std::lock_guard lock(stateMutex);pauseState.manual=command==L"pause";}syncControls();return;}
  if(command==L"automatic-on"||command==L"automatic-off"){
   bool next=command==L"automatic-on";wu::setEnabled(next);automaticUpdates=next;
-  if(!next){updates.cancel();dismissUpdateNotification();}else nextUpdateCheck=GetTickCount64()+5000;syncControls();return;
+  if(!next)updates.cancel();else{nextUpdateCheck=GetTickCount64()+5000;nextUpdateRestart=0;}syncControls();return;
  }
  if(displayId.empty())return;
  for(size_t i=0;i<std::size(visualizations);i++)if(command==visualizations[i].id){selectVisualization(int(i),displayId);return;}
@@ -817,13 +810,7 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   return 0;
  }
  case trayMessage:
-  if(LOWORD(l)==NIN_BALLOONUSERCLICK){
-   if(sessionEnding)return 0;
-   // A dismissed or stale notification cannot apply an invalidated update.
-   if(automaticUpdates&&!sessionEnding&&!updateNotificationVersion.empty()&&updates.readyVersion()==updateNotificationVersion)invokeMenuCommand(L"restart-update",{});
-   else showLibrary();
-  }
-  else if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();
+  if(LOWORD(l)==WM_LBUTTONUP||LOWORD(l)==NIN_SELECT)showLibrary();
   else if(LOWORD(l)==WM_CONTEXTMENU||LOWORD(l)==WM_RBUTTONUP){
    POINT point{};GetCursorPos(&point);prepareTrayMenu(hwnd,point);
    shellmenu::State state;std::wstring displayId;
@@ -852,12 +839,18 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
   if(w==2){bool changed=false;bool promoted=ui::promoteTray(executable().wstring(),changed);if(promoted||++promotionAttempts>=20)KillTimer(hwnd,2);if(changed){NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);addTray(false);}return 0;}
 
   if(!trayRegistered)addTray(false);
-  if(automaticUpdates&&!sessionEnding&&GetTickCount64()>=nextUpdateCheck){nextUpdateCheck=GetTickCount64()+3600000;updates.check();}
-  notifyReadyUpdate();
+  auto now=GetTickCount64();
+  if(automaticUpdates&&!sessionEnding){
+   if(now>=nextUpdateCheck){nextUpdateCheck=now+updateCheckInterval;updates.check();}
+   if(now>=nextUpdateRestart&&updates.ready()&&updateCanRestartQuietly()){
+    nextUpdateRestart=now+updateCheckInterval;
+    if(restartForUpdate())return 0;
+   }
+  }
   bool reconnect=renderSetupFailed;
   if(!previewMode)reconnect|=surfaces.empty()||std::any_of(surfaces.begin(),surfaces.end(),[](const Surface& s){return !wallpaperAttached(s.hwnd);});
   if(GetTickCount64()>=nextDesktopRetry&&reconnect)createSurfaces();
-  auto now=GetTickCount64();auto elapsed=previousRandomTick?now-previousRandomTick:0;previousRandomTick=now;
+  auto elapsed=previousRandomTick?now-previousRandomTick:0;previousRandomTick=now;
   SYSTEM_POWER_STATUS power{};bool powerKnown=GetSystemPowerStatus(&power)!=FALSE;std::vector<Monitor> coverageMonitors;for(const auto& s:surfaces)coverageMonitors.push_back(s.monitor);auto covered=previewMode?std::vector<bool>(surfaces.size(),false):monitorsCovered(coverageMonitors,GetCurrentProcessId());{std::lock_guard lock(stateMutex);if(powerKnown)pauseState.battery=power.ACLineStatus==0;pauseState.remote=GetSystemMetrics(SM_REMOTESESSION)!=0;for(size_t i=0;i<surfaces.size();i++)surfaces[i].covered=covered[i];}advanceRandomVisualizations(elapsed);syncControls();}return 0;
  case WM_WTSSESSION_CHANGE:{std::lock_guard lock(stateMutex);if(w==WTS_SESSION_LOCK)pauseState.locked=true;if(w==WTS_SESSION_UNLOCK){pauseState.locked=false;previousRandomTick=GetTickCount64();}}return 0;
  case WM_POWERBROADCAST:{std::lock_guard lock(stateMutex);if(w==PBT_APMSUSPEND)pauseState.suspended=true;if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND){pauseState.suspended=false;previousRandomTick=GetTickCount64();++outputRevision;}if(w==PBT_POWERSETTINGCHANGE){auto p=reinterpret_cast<POWERBROADCAST_SETTING*>(l);if(p->PowerSetting==GUID_CONSOLE_DISPLAY_STATE&&p->DataLength==sizeof(DWORD)){DWORD state;memcpy(&state,p->Data,sizeof(state));pauseState.asleep=state==0;if(!pauseState.asleep)previousRandomTick=GetTickCount64();}}}return TRUE;
@@ -877,7 +870,7 @@ LRESULT CALLBACK controllerProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  case WM_QUERYENDSESSION:sessionEnding=true;updates.sessionEnd();return TRUE;
  case WM_ENDSESSION:sessionEnding=w!=FALSE;if(w){updates.sessionEnd();DestroyWindow(hwnd);}else{updates.cancel();nextUpdateCheck=GetTickCount64()+5000;}return 0;
  case WM_CLOSE:DestroyWindow(hwnd);return 0;
- case WM_DESTROY:{desktopMenu.stop();updates.close(automaticUpdates&&!sessionEnding,restartForUpdate);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);PostQuitMessage(0);}return 0;
+ case WM_DESTROY:{desktopMenu.stop();updates.close(automaticUpdates&&!sessionEnding);NOTIFYICONDATAW n{sizeof(n)};n.hWnd=hwnd;n.uID=1;Shell_NotifyIconW(NIM_DELETE,&n);if(trayIcon){DestroyIcon(trayIcon);trayIcon=nullptr;}WTSUnRegisterSessionNotification(hwnd);PostQuitMessage(0);}return 0;
  }
  }catch(const std::exception& e){error(e);}return DefWindowProcW(hwnd,msg,w,l);
 }
@@ -1132,10 +1125,12 @@ int WINAPI wWinMain(HINSTANCE h,HINSTANCE,PWSTR,int){
    }
    if(singleInstance)CloseHandle(singleInstance);CoUninitialize();return 0;
   }
-  automaticUpdates=wu::enabled();nextUpdateCheck=GetTickCount64()+5000;
+  automaticUpdates=wu::enabled();
+  bool deferUpdateCheck=std::find(args.begin(),args.end(),L"--defer-update-check")!=args.end();
+  nextUpdateCheck=GetTickCount64()+(deferUpdateCheck?updateCheckInterval:5000);
   profile=profilePath();renderDiagnostics=std::find(args.begin(),args.end(),L"--render-diagnostics")!=args.end();
   if(renderDiagnostics){std::ofstream clear(profile/L"render-diagnostics.log",std::ios::trunc);}
-  renderDiagnostic("startup pid="+std::to_string(GetCurrentProcessId()));try{settings=loadSettings(profile);}catch(const std::exception& e){
+  renderDiagnostic("startup pid="+std::to_string(GetCurrentProcessId()));try{settings=loadSettings(profile,savePending);}catch(const std::exception& e){
    auto original=profile/L"settings.json";
    if(std::filesystem::exists(original)){
     auto recovery=profile/(L"settings-recovery-"+wide(newPresetId())+L".json");

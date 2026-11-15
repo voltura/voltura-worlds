@@ -15,9 +15,9 @@ class Updates {
     void check();
     void cancel();
     void sessionEnd();
-    void close(bool install, bool restart = false);
+    // A restart request leaves the reader running if the helper cannot be started.
+    bool close(bool install, bool restart = false);
     bool ready() const;
-    std::wstring readyVersion() const;
     ~Updates();
 };
 bool enabled();

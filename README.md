@@ -29,13 +29,13 @@ See [Using Worlds](docs/USING.md) for the full guide and [documentation](docs/RE
 
 ## Current release
 
-**Version 0.6.8** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.8/VolturaWorlds-Setup-0.6.8-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.6.8). Includes all **27 Worlds** and personal MP4 video wallpapers. Setup runs for your account. The optional Windows 11 compact desktop menu can request administrator approval to trust the public signing certificate. GitHub's source ZIP does not contain a built app.
+**Version 0.6.9** is available. [Download the Windows installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.9/VolturaWorlds-Setup-0.6.9-win-x64.exe) from [Releases](https://github.com/voltura/voltura-worlds/releases/tag/v0.6.9). Includes all **27 Worlds** and personal MP4 video wallpapers. Setup runs for your account. The optional Windows 11 compact desktop menu can request administrator approval to trust the public signing certificate. GitHub's source ZIP does not contain a built app.
 
 Pluto includes the original New Horizons heart region and artistically reconstructed far-side and southern terrain. Reconstructed detail is not additional spacecraft measurement. See [Pluto sources and limitations](assets/pluto/ATTRIBUTION.md).
 
 Run the installer to upgrade. Existing settings, imported videos and startup preferences are retained.
 
-Enable **Automatic updates** in the notification-area menu to download verified future releases in the background. Updates install on **Exit Voltura Worlds**; **Restart to update** appears when a download is ready. See [automatic updates](docs/UPDATES.md) for verification and behavior.
+Enable **Automatic updates** in the notification-area menu. Worlds downloads and installs verified releases automatically while its windows are closed, then resumes the wallpaper. See [automatic updates](docs/UPDATES.md).
 
 ## Build and run
 
