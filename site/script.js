@@ -26,7 +26,8 @@
     forest_water: ['23', 'Forest Water', 'Woodland reflections. Ripples beneath drifting leaves.'],
     tropical_paradise: ['24', 'Tropical Paradise', 'Jungle shade. Falling water. A turquoise escape.'],
     tropical_island: ['25', 'Tropical Island', 'A sunlit beach. Turquoise waves. Palms in the breeze.'],
-    solar_system_journey: ['26', 'Solar System Journey', 'One continuous journey. Eleven celestial bodies. Discover each on arrival.']
+    solar_system_journey: ['26', 'Solar System Journey', 'One continuous journey. Eleven celestial bodies. Discover each on arrival.', '0.6.5'],
+    swedish_christmas: ['27', 'Swedish Christmas', 'Chimney smoke drifts and tree lights twinkle outside a snowy Swedish cottage.', '0.6.8']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');
@@ -56,7 +57,7 @@
       const name = button.dataset.world;
       if (name === selected) return;
       selected = name;
-      const [number, title, description] = scenes[name];
+      const [number, title, description, revision = '0.5.0'] = scenes[name];
       document.querySelectorAll('[data-world]').forEach(item => {
         const active = item === button;
         item.classList.toggle('active', active);
@@ -67,7 +68,6 @@
       document.querySelector('#scene-title').textContent = title;
       document.querySelector('#scene-description').textContent = description;
       video.pause();
-      const revision = name === 'solar_system_journey' ? '0.6.5' : '0.5.0';
       video.poster = `assets/${name}.jpg?v=${revision}`;
       video.setAttribute('aria-label', `${title}: native animated wallpaper`);
       video.querySelector('source').src = `assets/${name}.mp4?v=${revision}`;
