@@ -206,6 +206,7 @@ private:
  ComPtr<ID3D12PipelineState> forestWater_,tropicalParadise_,tropicalIsland_,islandCoastPipeline_,islandComposite_;
  ComPtr<ID3D12Resource> christmasNight_,christmasDay_;
  ComPtr<ID3D12PipelineState> swedishChristmas_;
+ ComPtr<ID3D12PipelineState> swedishChristmasSnow_;
  void loadSwedishChristmas();
  ComPtr<ID3D12Resource> islandCoast_;unsigned islandCoastWidth_=0,islandCoastHeight_=0;uint64_t islandCoastBytes_=0;
  void makeIslandCoastTarget(const Assignment&,const FrameData&);

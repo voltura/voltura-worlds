@@ -114,9 +114,11 @@ void Renderer::loadPipelines(Scene scene){
  auto dir=assetDirectory_.parent_path()/L"shaders";
  auto full=shader(dir,L"fullscreen.cso");std::vector<char> ov,bv;
  if(scene==Scene::Orbit)ov=shader(dir,L"orbit.cso");if(scene==Scene::Bloom)bv=shader(dir,L"bloom_mesh.cso");
- auto pipeline=[&](const wchar_t* file,bool geometry,bool alpha,ComPtr<ID3D12PipelineState>& output,bool display=false,unsigned samples=1,bool folded=false,DXGI_FORMAT displayFormat=DXGI_FORMAT_R8G8B8A8_UNORM){if(output)return;std::wstring key=dir.wstring()+L"/"+file+L":"+std::to_wstring(geometry)+std::to_wstring(alpha)+std::to_wstring(display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT)+L":"+std::to_wstring(samples)+std::to_wstring(folded);
+ auto pipeline=[&](const wchar_t* file,bool geometry,bool alpha,ComPtr<ID3D12PipelineState>& output,bool display=false,unsigned samples=1,bool folded=false,DXGI_FORMAT displayFormat=DXGI_FORMAT_R8G8B8A8_UNORM,const wchar_t* vertexFile=nullptr){if(output)return;std::wstring key=dir.wstring()+L"/"+file+L":"+std::to_wstring(geometry)+std::to_wstring(alpha)+std::to_wstring(display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT)+L":"+std::to_wstring(samples)+std::to_wstring(folded);
+  if(vertexFile){key+=L":";key+=vertexFile;}
   if(auto found=context_->pipelines.find(key);found!=context_->pipelines.end()){output=found->second;return;}
-  auto ps=shader(dir,file);D3D12_GRAPHICS_PIPELINE_STATE_DESC pd{};pd.pRootSignature=root_.Get();pd.VS={folded?bv.data():geometry?ov.data():full.data(),folded?bv.size():geometry?ov.size():full.size()};pd.PS={ps.data(),ps.size()};pd.SampleMask=UINT_MAX;pd.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;pd.NumRenderTargets=1;pd.RTVFormats[0]=display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT;pd.DSVFormat=DXGI_FORMAT_D32_FLOAT;pd.SampleDesc.Count=samples;pd.RasterizerState.MultisampleEnable=samples>1;
+  auto ps=shader(dir,file);auto customVertex=vertexFile?shader(dir,vertexFile):decltype(full){};const auto& vs=vertexFile?customVertex:folded?bv:geometry?ov:full;
+  D3D12_GRAPHICS_PIPELINE_STATE_DESC pd{};pd.pRootSignature=root_.Get();pd.VS={vs.data(),vs.size()};pd.PS={ps.data(),ps.size()};pd.SampleMask=UINT_MAX;pd.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;pd.NumRenderTargets=1;pd.RTVFormats[0]=display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT;pd.DSVFormat=DXGI_FORMAT_D32_FLOAT;pd.SampleDesc.Count=samples;pd.RasterizerState.MultisampleEnable=samples>1;
   pd.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;pd.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;pd.RasterizerState.DepthClipEnable=TRUE;
   pd.DepthStencilState.DepthEnable=geometry;pd.DepthStencilState.DepthWriteMask=alpha?D3D12_DEPTH_WRITE_MASK_ZERO:D3D12_DEPTH_WRITE_MASK_ALL;pd.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_LESS_EQUAL;
   auto& b=pd.BlendState.RenderTarget[0];b.RenderTargetWriteMask=alpha?(D3D12_COLOR_WRITE_ENABLE_RED|D3D12_COLOR_WRITE_ENABLE_GREEN|D3D12_COLOR_WRITE_ENABLE_BLUE):D3D12_COLOR_WRITE_ENABLE_ALL;b.BlendEnable=alpha;b.SrcBlend=D3D12_BLEND_SRC_ALPHA;b.DestBlend=D3D12_BLEND_INV_SRC_ALPHA;b.BlendOp=D3D12_BLEND_OP_ADD;b.SrcBlendAlpha=D3D12_BLEND_ONE;b.DestBlendAlpha=D3D12_BLEND_ZERO;b.BlendOpAlpha=D3D12_BLEND_OP_ADD;
@@ -148,7 +150,10 @@ void Renderer::loadPipelines(Scene scene){
  if(scene==Scene::Orbit){pipeline(L"post_orbit.cso",false,false,postOrbit_,true);pipeline(L"post_orbit_hdr.cso",false,false,postOrbitHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);}
  if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
  if(scene==Scene::ForestWater){pipeline(L"forest_water.cso",false,false,forestWater_);}
- if(scene==Scene::SwedishChristmas)pipeline(L"swedish_christmas.cso",false,false,swedishChristmas_);
+ if(scene==Scene::SwedishChristmas){
+  pipeline(L"swedish_christmas.cso",false,false,swedishChristmas_);
+  pipeline(L"swedish_christmas_snow.cso",false,true,swedishChristmasSnow_,false,1,false,DXGI_FORMAT_UNKNOWN,L"swedish_christmas_snow_vs.cso");
+ }
  if(scene==Scene::TropicalParadise){pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);}
  if(scene==Scene::TropicalIsland){pipeline(L"tropical_island.cso",false,false,tropicalIsland_);}
  if(scene==Scene::TropicalIsland){pipeline(L"tropical_island_coast.cso",false,false,islandCoastPipeline_);}
@@ -1159,7 +1164,13 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  }
  else if(assignment.scene==Scene::TropicalParadise){list_->SetGraphicsRootDescriptorTable(2,gpu(420));draw(tropicalParadise_.Get(),0,3);}
  else if(assignment.scene==Scene::ForestWater){list_->SetGraphicsRootDescriptorTable(2,gpu(417));draw(forestWater_.Get(),0,3);}
- else if(assignment.scene==Scene::SwedishChristmas){list_->SetGraphicsRootDescriptorTable(2,gpu(426));draw(swedishChristmas_.Get(),0,3);}
+ else if(assignment.scene==Scene::SwedishChristmas){
+  list_->SetGraphicsRootDescriptorTable(2,gpu(426));draw(swedishChristmas_.Get(),0,3);
+  constexpr float flakesPerLayer[]={245.f,120.f,28.f};
+  const float aspect=vp.Width/vp.Height;
+  for(unsigned layer=0;layer<std::size(flakesPerLayer);++layer)
+   draw(swedishChristmasSnow_.Get(),float(layer),6,unsigned(std::ceil(flakesPerLayer[layer]*aspect)));
+ }
  else if(isProceduralWorld(assignment.scene)){draw(proceduralWorlds_[size_t(assignment.scene)-size_t(Scene::Silk)].Get(),0,3);}
  else if(assignment.scene==Scene::Uranus){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(uranusSpace_.Get(),0,3);draw(uranus_.Get(),0,3);}
  else if(assignment.scene==Scene::Neptune){list_->SetGraphicsRootDescriptorTable(2,gpu(82));draw(neptuneSpace_.Get(),0,3);draw(neptune_.Get(),0,3);}

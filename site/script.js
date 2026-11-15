@@ -27,7 +27,7 @@
     tropical_paradise: ['24', 'Tropical Paradise', 'Jungle shade. Falling water. A turquoise escape.'],
     tropical_island: ['25', 'Tropical Island', 'A sunlit beach. Turquoise waves. Palms in the breeze.'],
     solar_system_journey: ['26', 'Solar System Journey', 'One continuous journey. Eleven celestial bodies. Discover each on arrival.', '0.6.5'],
-    swedish_christmas: ['27', 'Swedish Christmas', 'Chimney smoke drifts and tree lights twinkle outside a snowy Swedish cottage.', '0.6.8']
+    swedish_christmas: ['27', 'Swedish Christmas', 'Snowflakes tumble in passing gusts outside a snowy Swedish cottage.', '0.6.10']
   };
   const video = document.querySelector('#world-video');
   const toggle = document.querySelector('#play-toggle');

@@ -3,16 +3,6 @@ Texture2D<float4> nightArtwork : register(t0);
 Texture2D<float4> dayArtwork : register(t1);
 SamplerState linearClamp : register(s0);
 
-float flakes(float2 uv, float t, float scale, float speed, float salt) {
- float2 gridPosition=float2(uv.x*resolution.x/resolution.y,uv.y)*scale;
- gridPosition.x+=sin(t*.31+gridPosition.y*.22+salt)*.38+t*.07;
- gridPosition.y-=t*speed;
- float2 cell=floor(gridPosition);
- float2 offset=float2(hash(float3(cell,salt)),hash(float3(cell,salt+1.)));
- float radius=lerp(.012,.043,hash(float3(cell,salt+3.)));
- return 1.-smoothstep(radius,radius+.02,length(frac(gridPosition)-lerp(.2,.8,offset)));
-}
-
 // Positions and animation timings follow the Julkalender artwork overlays.
 static const float artworkAspect=1672./941.;
 static const float2 artworkMetric=float2(artworkAspect,1.);
@@ -69,20 +59,18 @@ float3 twinkleTree(float3 color,float2 p,float t,float pixelSize) {
  return lerp(color,float3(1.,.98,.88),.88*pulse*core);
 }
 
-float3 glitterSnow(float3 color,float2 p,float t,float pixelSize) {
+float3 glitterSnow(float3 color,float2 p,float t,float pixelSize,float daylight) {
  [branch]if(p.y<.77||p.y>.94)return color;
  [unroll]for(int i=0;i<10;i++){
-  float strength=pow(max(0.,sin(t*(1.05+i*.026)+i*3.7)),5.);
-  float size=.0085*(i%3==0?1.25:1.);
+  float strength=pow(max(0.,sin(t*(.78+i*.057)+i*3.7)),10.);
+  float size=.0030*(i%3==0?1.25:1.);
   float2 delta=(p-snowGlints[i])*artworkMetric;
   float2 quadrant=abs(delta);
   [branch]if(strength>.1&&all(quadrant<size*1.85)){
-   color=lerp(color,float3(1.,.79,.38),strength*.65*radialGlow(delta,size*1.85));
-   // The two edges in each quadrant meet at the notch of the four-point star.
-   float verticalEdge=dot(quadrant,float2(.83,.19))-.19*size;
-   float horizontalEdge=dot(quadrant,float2(.17,.58))-.1309*size;
-   float star=1.-smoothstep(-pixelSize,pixelSize,min(verticalEdge/.851,horizontalEdge/.604));
-   color=lerp(color,float3(1.,.96,.80),strength*star);
+   float warm=smoothstep(.4,.8,p.x)*(1.-daylight);
+   float3 reflection=lerp(float3(.66,.80,1.),float3(1.,.85,.62),warm);
+   float core=1.-smoothstep(size*.15,min(size*.77,size*.25+pixelSize),length(delta));
+   color+=reflection*strength*(.52*core+.13*radialGlow(delta,size*1.5));
   }
  }
  return color;
@@ -103,8 +91,6 @@ float4 PS(float4 pixel : SV_POSITION,float2 uv : TEXCOORD) : SV_TARGET {
  float pixelSize=.5*cover.y/resolution.y;
  color=chimneySmoke(color,p,t,daylight);
  color=twinkleTree(color,p,t,pixelSize);
- color=glitterSnow(color,p,t,pixelSize);
- float falling=flakes(uv,t,24.,.48,3.)*.32+flakes(uv,t,43.,.69,5.)*.13;
- color+=falling*float3(.83,.91,1.)*lerp(1.,.58,daylight);
+ color=glitterSnow(color,p,t,pixelSize,daylight);
  return float4(tone(color),1.);
 }

@@ -2,7 +2,7 @@
 
 The current app has 26 built-in Worlds, independent display assignments, Random and Random Solar System, optional body statistics, local audio reaction and silent video playback. Version 0.6.0 adds Solar System Journey with continuous travel and arrival statistics, alongside Tropical Island, Tropical Paradise, Forest Water, optional desktop right-click menus, HDR output, adaptive display performance, video framing and speed controls, and saved desktop presets.
 
-The current release, [0.6.9](release-0.6.9.md), lets Worlds start normally when a display has a saved scene this version cannot render.
+The current release, [0.6.10](release-0.6.10.md), gives Swedish Christmas drifting flurries and more lifelike snowflakes.
 
 ## Using and maintaining the app
 
