@@ -2,7 +2,7 @@
 
 The current app has 26 built-in Worlds, independent display assignments, Random and Random Solar System, optional body statistics, local audio reaction and silent video playback. Version 0.6.0 adds Solar System Journey with continuous travel and arrival statistics, alongside Tropical Island, Tropical Paradise, Forest Water, optional desktop right-click menus, HDR output, adaptive display performance, video framing and speed controls, and saved desktop presets.
 
-The current release, [0.6.7](release-0.6.7.md), adds Swedish Christmas, a winter scene that moves from night to daylight over 15 minutes of active playback.
+The current release, [0.6.8](release-0.6.8.md), adds chimney smoke, twinkling tree lights, and snow sparkles to Swedish Christmas.
 
 ## Using and maintaining the app
 
