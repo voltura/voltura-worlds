@@ -1,4 +1,5 @@
 #include "common.hlsli"
+#include "swedish_christmas_common.hlsli"
 
 struct SnowSprite {
  float4 position : SV_POSITION;
@@ -52,7 +53,7 @@ SnowSprite VS(uint vertex : SV_VertexID,uint id : SV_InstanceID) {
  float2 corner=corners[vertex];
  float2 uv=float2((x+corner.x*extent)/aspect,y+corner.y*extent);
 
- float daylight=smoothstep(0.,900.,time);
+ float daylight=christmasDaylight(time);
  float2 cover=float2(aspect/(1672./941.),1.);
  cover/=max(1.,cover.x);
  float2 p=(float2(x/aspect,y)-.5)*cover+float2(lerp(.5,.66,1.-cover.x),.5);

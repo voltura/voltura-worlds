@@ -1,4 +1,5 @@
 #include "common.hlsli"
+#include "swedish_christmas_common.hlsli"
 Texture2D<float4> nightArtwork : register(t0);
 Texture2D<float4> dayArtwork : register(t1);
 SamplerState linearClamp : register(s0);
@@ -81,12 +82,12 @@ float4 PS(float4 pixel : SV_POSITION,float2 uv : TEXCOORD) : SV_TARGET {
  cover/=max(1.,cover.x);
  float2 p=(uv-.5)*cover+float2(lerp(.5,.66,1.-cover.x),.5);
  float t=time*movement;
- float daylight=smoothstep(0.,900.,time);
- float dawn=4.*daylight*(1.-daylight);
+ float daylight=christmasDaylight(time);
+ float twilight=4.*daylight*(1.-daylight);
  float3 night=nightArtwork.Sample(linearClamp,p).rgb;
  float3 day=dayArtwork.Sample(linearClamp,p).rgb;
  float3 color=lerp(night,day,daylight);
- color+=dawn*day*float3(.19,.055,.015)*(1.-smoothstep(.1,.75,p.y));
+ color+=twilight*day*float3(.19,.055,.015)*(1.-smoothstep(.1,.75,p.y));
 
  float pixelSize=.5*cover.y/resolution.y;
  color=chimneySmoke(color,p,t,daylight);
