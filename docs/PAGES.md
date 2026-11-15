@@ -34,7 +34,7 @@ Intermediate frames and metrics stay in ignored `artifacts/site-media/`. Encoded
 
 ## Publish
 
-Source and website content live on `main`. The `.github/workflows/pages.yml` workflow publishes only `site/` to GitHub Pages when site content changes on `main`, or when manually dispatched. No separate publishing branch is needed.
+Source and website content live on `main`. The `.github/workflows/pages.yml` workflow publishes `site/` to GitHub Pages when the site or workflow changes on `main`, or when manually dispatched.
 
 After publishing the signed release and committing its site links:
 
@@ -43,6 +43,10 @@ git push origin main
 ```
 
 GitHub Pages uses GitHub Actions as its publishing source. The `github-pages` environment allows deployments from `main`. `site/.nojekyll` keeps the static files unchanged. Only the website is uploaded; application binaries are distributed through Releases.
+
+In Actions, find the **Publish website** run for the commit you pushed and wait for **Deploy website** to succeed before checking the live site.
+
+If a run fails, read the failed step first with `gh run view <run-id> --log-failed`. GitHub can finish the upload before its artifact lookup lists the file. The workflow waits for the uploaded artifact ID to appear, and each attempt uses a unique artifact name. For a failure on a commit that predates those changes, dispatch a fresh run from current `main` with `gh workflow run pages.yml --ref main`. Rerunning the old commit can leave two artifacts named `github-pages` and block deployment.
 
 ## Domain
 

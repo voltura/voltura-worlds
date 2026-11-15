@@ -30,6 +30,6 @@ Desktop-menu packaging also signs the shell DLL, the sparse identity package and
 
 Publish when authorized by the user. Upload the signed installer and release manifest. GitHub automatically supplies the uploaded asset's `sha256:` digest; the updater compares its download against that digest and verifies its signature and product/version identity. No separate checksum file, compatibility path or manual checksum comparison is required.
 
-Regenerate previews/posters only for changed visuals, then update relevant site content and download links following [website maintenance](PAGES.md). Check the published release metadata and changed site content after propagation. Do not add repeated full downloads or unrelated media review as routine release gates.
+Regenerate previews/posters only for changed visuals, then update relevant site content and download links following [website maintenance](PAGES.md). Check the published release metadata. Wait for the Pages run for the site commit to succeed, then check the changed content on the live site. Do not add repeated full downloads or unrelated media review as routine release gates.
 
 Report what changed, build/signing results, what was actually observed in the running app, and any visual feedback still needed. Do not substitute automated output or generated screenshots for the user's acceptance of the app.
