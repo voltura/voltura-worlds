@@ -1,8 +1,8 @@
 # Voltura Worlds documentation
 
-The current app has 26 built-in Worlds, independent display assignments, Random and Random Solar System, optional body statistics, local audio reaction and silent video playback. Version 0.6.0 adds Solar System Journey with continuous travel and arrival statistics, alongside Tropical Island, Tropical Paradise, Forest Water, optional desktop right-click menus, HDR output, adaptive display performance, video framing and speed controls, and saved desktop presets.
+The app has 27 built-in Worlds, independent display assignments, Random and Random Solar System, optional body statistics, local audio reaction and silent video playback. It includes Solar System Journey with arrival statistics, optional desktop right-click menus, HDR output, adaptive display performance, video framing and speed controls, and saved desktop presets.
 
-The current release, [0.6.11](release-0.6.11.md), gives Swedish Christmas a repeating 30-minute day and night cycle.
+The current release, [0.6.12](release-0.6.12.md), reduces rendering work and releases memory during pauses.
 
 ## Using and maintaining the app
 
@@ -20,6 +20,7 @@ The current release, [0.6.11](release-0.6.11.md), gives Swedish Christmas a repe
 - [Bloom](BLOOM.md), [Earth](EARTH.md), [Moon](MOON.md), [Jupiter](JUPITER.md), [Venus](venus.md), [Uranus](uranus.md), [Neptune](neptune.md) and [Sun](sun.md).
 - [Artwork and third-party credits](../THIRD-PARTY-NOTICES.md), including the source and rendering notices for Mars, Mercury, Saturn and Pluto.
 - [GPU profiling](GPU-PROFILING.md) and [frozen-volume diagnostics](SMOKE-REFERENCE-VOLUMES.md). Diagnostic capture options are separate from library settings.
+- [0.6.12 performance measurements](performance-0.6.12.md) cover all 27 Worlds and include a desktop pause check.
 
 ## Development verification
 

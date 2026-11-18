@@ -396,7 +396,7 @@ void startRendering(){
     if(FAILED(runtime.initialized))throw std::runtime_error("Cannot initialize graphics worker.");
     {
      std::vector<std::unique_ptr<Renderer>> renderers(indices.size());std::vector<PerformanceState> performance(indices.size());
-     std::vector<double> clocks(indices.size(),0),previous(indices.size(),0),retryAt(indices.size(),0),insetAt(indices.size(),0),outputAt(indices.size(),0);
+     std::vector<double> clocks(indices.size(),0),previous(indices.size(),0),retryAt(indices.size(),0),insetAt(indices.size(),0),outputAt(indices.size(),0),trimAt(indices.size(),0);
      std::vector<Assignment> assignmentSnapshots(indices.size());std::vector<Monitor> monitorSnapshots(indices.size());
      std::vector<OutputConfig> outputConfigs(indices.size());std::vector<OutputPreference> outputPreferences(indices.size(),OutputPreference::Auto);std::vector<bool> outputVideo(indices.size(),false);std::vector<unsigned> outputSeen(indices.size(),0);
      double statusAt=0;bool compositorPaced=false;
@@ -419,16 +419,23 @@ void startRendering(){
        bool active=a.scene!=Scene::Off&&IsWindow(window)&&!shouldPause(pause,true)&&retryAt[n]<=now;bool wasActive=perf.active;perf.setActive(active,now);
        if(scenes[n]!=a.scene){clocks[n]=0;scenes[n]=a.scene;previous[n]=now;}if(active&&!wasActive)previous[n]=now;
        if(a.scene==Scene::Off){renderers[n].reset();if(hadFailure)publish(i,false,{});}
-       if(!active){if(renderers[n]){try{renderers[n]->setPaused(true);}catch(...){renderers[n].reset();}}previous[n]=now;continue;}
+       if(!active){
+        if(renderers[n]){
+         try{
+          if(wasActive){renderers[n]->setPaused(true);trimAt[n]=now+5;}
+          if(trimAt[n]&&now>=trimAt[n]){renderers[n]->trimSceneTargets();trimAt[n]=0;}
+         }catch(...){renderers[n].reset();}
+        }
+        previous[n]=now;continue;
+       }
        if(changed)previous[n]=now;
        double tickTolerance=compositorPaced?.5/displayRefresh(monitor.refreshHz):0.;
        if(!perf.deadline.due(now+tickTolerance))continue;
        try{
         if(!context){context=GpuContext::acquire(ownedAdapter,false,false);adapter={now};for(auto& p:performance)p.restart(now);}
         RECT rect{};GetClientRect(window,&rect);
-        if(!renderers[n]){renderers[n]=std::make_unique<Renderer>(window,std::max(1L,rect.right),std::max(1L,rect.bottom),exeDir/L"shaders",false,false,context);renderers[n]->setNonblocking(true);perf.restart(seconds());previous[n]=seconds();}
+        if(!renderers[n]){renderers[n]=std::make_unique<Renderer>(window,std::max(1L,rect.right),std::max(1L,rect.bottom),exeDir/L"shaders",false,false,context);renderers[n]->setNonblocking(true);renderers[n]->setStageProfiling(renderDiagnostics);perf.restart(seconds());previous[n]=seconds();}
         auto& renderer=*renderers[n];
-        renderer.setStageProfiling(renderDiagnostics);
         auto revision=outputRevision.load();bool outputEvent=revision!=outputSeen[n];
         if(outputEvent||now>=outputAt[n]||outputPreferences[n]!=a.output||outputVideo[n]!=(a.scene==Scene::Video)){
          outputConfigs[n]=discoverOutput(monitor,a.output,a.scene==Scene::Video);outputAt[n]=now+1;outputPreferences[n]=a.output;outputVideo[n]=a.scene==Scene::Video;outputSeen[n]=revision;
@@ -450,17 +457,20 @@ void startRendering(){
         double elapsed=previous[n]>0?std::max(0.,now-previous[n]):0;previous[n]=now;clocks[n]+=elapsed*(a.scene==Scene::SolarSystemJourney?a.params.movement:1.f);
         auto features=a.reaction==Reaction::Off||a.scene==Scene::Video?AudioFeatures{}:audio.features();FrameData data;data.time=float(clocks[n]);data.dt=boundedDelta(float(elapsed));data.brightness=a.params.brightness;data.movement=a.params.movement;data.detail=a.params.detail;data.flow=a.params.flow;data.turbulence=a.params.turbulence;data.density=a.params.density;data.palette=float(a.params.palette);data.reaction=a.reaction==Reaction::Off?0:(a.reaction==Reaction::Gentle?.35f:1.f)*a.params.strength;data.bass=features.bass;data.mid=features.mid;data.treble=features.treble;data.energy=features.energy;data.impulse=features.transient;if(isProceduralWorld(a.scene)||(a.scene==Scene::Sun||a.scene==Scene::SolarSystemJourney))data.spare[0]=float(perf.detail);
         bool missed=elapsed>1.5/perf.fps();
-        renderer.render(a,data);auto after=seconds();perf.sample(after,renderer.gpuMs(),missed);perf.deadline.submitted(compositorPaced?now:after,perf.fps());
+        bool rendered=renderer.render(a,data);auto after=seconds();if(rendered)perf.sample(after,renderer.gpuMs(),missed);perf.deadline.submitted(compositorPaced?now:after,perf.fps());
         if(after-now>.25){perf.restart(after);previous[n]=after;} // Ignore uploads and expensive resource changes.
-        bool recoveredFailure;{std::lock_guard lock(stateMutex);++surfaces[i].renderedFrames;
-         if(a.scene==Scene::Video&&renderer.videoRateKnown()){
+        const bool reportVideoRate=a.scene==Scene::Video&&renderer.videoRateKnown();
+        if(renderDiagnostics||reportVideoRate){
+         std::lock_guard lock(stateMutex);
+         if(renderDiagnostics&&rendered)++surfaces[i].renderedFrames;
+         if(reportVideoRate){
           for(auto& [id,live]:settings.displays)if(id==monitor.id&&live.scene==Scene::Video&&live.video==a.video){
            auto& pending=surfaces[i].pendingVideoSpeed;bool matches=pending?std::abs(*pending-a.videoSettings.speed)<1e-6:std::abs(live.videoSettings.speed-a.videoSettings.speed)<1e-6;
            if(matches){bool speedChanged=live.videoSettings.speed!=renderer.videoPlaybackRate();live.videoSettings.speed=renderer.videoPlaybackRate();pending.reset();surfaces[i].videoMessage=renderer.videoRateMessage();if(speedChanged)requestSave();}
           }
          }
-         recoveredFailure=surfaces[i].renderingFailed;}
-        if(recoveredFailure)publish(i,false,{});retryAt[n]=0;
+        }
+        if(hadFailure)publish(i,false,{});retryAt[n]=0;
        }catch(const std::exception& error){
         renderDiagnostic(std::string("renderer error: ")+error.what());bool removed=context&&context->removed();renderers[n].reset();retryAt[n]=now+5;failedScenes[n]=a.scene;failedVideos[n]=a.video;perf.restart(now);publish(i,true,describeError(error));
         if(removed){for(size_t k=0;k<renderers.size();k++){renderers[k].reset();retryAt[k]=now+5;failedScenes[k]=performance[k].scene;performance[k].restart(now);publish(indices[k],true,L"Graphics device unavailable. Retrying automatically.");}context.reset();}
@@ -475,7 +485,7 @@ void startRendering(){
        if(!p.active)summary<<L" · Paused";
        surfaces[indices[n]].outputFallback=renderers[n]&&renderers[n]->output().reason==L"HDR presentation unavailable";
        surfaces[indices[n]].performanceStatus=summary.str();surfaces[indices[n]].effectiveFps=p.fps();
-       if(renderDiagnostics&&renderers[n])renderDiagnostic("detail="+std::to_string(p.detail)+" frame display="+std::to_string(indices[n])+" targetFps="+std::to_string(p.fps())+" gpuMs="+std::to_string(renderers[n]->gpuMs())+" drawMs="+std::to_string(renderers[n]->gpuStageMs()[11])+" postMs="+std::to_string(renderers[n]->gpuStageMs()[13])+" frames="+std::to_string(surfaces[indices[n]].renderedFrames)+" active="+std::to_string(p.active));
+       if(renderDiagnostics&&renderers[n])renderDiagnostic("detail="+std::to_string(p.detail)+" frame display="+std::to_string(indices[n])+" targetFps="+std::to_string(p.fps())+" gpuMs="+std::to_string(renderers[n]->gpuMs())+" drawMs="+std::to_string(renderers[n]->gpuStageMs()[11])+" postMs="+std::to_string(renderers[n]->gpuStageMs()[13])+" frames="+std::to_string(surfaces[indices[n]].renderedFrames)+" active="+std::to_string(p.active)+" estimatedGpuBytes="+std::to_string(renderers[n]->allocations()));
       }}
       // High-resolution waits keep fractional deadlines accurate without a
       // process-wide timer-resolution change. Paused adapters sleep longer.
@@ -1036,7 +1046,7 @@ int captureMode(const std::vector<std::wstring>& args){
   data.time+=startTime;
   auto timingWarmupOption=option(L"--timing-warmup",L"11");size_t timingConsumed{};int timingWarmup=std::stoi(timingWarmupOption,&timingConsumed);
   if(timingConsumed!=timingWarmupOption.size()||timingWarmup<0||timingWarmup>36000)throw std::runtime_error("Timing warmup must be an integer from 0 to 36000 frames");
-  for(int i=0;i<frames;i++){data.time+=data.dt;renderer.render(a,data,presentFrames);if(presentFrames||scene==Scene::Video)std::this_thread::sleep_for(std::chrono::milliseconds(16));if(i>=timingWarmup){timings.push_back(renderer.gpuMs());if(profileStages)for(unsigned stage=0;stage<14;stage++)stageTimings[stage].push_back(renderer.gpuStageMs()[stage]);}}
+  for(int i=0;i<frames;i++){data.time+=data.dt;bool rendered=renderer.render(a,data,presentFrames);if(presentFrames||scene==Scene::Video)std::this_thread::sleep_for(std::chrono::milliseconds(16));if(rendered&&i>=timingWarmup){timings.push_back(renderer.gpuMs());if(profileStages)for(unsigned stage=0;stage<14;stage++)stageTimings[stage].push_back(renderer.gpuStageMs()[stage]);}}
   if(!compositionProfile)renderer.capture(out/(wide(sceneName(scene))+L".png"));
   if(std::find(args.begin(),args.end(),L"--validate-paused-frame")!=args.end()){
    if(scene!=Scene::Smoke&&scene!=Scene::Jupiter)throw std::runtime_error("Paused-frame diagnostic requires Smoke or Jupiter");

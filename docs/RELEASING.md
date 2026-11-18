@@ -10,7 +10,7 @@ Use the smallest useful verification and stop when there is sufficient evidence.
 
 ## 2. Build, sign and package once
 
-Update version references and release notes. Build the final Release output if needed, then package it:
+Update version references and release notes. Run the build and packaging commands from PowerShell 7. The shell package uses its .NET image support to convert the icon.
 
 ```powershell
 ./scripts/build.ps1

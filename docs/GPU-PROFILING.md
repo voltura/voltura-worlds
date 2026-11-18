@@ -15,3 +15,5 @@ Smoke currently stores conservative occupancy flags in the lighting volume's alp
 ## Composition timing
 
 The existing native profiler accepts `--composition-profile` to render through a hidden composition target and record GPU timestamps without framebuffer readback. Add `--composition-copy` to compare the retained copy path, or `--composition-surface` to profile direct surface rendering. `presentationPath` records the actual path, including fallback. This does not observe behind-icons appearance, physical HDR, display latency or power. Do not combine composition timing with recording or readback diagnostics. GPU debug validation adds overhead and should be kept separate from timing comparisons.
+
+During video presentation, polls that reuse the displayed frame produce no GPU timing sample. To compare GPU work per poll after warmup, multiply `gpuMeanMs` (with `--gpu-stages`) by `timingSampleCount` and divide by `--frames` minus `timingWarmupFrames`.

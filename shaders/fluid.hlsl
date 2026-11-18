@@ -252,7 +252,6 @@ void CS(uint3 id:SV_DispatchThreadID,uint lane:SV_GroupIndex){
  // Keep the previous pressure as the next solve's initial estimate. Resetting
  // it every frame wastes the bounded iteration budget on low-frequency error.
  if(pass<4.5){divergence[p]=(vel(p+int3(1,0,0)).x-vel(p).x+vel(p+int3(0,1,0)).y-vel(p).y+vel(p+int3(0,0,1)).z-vel(p).z);return;}
- if(pass<5.5){pressureOut[p]=(pressureIn[bound(p+int3(1,0,0))]+pressureIn[bound(p-int3(1,0,0))]+pressureIn[bound(p+int3(0,1,0))]+pressureIn[bound(p-int3(0,1,0))]+pressureIn[bound(p+int3(0,0,1))]+pressureIn[bound(p-int3(0,0,1))]-divergence[p])/6;return;}
  float3 v=vel(p)-float3(pressureIn[p]-pressureIn[bound(p-int3(1,0,0))],pressureIn[p]-pressureIn[bound(p-int3(0,1,0))],pressureIn[p]-pressureIn[bound(p-int3(0,0,1))]);
 #ifdef SMOKE_CLOSED_FACES
  v=wallFaces(v,p);

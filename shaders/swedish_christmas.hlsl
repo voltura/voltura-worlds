@@ -20,28 +20,54 @@ static const float2 snowGlints[]={
  float2(.63,.92),float2(.68,.84),float2(.73,.86),float2(.81,.81),float2(.91,.90)
 };
 
-float radialGlow(float2 offset,float radius) {
- return saturate(1.-length(offset)/radius);
-}
+struct ChristmasFrame {
+ float4 position : SV_POSITION;
+ float2 uv : TEXCOORD0;
+ nointerpolation float4 puffs[9] : TEXCOORD1;
+ nointerpolation float4 glints[3] : TEXCOORD10;
+ nointerpolation float daylight : TEXCOORD13;
+};
 
-float3 chimneySmoke(float3 color,float2 p,float t,float daylight) {
- // Limit the puff work to the chimney and the sky immediately above it.
- [branch]if(any(p<float2(.630,.115))||any(p>float2(.724,.354)))return color;
- float2 position=(p-chimney)*artworkMetric;
- float transmission=1.;
+ChristmasFrame VS(uint id : SV_VertexID) {
+ ChristmasFrame frame;
+ frame.uv=float2((id<<1)&2,id&2);
+ frame.position=float4(frame.uv*float2(2,-2)+float2(-1,1),0,1);
+ frame.daylight=christmasDaylight(time);
+ // The animation of each puff and glint is uniform across the image.
+ float t=time*movement;
  [unroll]for(int i=0;i<9;i++){
   float age=frac((t+i)/9.);
   float2 center=artworkAspect*float2(
    .04*age+sin(age*8.-t*.58)*.007*age,
    -.08*age-.014*age*age);
   float spread=artworkAspect*(.004+.012*age);
-  float opacity=lerp(.25,.32,daylight)*sin(3.141593*age)*(1.-.46*age);
-  float2 delta=position-center;
+  float opacity=lerp(.25,.32,frame.daylight)*sin(3.141593*age)*(1.-.46*age);
+  frame.puffs[i]=float4(center,spread,opacity);
+ }
+ frame.glints[2]=0.;
+ [unroll]for(int i=0;i<10;i++)
+  frame.glints[i/4][i%4]=pow(max(0.,sin(t*(.78+i*.057)+i*3.7)),10.);
+ return frame;
+}
+
+float radialGlow(float2 offset,float radius) {
+ return saturate(1.-length(offset)/radius);
+}
+
+float3 chimneySmoke(float3 color,float2 p,ChristmasFrame frame) {
+ // Limit the puff work to the chimney and the sky immediately above it.
+ [branch]if(any(p<float2(.630,.115))||any(p>float2(.724,.354)))return color;
+ float2 position=(p-chimney)*artworkMetric;
+ float transmission=1.;
+ [unroll]for(int i=0;i<9;i++){
+  float4 puff=frame.puffs[i];
+  float spread=puff.z,opacity=puff.w;
+  float2 delta=position-puff.xy;
   transmission*=1.-opacity*radialGlow(delta,spread);
   transmission*=1.-opacity*.60*radialGlow(delta-spread*float2(-.52,.37),spread*.72);
   transmission*=1.-opacity*.54*radialGlow(delta-spread*float2(.43,-.48),spread*.85);
  }
- float3 smokeColor=lerp(float3(.58,.69,.86),float3(.93,.85,.72),daylight);
+ float3 smokeColor=lerp(float3(.58,.69,.86),float3(.93,.85,.72),frame.daylight);
  return lerp(smokeColor,color,transmission);
 }
 
@@ -60,15 +86,15 @@ float3 twinkleTree(float3 color,float2 p,float t,float pixelSize) {
  return lerp(color,float3(1.,.98,.88),.88*pulse*core);
 }
 
-float3 glitterSnow(float3 color,float2 p,float t,float pixelSize,float daylight) {
+float3 glitterSnow(float3 color,float2 p,float pixelSize,ChristmasFrame frame) {
  [branch]if(p.y<.77||p.y>.94)return color;
  [unroll]for(int i=0;i<10;i++){
-  float strength=pow(max(0.,sin(t*(.78+i*.057)+i*3.7)),10.);
+  float strength=frame.glints[i/4][i%4];
   float size=.0030*(i%3==0?1.25:1.);
   float2 delta=(p-snowGlints[i])*artworkMetric;
   float2 quadrant=abs(delta);
   [branch]if(strength>.1&&all(quadrant<size*1.85)){
-   float warm=smoothstep(.4,.8,p.x)*(1.-daylight);
+   float warm=smoothstep(.4,.8,p.x)*(1.-frame.daylight);
    float3 reflection=lerp(float3(.66,.80,1.),float3(1.,.85,.62),warm);
    float core=1.-smoothstep(size*.15,min(size*.77,size*.25+pixelSize),length(delta));
    color+=reflection*strength*(.52*core+.13*radialGlow(delta,size*1.5));
@@ -77,12 +103,12 @@ float3 glitterSnow(float3 color,float2 p,float t,float pixelSize,float daylight)
  return color;
 }
 
-float4 PS(float4 pixel : SV_POSITION,float2 uv : TEXCOORD) : SV_TARGET {
+float4 PS(ChristmasFrame frame) : SV_TARGET {
  float2 cover=float2(resolution.x/resolution.y/artworkAspect,1.);
  cover/=max(1.,cover.x);
- float2 p=(uv-.5)*cover+float2(lerp(.5,.66,1.-cover.x),.5);
+ float2 p=(frame.uv-.5)*cover+float2(lerp(.5,.66,1.-cover.x),.5);
  float t=time*movement;
- float daylight=christmasDaylight(time);
+ float daylight=frame.daylight;
  float twilight=4.*daylight*(1.-daylight);
  float3 night=nightArtwork.Sample(linearClamp,p).rgb;
  float3 day=dayArtwork.Sample(linearClamp,p).rgb;
@@ -90,8 +116,8 @@ float4 PS(float4 pixel : SV_POSITION,float2 uv : TEXCOORD) : SV_TARGET {
  color+=twilight*day*float3(.19,.055,.015)*(1.-smoothstep(.1,.75,p.y));
 
  float pixelSize=.5*cover.y/resolution.y;
- color=chimneySmoke(color,p,t,daylight);
+ color=chimneySmoke(color,p,frame);
  color=twinkleTree(color,p,t,pixelSize);
- color=glitterSnow(color,p,t,pixelSize,daylight);
+ color=glitterSnow(color,p,pixelSize,frame);
  return float4(tone(color),1.);
 }

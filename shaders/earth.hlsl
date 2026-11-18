@@ -28,36 +28,41 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET{
  float3 cloudPoint=float3(q,cloudZ),cloudNormal=normalize(cloudPoint);
  float2 cloudCoord=cloudUV(cloudPoint);
  float2 cdx=earthGradient(ddx(cloudCoord)),cdy=earthGradient(ddy(cloudCoord));
+ float cloudCoverage=saturate((earthCloudRadius-radius)/edge+.5);
+ bool shadeClouds=cloudCoverage>0&&probe!=4&&probe!=5&&probe!=7;
+ float viewCloud=0;
+ if(surfaceCoverage>0||shadeClouds)viewCloud=cloudAt(cloudPoint,cdx,cdy);
  float3 ground=0,city=0,glint=0,albedo=0;float water=0,shadow=1;
  if(surfaceCoverage>0){
   albedo=surfaceMap.SampleGrad(globeSampler,coord,dx,dy).rgb;
   float2 material=materialMap.SampleGrad(globeSampler,coord,dx,dy);
   // Snow and sea ice stay diffuse even where the geographic mask is water.
   water=material.r*(1-smoothstep(.16,.45,min(albedo.r,min(albedo.g,albedo.b))));
-  float mu=dot(n,light),sun=earthSun(mu);
-  float3 sunTransmission=earthSolarTransmission(1,max(mu,0));
-  float3 shadowPoint=n+light*shellDistance(n,light,earthCloudRadius);
-  float shadowCloud=cloudAt(shadowPoint,cdx,cdy);
-  shadow=exp(-shadowCloud*1.8/max(dot(normalize(shadowPoint),light),.22));
-  float diffuse=max(mu,0)*sun;
-  ground=albedo*(diffuse/earthPi)*sunTransmission*(probe==5?1:shadow);
-  // A normalized microfacet lobe and water Fresnel, gated by the same Sun.
-  float3 halfVector=normalize(light+float3(0,0,1));
-  float nh=max(dot(n,halfVector),0),nv=max(n.z,.001),nl=max(mu,.001);
-  float a2=.0121,denom=nh*nh*(a2-1)+1;
-  float distribution=a2/(earthPi*denom*denom);
-  float visibility=1/(4*(nv*(1-.06)+.06)*(nl*(1-.06)+.06));
-  float fresnel=.0204+.9796*pow(1-saturate(dot(halfVector,light)),5);
-  glint=water*fresnel*distribution*visibility*diffuse*sunTransmission*shadow;
-  float viewCloud=cloudAt(cloudPoint,cdx,cdy);
+  float mu=dot(n,light),nv=max(n.z,.001);
+  // Direct surface light and reflection are zero on the night side.
+  [branch]if(mu>0){
+   float3 sunTransmission=earthSolarTransmission(1,mu);
+   float3 shadowPoint=n+light*shellDistance(n,light,earthCloudRadius);
+   float shadowCloud=cloudAt(shadowPoint,cdx,cdy);
+   shadow=exp(-shadowCloud*1.8/max(dot(normalize(shadowPoint),light),.22));
+   float diffuse=mu*earthSun(mu);
+   ground=albedo*(diffuse/earthPi)*sunTransmission*(probe==5?1:shadow);
+   // A normalized microfacet lobe and water Fresnel, gated by the same Sun.
+   float3 halfVector=normalize(light+float3(0,0,1));
+   float nh=max(dot(n,halfVector),0),nl=max(mu,.001);
+   float a2=.0121,denom=nh*nh*(a2-1)+1;
+   float distribution=a2/(earthPi*denom*denom);
+   float visibility=1/(4*(nv*(1-.06)+.06)*(nl*(1-.06)+.06));
+   float fresnel=.0204+.9796*pow(1-saturate(dot(halfVector,light)),5);
+   glint=water*fresnel*distribution*visibility*diffuse*sunTransmission*shadow;
+  }
   city=float3(1,.63,.28)*pow(material.g,1.35)*(.42/earthPi)*(1-smoothstep(-.12,.02,mu))*exp(-viewCloud*2.5/max(nv,.22));
   if(probe==6)city=0;
   ground=(ground+glint+city)*surfaceCoverage;
  }
  // Cloud shell at 8 km with footprint-filtered relief and directional shadow.
- float cloudCoverage=saturate((earthCloudRadius-radius)/edge+.5);
- if(cloudCoverage>0&&probe!=4&&probe!=5&&probe!=7){
-  float coverage=cloudAt(cloudPoint,cdx,cdy);
+ if(shadeClouds){
+  float coverage=viewCloud;
   float mu=dot(cloudNormal,light);
   float3 shadowPoint=cloudPoint+light*.0007;
   float sunward=cloudAt(shadowPoint,cdx,cdy);

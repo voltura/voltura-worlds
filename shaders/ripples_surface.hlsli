@@ -2,11 +2,13 @@
 // gradients superpose before surface intersection, refraction or reflection.
 struct WaterField { float height; float2 slope; };
 
-void waterBand(inout WaterField field,float2 delta,float age,float amplitude,float flowScale,float k) {
- if(age<0||age>=7.)return;
- // A smooth radial coordinate avoids a cusp at the impact centre.
- float r=sqrt(dot(delta,delta)+.000004);
- float2 direction=delta/r;
+struct WaterDropProfile {
+ float r;
+ float2 direction;
+ float propagationTime,inverseWidth,fade,attenuation,radialSlope;
+};
+
+void waterBand(inout WaterField field,WaterDropProfile drop,float amplitude,float k) {
  // Deep-water gravity-capillary dispersion: phase and group velocities
  // differ. The envelope carries energy while crests move within the packet.
  // omega^2 = g*k + (surface tension / density)*k^3.
@@ -14,31 +16,36 @@ void waterBand(inout WaterField field,float2 delta,float age,float amplitude,flo
  float tension=.000073;
  float omega=sqrt(9.81*k+tension*k*k*k);
  float group=(9.81+3.*tension*k*k)/(2.*omega);
- float propagationTime=age*.55*flowScale;
- float q=r-propagationTime*group;
- float width=.028+.005*age;
- float inverseWidth=1./(width*width);
- float envelope=exp(-q*q*inverseWidth);
- float fade=smoothstep(0.,.25,age)*(1.-smoothstep(4.,7.,age));
- float attenuation=rsqrt(1.+35.*r);
- float viscousDamping=exp(-2.*.000001*k*k*propagationTime);
- float a=amplitude*fade*attenuation*envelope*viscousDamping;
- float phase=k*r-omega*propagationTime;
+ float q=drop.r-drop.propagationTime*group;
+ float envelope=exp(-q*q*drop.inverseWidth);
+ float viscousDamping=exp(-2.*.000001*k*k*drop.propagationTime);
+ float a=amplitude*drop.fade*drop.attenuation*envelope*viscousDamping;
+ float phase=k*drop.r-omega*drop.propagationTime;
  float wave=sin(phase),quadrature=cos(phase);
- float logarithmicSlope=-2.*q*inverseWidth-17.5/(1.+35.*r);
+ float logarithmicSlope=-2.*q*drop.inverseWidth-drop.radialSlope;
  field.height+=a*wave;
- field.slope+=a*(k*quadrature+logarithmicSlope*wave)*direction;
+ field.slope+=a*(k*quadrature+logarithmicSlope*wave)*drop.direction;
 }
 
 void waterDrop(inout WaterField field,float2 delta,float age,float amplitude,float flowScale,float k) {
  if(age<0||age>=7.)return;
+ // The three wavelength bands share the same radial envelope geometry.
+ WaterDropProfile drop;
+ float deltaSquared=dot(delta,delta),width=.028+.005*age;
+ drop.r=sqrt(deltaSquared+.000004);
+ drop.direction=delta/drop.r;
+ drop.propagationTime=age*.55*flowScale;
+ drop.inverseWidth=1./(width*width);
+ drop.fade=smoothstep(0.,.25,age)*(1.-smoothstep(4.,7.,age));
+ drop.attenuation=rsqrt(1.+35.*drop.r);
+ drop.radialSlope=17.5/(1.+35.*drop.r);
  // A drop excites a band of wavelengths, not a rigid monochromatic ring train.
  // Their different group velocities spread the pulse and avoid a regular grid
  // of identical steep peaks where two trains cross.
- waterBand(field,delta,age,amplitude*.5,flowScale,k);
- waterBand(field,delta,age,amplitude*.3,flowScale,k*.72);
- waterBand(field,delta,age,amplitude*.2,flowScale,k*1.32);
- float dimple=-amplitude*(.0012/.0014)*exp(-dot(delta,delta)/.00018)*smoothstep(0.,.04,age)*exp(-age*12.);
+ waterBand(field,drop,amplitude*.5,k);
+ waterBand(field,drop,amplitude*.3,k*.72);
+ waterBand(field,drop,amplitude*.2,k*1.32);
+ float dimple=-amplitude*(.0012/.0014)*exp(-deltaSquared/.00018)*smoothstep(0.,.04,age)*exp(-age*12.);
  field.height+=dimple;
  field.slope+=dimple*(-2./.00018)*delta;
 }

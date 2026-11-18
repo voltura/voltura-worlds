@@ -41,8 +41,9 @@ public:
  ID3D12Resource* simulationIdentity()const{return velocity_[0].resource.Get();}
  ID3D12Resource* targetIdentity()const{return hdr_.Get();}
  ID3D12PipelineState* pipelineIdentity()const{return earth_.Get();}
- void render(const Assignment&,FrameData,bool present=true);
+ bool render(const Assignment&,FrameData,bool present=true);
  void resize(unsigned,unsigned);
+ void trimSceneTargets();
  void setOverlayInsets(std::array<unsigned,4> insets){overlayInsets_=insets;}
  void capture(const std::filesystem::path&);
  void captureFluidFields(const std::filesystem::path&);
@@ -86,7 +87,7 @@ public:
  unsigned flowmapRenewals()const{return flowmapRenewals_;}
 private:
  std::array<bool,size_t(Scene::SwedishChristmas)+1> pipelinesReady_{};
- void loadPipelines(Scene);
+ void loadPipelines(const Assignment&);
  void prepareBodyStatistics(const Assignment&,int palette);
  void drawBodyStatistics(const Assignment&,float opacity=1);
  std::array<ComPtr<ID3D12PipelineState>,11> journeyPipelines_;
@@ -154,12 +155,13 @@ private:
  OutputConfig output_{},requestedOutput_{};bool outputConfigured_=false;
  ComPtr<ID3D12PipelineState> postHdr_,postOrbit_,postOrbitHdr_,bodyStatisticsHdr_;
  void outputConstants();
- bool nonblocking_=false,pendingPresent_=false;HANDLE latency_=nullptr;
+ bool nonblocking_=false,pendingPresent_=false,frameLatencyReady_=false;HANDLE latency_=nullptr;
  bool tryPresent();
  void makePresentationBuffers(DXGI_FORMAT);
  void preparePresentationTarget();
  void abandonCompositionFrame()noexcept;
  void releasePresentationBuffers();
+ void releaseSceneTargets();
  void makeCompositionSurface(DXGI_FORMAT);
  void updateCompositionTransform();
  bool compositionSwapChain_=false,compositionCommitPending_=false;
@@ -201,7 +203,8 @@ private:
  ComPtr<ID3D12Resource> orbitColor_,orbitDepth_;unsigned orbitSamples_=1;uint64_t orbitTargetBytes_=0,depthTargetBytes_=0;
  std::array<ComPtr<ID3D12Resource>,2> bloomTargets_,auroraTextures_;
  std::filesystem::path assetDirectory_;uint64_t assetBytes_=0;bool starForeground_=false;
- ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidMultigrid_,post_,bloom_,videoPipeline_;
+ ComPtr<ID3D12PipelineState> bloomSurface_,bloomBackdrop_,aurora_,space_,planet_,atmosphere_,smoke_,fluid_,fluidPressure_,fluidMultigrid_,post_,bloom_,bloomAligned_,videoPipeline_;
+ bool alignedBloom()const{return width_%4==0&&height_%4==0;}
  ComPtr<ID3D12Resource> forestReflection_,tropicalArtwork_,islandArtwork_,islandSand_;
  ComPtr<ID3D12PipelineState> forestWater_,tropicalParadise_,tropicalIsland_,islandCoastPipeline_,islandComposite_;
  ComPtr<ID3D12Resource> christmasNight_,christmasDay_;
@@ -213,7 +216,8 @@ private:
  std::array<ComPtr<ID3D12PipelineState>,7> proceduralWorlds_;
  bool videoRateKnown_=false;double requestedVideoRate_=-1,acceptedVideoRate_=1;std::wstring videoRateMessage_;
  std::unique_ptr<VideoPlayer> video_;std::filesystem::path videoPath_;ID3D12Resource* videoView_{};uint64_t videoBytes_{};
- void renderVideo(const Assignment&,FrameData,bool);
+ std::optional<std::array<float,3>> presentedVideoFraming_;
+ bool renderVideo(const Assignment&,FrameData,bool);
  std::array<Volume,2> velocity_,density_,pressure_;Volume divergence_,curl_;
  unsigned v_=0,d_=0,p_=0;bool fluidReady_=false;Scene lastScene_=Scene::Aurora;
  ComPtr<ID3D12QueryHeap> query_;ComPtr<ID3D12Resource> queryReadback_;uint64_t* queryTimes_=nullptr;UINT64 frequency_=0;

@@ -4,6 +4,8 @@
 
 All public methods run on the rendering thread. Start/resume with `setPaused(false)` and pause with `setPaused(true)`. `update()` asks for a new frame and places a producer wait on the D3D12 queue. When a frame exists, callers must transition it from COMMON to their read state, return it to COMMON, submit that work, and call `consumed()` after every use, including reused frames. This prevents decoder writes from racing GPU reads. Playback is muted and looping.
 
+For wallpaper presentation, the renderer skips drawing when the decoder has no new frame and the displayed framing is current. Changing Fit, Fill, position, the output surface or the source still triggers a redraw. A skipped draw keeps the acquired DXGI frame-latency signal for the next submission.
+
 Personal imports inspect supported native video containers, bounded landscape/portrait geometry and reported or encoded PQ/HLG color metadata. Known HDR/protected video is rejected. Version-1 World packages retain their H.264 MP4 restriction. Codec packs are not installed.
 
 The core is connected to native scene rendering, Fit/Fill positioning, managed personal video import, and library controls. Video World and personal imports require native GPU preflight before confirmation. Physical monitor presentation and hardware-decoder selection remain separate verification work.

@@ -2,7 +2,10 @@
 #include "video.h"
 #include "dds.h"
 #include "solar_journey.h"
+#include "body_catalog.h"
 #include <algorithm>
+#include <bit>
+#include <cstddef>
 #include <d3dcompiler.h>
 #include <d3d12sdklayers.h>
 #include <wincodec.h>
@@ -109,15 +112,25 @@ Renderer::Renderer(HWND hwnd,unsigned w,unsigned h,const std::filesystem::path& 
  nullFine={};nullFine.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;nullFine.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;nullFine.Buffer.NumElements=1;nullFine.Buffer.StructureByteStride=8;device_->CreateShaderResourceView(nullptr,&nullFine,cpu(381));
  setupHandles.complete=true;
 }
-void Renderer::loadPipelines(Scene scene){
- auto index=size_t(scene);if(index>=pipelinesReady_.size())throw std::runtime_error("Invalid World pipeline selection");if(pipelinesReady_[index])return;
+void Renderer::loadPipelines(const Assignment& assignment){
+ const auto scene=assignment.scene;
+ auto index=size_t(scene);if(index>=pipelinesReady_.size())throw std::runtime_error("Invalid World pipeline selection");
+ const bool statistics=scene==Scene::SolarSystemJourney?assignment.journeyShowBodyStatistics:assignment.showBodyStatistics&&bodyFacts(scene);
+ const bool orbit=scene==Scene::Orbit,hdr=output_.hdr;
+ auto& post=orbit?(hdr?postOrbitHdr_:postOrbit_):(hdr?postHdr_:post_);
+ auto& bodyCard=hdr?bodyStatisticsHdr_:bodyStatisticsPipeline_;
+ auto& bloom=alignedBloom()?bloomAligned_:bloom_;
+ const bool detailSmoke=scene==Scene::Smoke&&detailCoordinates_;
+ const bool needsPressure=scene==Scene::Smoke&&!pressureMultigrid_;
+ if(pipelinesReady_[index]&&(scene==Scene::Video||(post&&bloom&&(!statistics||bodyCard)&&(!detailSmoke||detailPipeline_)&&(!needsPressure||fluidPressure_))))return;
  auto dir=assetDirectory_.parent_path()/L"shaders";
- auto full=shader(dir,L"fullscreen.cso");std::vector<char> ov,bv;
- if(scene==Scene::Orbit)ov=shader(dir,L"orbit.cso");if(scene==Scene::Bloom)bv=shader(dir,L"bloom_mesh.cso");
+ std::vector<char> full,ov,bv;
  auto pipeline=[&](const wchar_t* file,bool geometry,bool alpha,ComPtr<ID3D12PipelineState>& output,bool display=false,unsigned samples=1,bool folded=false,DXGI_FORMAT displayFormat=DXGI_FORMAT_R8G8B8A8_UNORM,const wchar_t* vertexFile=nullptr){if(output)return;std::wstring key=dir.wstring()+L"/"+file+L":"+std::to_wstring(geometry)+std::to_wstring(alpha)+std::to_wstring(display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT)+L":"+std::to_wstring(samples)+std::to_wstring(folded);
   if(vertexFile){key+=L":";key+=vertexFile;}
   if(auto found=context_->pipelines.find(key);found!=context_->pipelines.end()){output=found->second;return;}
-  auto ps=shader(dir,file);auto customVertex=vertexFile?shader(dir,vertexFile):decltype(full){};const auto& vs=vertexFile?customVertex:folded?bv:geometry?ov:full;
+  auto ps=shader(dir,file);std::vector<char> customVertex;
+  auto& vs=vertexFile?customVertex:folded?bv:geometry?ov:full;
+  if(vs.empty())vs=shader(dir,vertexFile?vertexFile:folded?L"bloom_mesh.cso":geometry?L"orbit.cso":L"fullscreen.cso");
   D3D12_GRAPHICS_PIPELINE_STATE_DESC pd{};pd.pRootSignature=root_.Get();pd.VS={vs.data(),vs.size()};pd.PS={ps.data(),ps.size()};pd.SampleMask=UINT_MAX;pd.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;pd.NumRenderTargets=1;pd.RTVFormats[0]=display?displayFormat:DXGI_FORMAT_R16G16B16A16_FLOAT;pd.DSVFormat=DXGI_FORMAT_D32_FLOAT;pd.SampleDesc.Count=samples;pd.RasterizerState.MultisampleEnable=samples>1;
   pd.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;pd.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;pd.RasterizerState.DepthClipEnable=TRUE;
   pd.DepthStencilState.DepthEnable=geometry;pd.DepthStencilState.DepthWriteMask=alpha?D3D12_DEPTH_WRITE_MASK_ZERO:D3D12_DEPTH_WRITE_MASK_ALL;pd.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_LESS_EQUAL;
@@ -140,18 +153,19 @@ void Renderer::loadPipelines(Scene scene){
  if(scene==Scene::Mercury){pipeline(L"mercury.cso",false,true,mercuryPlanet_);pipeline(L"mercury_space.cso",false,false,mercurySpace_);}
  if(scene==Scene::Mars){pipeline(L"mars.cso",false,true,mars_);pipeline(L"mars_space.cso",false,false,marsSpace_);}
  if(scene==Scene::Video){pipeline(L"video.cso",false,false,videoPipeline_,true);}
- if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsPipeline_,true);
  if(scene==Scene::Bloom){pipeline(L"bloom_fold.cso",true,false,bloomSurface_,false,orbitSamples_,true);pipeline(L"bloom_backdrop.cso",false,false,bloomBackdrop_,false,orbitSamples_);}
  if(scene==Scene::Aurora)pipeline(L"aurora.cso",false,false,aurora_);
  if(scene==Scene::Orbit){pipeline(L"space.cso",false,false,space_,false,orbitSamples_);pipeline(L"planet.cso",true,false,planet_,false,orbitSamples_);pipeline(L"planet.cso",true,true,atmosphere_,false,orbitSamples_);}
  if(scene==Scene::Smoke)pipeline(L"smoke.cso",false,false,smoke_);
- if(scene!=Scene::Video){pipeline(L"post.cso",false,false,post_,true);pipeline(L"bloom.cso",false,false,bloom_);}
- if(scene!=Scene::Video)pipeline(L"post_hdr.cso",false,false,postHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
- if(scene==Scene::Orbit){pipeline(L"post_orbit.cso",false,false,postOrbit_,true);pipeline(L"post_orbit_hdr.cso",false,false,postOrbitHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);}
- if(scene!=Scene::Video)pipeline(L"body_statistics.cso",false,true,bodyStatisticsHdr_,true,1,false,DXGI_FORMAT_R16G16B16A16_FLOAT);
+ if(scene!=Scene::Video){
+  const auto format=output_.format();
+  pipeline(orbit?(hdr?L"post_orbit_hdr.cso":L"post_orbit.cso"):(hdr?L"post_hdr.cso":L"post.cso"),false,false,post,true,1,false,format);
+  pipeline(alignedBloom()?L"bloom_aligned.cso":L"bloom.cso",false,false,bloom);
+  if(statistics)pipeline(L"body_statistics.cso",false,true,bodyCard,true,1,false,format);
+ }
  if(scene==Scene::ForestWater){pipeline(L"forest_water.cso",false,false,forestWater_);}
  if(scene==Scene::SwedishChristmas){
-  pipeline(L"swedish_christmas.cso",false,false,swedishChristmas_);
+  pipeline(L"swedish_christmas.cso",false,false,swedishChristmas_,false,1,false,DXGI_FORMAT_UNKNOWN,L"swedish_christmas_vs.cso");
   pipeline(L"swedish_christmas_snow.cso",false,true,swedishChristmasSnow_,false,1,false,DXGI_FORMAT_UNKNOWN,L"swedish_christmas_snow_vs.cso");
  }
  if(scene==Scene::TropicalParadise){pipeline(L"tropical_paradise.cso",false,false,tropicalParadise_);}
@@ -161,11 +175,14 @@ void Renderer::loadPipelines(Scene scene){
  const wchar_t* proceduralShaders[]={L"silk.cso",L"eclipse.cso",L"lattice.cso",L"drift.cso",L"contour.cso",L"plastic_metal.cso",L"ripples.cso"};
  if(scene>=Scene::Silk&&scene<=Scene::Ripples){unsigned i=unsigned(scene)-unsigned(Scene::Silk);pipeline(proceduralShaders[i],false,false,proceduralWorlds_[i]);}
  auto computePipeline=[&](const wchar_t* file,ComPtr<ID3D12PipelineState>& output){
+  if(output)return;
   auto key=dir.wstring()+L"/compute/"+file;
   if(auto it=context_->pipelines.find(key);it!=context_->pipelines.end()){output=it->second;return;}
   auto code=shader(dir,file);D3D12_COMPUTE_PIPELINE_STATE_DESC cd{};cd.pRootSignature=root_.Get();cd.CS={code.data(),code.size()};check(device_->CreateComputePipelineState(&cd,IID_PPV_ARGS(&output)),"Create shared compute pipeline");context_->pipelines[key]=output;
  };
- if(scene==Scene::Smoke){computePipeline(L"fluid.cso",fluid_);computePipeline(L"smoke_coordinates.cso",coordinatePipeline_);computePipeline(L"smoke_detail.cso",detailPipeline_);}
+ if(scene==Scene::Smoke)computePipeline(L"fluid.cso",fluid_);
+ if(needsPressure)computePipeline(L"fluid_pressure.cso",fluidPressure_);
+ if(detailSmoke){computePipeline(L"smoke_coordinates.cso",coordinatePipeline_);computePipeline(L"smoke_detail.cso",detailPipeline_);}
  pipelinesReady_[index]=true;
 }
 Renderer::~Renderer(){
@@ -175,6 +192,7 @@ Renderer::~Renderer(){
  if(event_)CloseHandle(event_);if(latency_)CloseHandle(latency_);
 }
 void Renderer::releasePresentationBuffers(){
+ presentedVideoFraming_.reset();
  abandonCompositionFrame();
  for(auto& source:compositionSources_)source.Reset();
  if(compositionContext11_){compositionContext11_->ClearState();compositionContext11_->Flush();}
@@ -217,6 +235,7 @@ void Renderer::abandonCompositionFrame()noexcept{
  for(auto& buffer:buffers_)buffer.Reset();
 }
 void Renderer::preparePresentationTarget(){
+ frameLatencyReady_=false;
  presentationOffset_={};if(!directComposition_)return;
  // DirectComposition may supply a different atlas surface and offset on each
  // frame. Check it out only for this update; never retain it after EndDraw.
@@ -274,7 +293,10 @@ bool Renderer::ready(){
  if(context_->removed())throw std::runtime_error("Graphics device removed");
  if(pendingPresent_){tryPresent();return false;}
  auto index=composedDesktop_?compositionIndex_:swap_->GetCurrentBackBufferIndex();if(frames_[index].fence&&fence_->GetCompletedValue()<frames_[index].fence)return false;
- return !latency_||WaitForSingleObject(latency_,0)==WAIT_OBJECT_0;
+ // Video can poll the decoder without submitting. Keep the acquired
+ // frame-latency signal until the next frame uses it.
+ if(latency_&&!frameLatencyReady_)frameLatencyReady_=WaitForSingleObject(latency_,0)==WAIT_OBJECT_0;
+ return !latency_||frameLatencyReady_;
 }
 ID3D12Resource* Renderer::textureIdentity(unsigned slot)const{auto it=assetSlots_.find(slot);return it==assetSlots_.end()?nullptr:it->second;}
 bool Renderer::cachedTexture(const std::wstring& key,ComPtr<ID3D12Resource>& texture,unsigned slot){
@@ -309,6 +331,20 @@ void Renderer::validateDebugMessages(){
 }
 void Renderer::targets(){
  makePresentationBuffers(output_.format());
+}
+void Renderer::releaseSceneTargets(){
+ hdr_.Reset();
+ for(auto& target:bloomTargets_)target.Reset();
+ depth_.Reset();depthTargetBytes_=0;
+ orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;
+ islandCoast_.Reset();islandCoastBytes_=0;islandCoastWidth_=islandCoastHeight_=0;
+}
+void Renderer::trimSceneTargets(){
+ if(!hdr_)return;
+ // The swap chain or compositor owns the last displayed image.
+ // Keep scene assets and simulation state so playback can resume in place.
+ idle();
+ releaseSceneTargets();
 }
 void Renderer::makeSceneTargets(){
  if(hdr_&&bloomTargets_[0]&&bloomTargets_[1])return;
@@ -352,7 +388,7 @@ void Renderer::makeDepthTarget(){
  check(device_->CreateCommittedResource(&h,D3D12_HEAP_FLAG_NONE,&d,D3D12_RESOURCE_STATE_DEPTH_WRITE,&clear,IID_PPV_ARGS(&depth_)),"Create depth target");device_->CreateDepthStencilView(depth_.Get(),nullptr,dsv_->GetCPUDescriptorHandleForHeapStart());
  depthTargetBytes_=device_->GetResourceAllocationInfo(0,1,&d).SizeInBytes;
 }
-void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();releasePresentationBuffers();depth_.Reset();depthTargetBytes_=0;hdr_.Reset();orbitColor_.Reset();orbitDepth_.Reset();orbitTargetBytes_=0;for(auto& b:bloomTargets_)b.Reset();auto resizeOutput=[&](){if(composedDesktop_){auto oldWidth=width_,oldHeight=height_;width_=w;height_=h;try{makeCompositionSurface(output_.format());}catch(...){width_=oldWidth;height_=oldHeight;throw;}return;}check(swap_->ResizeBuffers(2,w,h,output_.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Resize wallpaper");check(swap_->SetColorSpace1(output_.colorSpace()),"Restore output color space");};
+void Renderer::resize(unsigned w,unsigned h){if(!w||!h||(w==width_&&h==height_))return;idle();releasePresentationBuffers();releaseSceneTargets();auto resizeOutput=[&](){if(composedDesktop_){auto oldWidth=width_,oldHeight=height_;width_=w;height_=h;try{makeCompositionSurface(output_.format());}catch(...){width_=oldWidth;height_=oldHeight;throw;}return;}check(swap_->ResizeBuffers(2,w,h,output_.format(),DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT),"Resize wallpaper");check(swap_->SetColorSpace1(output_.colorSpace()),"Restore output color space");};
  try{resizeOutput();}catch(...){if(context_->removed()||!output_.hdr)throw;output_.hdr=false;output_.reason=L"HDR presentation unavailable";resizeOutput();}
  width_=w;height_=h;pendingPresent_=false;if(compositionSwapChain_)updateCompositionTransform();targets();}
 void Renderer::outputConstants(){float values[]={output_.hdr?1.f:0.f,output_.white/80.f,output_.peak/output_.white,0};list_->SetGraphicsRoot32BitConstants(5,4,values,0);}
@@ -575,33 +611,14 @@ void Renderer::loadTexture(const std::filesystem::path& file,ComPtr<ID3D12Resour
  // Mipmaps preserve fine coverage at the limb without sparkling or a blur pass.
  // RGB filtering is in linear light; coverage and alpha remain linear data.
  const UINT channels=grayscale?1:4;
- std::vector<std::vector<BYTE>> levels(1);
- levels[0].resize(size_t(width)*height*channels);
- check(converter->CopyPixels(nullptr,width*channels,static_cast<UINT>(levels[0].size()),levels[0].data()),"Decode artwork pixels");
+ std::vector<BYTE> pixels(size_t(width)*height*channels);
+ check(converter->CopyPixels(nullptr,width*channels,static_cast<UINT>(pixels.size()),pixels.data()),"Decode artwork pixels");
+ converter.Reset();scaler.Reset();frame.Reset();decoder.Reset();
  std::array<float,256> linear{};
  for(unsigned i=0;i<256;i++){float c=i/255.f;linear[i]=c<=.04045f?c/12.92f:std::pow((c+.055f)/1.055f,2.4f);}
- UINT mipWidth=width,mipHeight=height;
- while(mipWidth>1||mipHeight>1){
-  UINT nextWidth=std::max(1u,mipWidth/2),nextHeight=std::max(1u,mipHeight/2);
-  std::vector<BYTE> next(size_t(nextWidth)*nextHeight*channels);
-  const auto& previous=levels.back();
-  for(UINT y=0;y<nextHeight;y++)for(UINT x=0;x<nextWidth;x++)for(UINT c=0;c<channels;c++){
-   // Include the final row/column for odd-sized maps such as the night mask.
-   UINT x0=x*mipWidth/nextWidth,x1=(x+1)*mipWidth/nextWidth;
-   UINT y0=y*mipHeight/nextHeight,y1=(y+1)*mipHeight/nextHeight;
-   float value=0;
-   for(UINT sy=y0;sy<y1;sy++)for(UINT sx=x0;sx<x1;sx++){
-    BYTE b=previous[(size_t(sy)*mipWidth+sx)*channels+c];value+=!grayscale&&c<3?linear[b]:b/255.f;
-   }
-   value/=float((x1-x0)*(y1-y0));
-   if(!grayscale&&c<3)value=value<=.0031308f?value*12.92f:1.055f*std::pow(value,1/2.4f)-.055f;
-   next[(size_t(y)*nextWidth+x)*channels+c]=static_cast<BYTE>(std::clamp(value*255.f+.5f,0.f,255.f));
-  }
-  levels.push_back(std::move(next));mipWidth=nextWidth;mipHeight=nextHeight;
- }
- D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=width;desc.Height=height;desc.DepthOrArraySize=1;desc.MipLevels=static_cast<UINT16>(levels.size());desc.Format=grayscale?DXGI_FORMAT_R8_UNORM:DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.SampleDesc.Count=1;
+ D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=width;desc.Height=height;desc.DepthOrArraySize=1;desc.MipLevels=static_cast<UINT16>(std::bit_width(std::max(width,height)));desc.Format=grayscale?DXGI_FORMAT_R8_UNORM:DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.SampleDesc.Count=1;
  ComPtr<ID3D12Resource> ready;auto hp=heap(D3D12_HEAP_TYPE_DEFAULT);check(device_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,IID_PPV_ARGS(&ready)),"Allocate artwork texture");ready->SetName(file.filename().c_str());
- std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(levels.size());UINT64 bytes{};device_->GetCopyableFootprints(&desc,0,desc.MipLevels,0,footprints.data(),nullptr,nullptr,&bytes);bytes=std::min<UINT64>(bytes,4*1024*1024);auto uploadHeap=heap(D3D12_HEAP_TYPE_UPLOAD);auto buffer=bufferDesc(bytes);ComPtr<ID3D12Resource> upload;check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate bounded artwork upload");
+ std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(desc.MipLevels);UINT64 bytes{};device_->GetCopyableFootprints(&desc,0,desc.MipLevels,0,footprints.data(),nullptr,nullptr,&bytes);bytes=std::min<UINT64>(bytes,4*1024*1024);auto uploadHeap=heap(D3D12_HEAP_TYPE_UPLOAD);auto buffer=bufferDesc(bytes);ComPtr<ID3D12Resource> upload;check(device_->CreateCommittedResource(&uploadHeap,D3D12_HEAP_FLAG_NONE,&buffer,D3D12_RESOURCE_STATE_GENERIC_READ,nullptr,IID_PPV_ARGS(&upload)),"Allocate bounded artwork upload");
  BYTE* mapped{};D3D12_RANGE none{};check(upload->Map(0,&none,reinterpret_cast<void**>(&mapped)),"Map artwork upload");
  UINT64 used=0;bool recording=false;
  for(UINT i=0;i<desc.MipLevels;i++){
@@ -611,14 +628,33 @@ void Renderer::loadTexture(const std::filesystem::path& file,ComPtr<ID3D12Resour
    UINT64 offset=(used+D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1)&~UINT64(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1);
    if(offset+fp.RowPitch>bytes){submit();idle();recording=false;used=offset=0;}
    UINT count=std::min<UINT>(UINT((bytes-offset)/fp.RowPitch),fp.Height-row);
-   for(UINT y=0;y<count;y++)std::memcpy(mapped+offset+size_t(y)*fp.RowPitch,levels[i].data()+size_t(row+y)*rowBytes,rowBytes);
+   for(UINT y=0;y<count;y++)std::memcpy(mapped+offset+size_t(y)*fp.RowPitch,pixels.data()+size_t(row+y)*rowBytes,rowBytes);
    if(!recording){begin();recording=true;}
    D3D12_TEXTURE_COPY_LOCATION source{},dest{};source.pResource=upload.Get();source.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;source.PlacedFootprint.Offset=offset;source.PlacedFootprint.Footprint=fp;source.PlacedFootprint.Footprint.Height=count;
    dest.pResource=ready.Get();dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dest.SubresourceIndex=i;
    list_->CopyTextureRegion(&dest,0,row,0,&source,nullptr);used=offset+UINT64(count)*fp.RowPitch;row+=count;
   }
-  // The staging copy now owns these pixels; discard decoded mip storage early.
-  std::vector<BYTE>().swap(levels[i]);
+  if(i+1==desc.MipLevels)break;
+  // The staging buffer owns this level. Each row-major destination is
+  // at or before its source block, so unread pixels survive the in-place reduction.
+  const UINT nextWidth=footprints[i+1].Footprint.Width,nextHeight=footprints[i+1].Footprint.Height;
+  // Include an odd trailing row or column in the last block on that axis.
+  for(UINT y=0;y<nextHeight;y++){
+   const UINT y0=2*y,y1=y+1==nextHeight?fp.Height:y0+2;
+   for(UINT x=0;x<nextWidth;x++){
+    const UINT x0=2*x,x1=x+1==nextWidth?fp.Width:x0+2;
+    const float sampleCount=float((x1-x0)*(y1-y0));
+    for(UINT c=0;c<channels;c++){
+     float value=0;
+     for(UINT sy=y0;sy<y1;sy++)for(UINT sx=x0;sx<x1;sx++){
+      BYTE b=pixels[(size_t(sy)*fp.Width+sx)*channels+c];value+=!grayscale&&c<3?linear[b]:b/255.f;
+     }
+     value/=sampleCount;
+     if(!grayscale&&c<3)value=value<=.0031308f?value*12.92f:1.055f*std::pow(value,1/2.4f)-.055f;
+     pixels[(size_t(y)*nextWidth+x)*channels+c]=static_cast<BYTE>(std::clamp(value*255.f+.5f,0.f,255.f));
+    }
+   }
+  }
  }
  upload->Unmap(0,nullptr);if(!recording)begin();
  transition(ready.Get(),D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);submit();idle();
@@ -943,7 +979,23 @@ void Renderer::simulate(FrameData& data){
  if(flowmapLive_)combineFlowmap(data);
  if(data.spare[4]>.5f){dispatch(8);finishCoordinates();return;}
  v_=1-v_;dispatch(2);dispatch(3);v_=1-v_;dispatch(4);
- if(pressureMultigrid_)solvePressureHierarchy();else for(int i=0;i<12;i++){dispatch(5);p_=1-p_;}dispatch(6);v_=1-v_;dispatch(8);finishCoordinates();
+ if(pressureMultigrid_)solvePressureHierarchy();
+ else{
+  // Jacobi only reads pressure and divergence. Keep the velocity and density
+  // resources in their existing states for the whole solve.
+  const auto timing=beginGpuStage(5);
+  list_->SetPipelineState(fluidPressure_.Get());
+  D3D12_RESOURCE_BARRIER barrier{};barrier.Type=D3D12_RESOURCE_BARRIER_TYPE_UAV;
+  for(int i=0;i<12;i++){
+   list_->SetComputeRootDescriptorTable(1,gpu((v_*4+d_*2+p_)*8));
+   list_->Dispatch(grid_/4,grid_/4,grid_/4);
+   list_->ResourceBarrier(1,&barrier);
+   p_=1-p_;
+  }
+  endGpuStage(timing);
+  list_->SetPipelineState(fluid_.Get());
+ }
+ dispatch(6);v_=1-v_;dispatch(8);finishCoordinates();
 }
 void Renderer::makeSmokeFilaments(){
  if(smokeFilamentPipeline_)return;
@@ -991,16 +1043,20 @@ void Renderer::drawSmokeFilaments(FrameData data){
 }
 void Renderer::setPaused(bool paused){if(video_&&(paused||videoRateKnown_))video_->setPaused(paused);}
 double Renderer::videoPosition()const{return video_?video_->position():0;}
-void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool present){
+bool Renderer::renderVideo(const Assignment& assignment,FrameData data,bool present){
  if(!video_||videoPath_!=assignment.video){
-  idle();video_.reset();videoView_=nullptr;videoBytes_=0;
+  idle();video_.reset();videoView_=nullptr;videoBytes_=0;presentedVideoFraming_.reset();
   video_=std::make_unique<VideoPlayer>(device_.Get(),queue_.Get(),assignment.video);videoPath_=assignment.video;videoRateKnown_=false;requestedVideoRate_=-1;acceptedVideoRate_=1;videoRateMessage_.clear();
  }
  if(!videoRateKnown_||requestedVideoRate_!=assignment.videoSettings.speed){
   try{if(video_->setPlaybackRate(assignment.videoSettings.speed)){videoRateKnown_=true;requestedVideoRate_=assignment.videoSettings.speed;acceptedVideoRate_=video_->playbackRate();videoRateMessage_.clear();}}
   catch(const VideoRateRejected&){videoRateKnown_=true;requestedVideoRate_=assignment.videoSettings.speed;acceptedVideoRate_=video_->playbackRate();videoRateMessage_=L"Selected video speed unavailable; previous speed retained.";}
  }
- if(videoRateKnown_)video_->setPaused(false);video_->update();auto source=video_->frame();
+ if(videoRateKnown_)video_->setPaused(false);
+ const bool newFrame=video_->update();
+ const std::array framing{assignment.fit?1.f:0.f,float(assignment.videoSettings.positionX),float(assignment.videoSettings.positionY)};
+ if(present&&!newFrame&&presentedVideoFraming_==framing)return false;
+ auto source=video_->frame();
  if(source&&source!=videoView_){
   D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=DXGI_FORMAT_B8G8R8A8_UNORM;view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;view.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;view.Texture2D.MipLevels=1;
   device_->CreateShaderResourceView(source,&view,cpu(240));for(unsigned index=241;index<243;index++)device_->CreateShaderResourceView(nullptr,&view,cpu(index));
@@ -1013,25 +1069,28 @@ void Renderer::renderVideo(const Assignment& assignment,FrameData data,bool pres
  if(source){
   transition(source,D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
   D3D12_VIEWPORT viewport{float(presentationOffset_.x),float(presentationOffset_.y),float(width_),float(height_),0,1};D3D12_RECT scissor=outputRect;list_->RSSetViewports(1,&viewport);list_->RSSetScissorRects(1,&scissor);
-  data.width=float(width_);data.height=float(height_);auto info=video_->info();data.spare[0]=float(info.width);data.spare[1]=float(info.height);if(std::abs(info.displayAspect-double(info.width)/info.height)>1e-6){data.spare[0]=float(info.displayAspect);data.spare[1]=1;}data.spare[2]=assignment.fit?1.f:0.f;data.spare[3]=float(assignment.videoSettings.positionX);data.spare[4]=float(assignment.videoSettings.positionY);
+  data.width=float(width_);data.height=float(height_);auto info=video_->info();data.spare[0]=float(info.width);data.spare[1]=float(info.height);if(std::abs(info.displayAspect-double(info.width)/info.height)>1e-6){data.spare[0]=float(info.displayAspect);data.spare[1]=1;}std::copy(framing.begin(),framing.end(),data.spare+2);
   list_->SetGraphicsRootSignature(root_.Get());list_->SetGraphicsRoot32BitConstants(0,32,&data,0);list_->SetGraphicsRootDescriptorTable(2,gpu(240));list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);list_->SetPipelineState(videoPipeline_.Get());list_->DrawInstanced(3,1,0,0);
   transition(source,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_COMMON);
  }
  transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(directComposition_||!composedDesktop_||!present,directComposition_&&present);
- if(present){if(nonblocking_||composedDesktop_||compositionSwapChain_)tryPresent();else check(swap_->Present(1,0),"Present video wallpaper");}
+ if(present){if(nonblocking_||composedDesktop_||compositionSwapChain_)tryPresent();else check(swap_->Present(1,0),"Present video wallpaper");presentedVideoFraming_=framing;}
  // Desktop presentation submits the sampling commands inside tryPresent().
  // Queue the decoder's reuse fence only after that GPU work is submitted.
  video_->consumed();
+ return true;
 }
-void Renderer::render(const Assignment& assignment,FrameData data,bool present){
+bool Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(directComposition_&&!present)throw std::runtime_error("Direct desktop rendering requires presentation; use a swap-chain target for readback.");
- loadPipelines(assignment.scene);
+ loadPipelines(assignment);
  // Video is drawn directly to the presentation buffer. It needs neither the
  // full-resolution FP16 scene nor the two bloom intermediates.
- if(assignment.scene==Scene::Video){
-  if(hdr_){idle();hdr_.Reset();for(auto& target:bloomTargets_)target.Reset();}
- }else makeSceneTargets();
+ if(assignment.scene==Scene::Video)trimSceneTargets();
+ else makeSceneTargets();
  if(assignment.scene!=Scene::Aurora&&auroraArtwork_){idle();releaseAsset(auroraArtwork_);}
+ if(assignment.scene!=Scene::SwedishChristmas&&(christmasNight_||christmasDay_)){
+  idle();releaseAsset(christmasNight_);releaseAsset(christmasDay_);
+ }
  const bool journey=assignment.scene==Scene::SolarSystemJourney;
  JourneyFrame tour{};JourneyProjection projection{};if(journey){tour=journeyFrame(data.time,data.flow,float(width_)/height_);projection=projectJourney(tour,width_,height_);}
  Assignment journeyCard;const Assignment* cardAssignment=&assignment;
@@ -1099,7 +1158,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  if(assignment.scene==Scene::Smoke&&!velocity_[0].resource)makeFluid();
  if(assignment.scene==Scene::Smoke&&smokeFilamentsEnabled_)makeSmokeFilaments();
  if(lastScene_==Scene::Smoke&&assignment.scene!=Scene::Smoke){idle();smokeTracersReady_=false;releasePressureHierarchy();releaseFineAtlas();detailVelocity_.resource.Reset();releaseFlowmapAudit();flowmapBase_.resource.Reset();flowmapTotal_.resource.Reset();for(auto& r:coordinates_)r.resource.Reset();for(auto& r:velocity_)r.resource.Reset();for(auto& r:density_)r.resource.Reset();for(auto& r:pressure_)r.resource.Reset();divergence_.resource.Reset();curl_.resource.Reset();fluidReady_=false;allocationBytes_=uint64_t(width_)*height_*20;}
- lastScene_=assignment.scene;if(assignment.scene==Scene::Video){renderVideo(assignment,data,present);return;}data.width=float(width_);data.height=float(height_);begin();ID3D12DescriptorHeap* heaps[]={views_.Get()};list_->SetDescriptorHeaps(1,heaps);
+ lastScene_=assignment.scene;if(assignment.scene==Scene::Video)return renderVideo(assignment,data,present);data.width=float(width_);data.height=float(height_);begin();ID3D12DescriptorHeap* heaps[]={views_.Get()};list_->SetDescriptorHeaps(1,heaps);
  if(assignment.scene==Scene::Smoke){
   // Smoke advances a simulation rather than sampling time in its scene shader.
   // Apply the same Movement contract as the analytic Worlds, including zero.
@@ -1199,11 +1258,18 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
   transition(hdr_.Get(),D3D12_RESOURCE_STATE_RESOLVE_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
  }else transition(hdr_.Get(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
  D3D12_VIEWPORT bloomViewport{0,0,float((width_+3)/4),float((height_+3)/4),0,1};list_->RSSetViewports(1,&bloomViewport);
+ data.pass=0;
+ list_->SetPipelineState(alignedBloom()?bloomAligned_.Get():bloom_.Get());
+ list_->SetGraphicsRoot32BitConstants(0,32,&data,0);
  for(unsigned pass=0;pass<3;pass++){
   unsigned destination=pass==1?1:0;unsigned source=pass==0?66:pass==1?67:68;
   transition(bloomTargets_[destination].Get(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_RENDER_TARGET);
   auto view=rtv_->GetCPUDescriptorHandleForHeapStart();view.ptr+=(3+destination)*rtvStride_;list_->OMSetRenderTargets(1,&view,FALSE,nullptr);
-  list_->SetGraphicsRootDescriptorTable(2,gpu(source));draw(bloom_.Get(),float(pass),3);
+  if(pass){
+   float blurPass=float(pass);
+   list_->SetGraphicsRoot32BitConstants(0,1,&blurPass,offsetof(FrameData,pass)/sizeof(float));
+  }
+  list_->SetGraphicsRootDescriptorTable(2,gpu(source));list_->DrawInstanced(3,1,0,0);
   transition(bloomTargets_[destination].Get(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
  }
  D3D12_VIEWPORT outputViewport{float(presentationOffset_.x),float(presentationOffset_.y),float(width_),float(height_),0,1};D3D12_RECT outputScissor{presentationOffset_.x,presentationOffset_.y,presentationOffset_.x+LONG(width_),presentationOffset_.y+LONG(height_)};list_->RSSetViewports(1,&outputViewport);list_->RSSetScissorRects(1,&outputScissor);
@@ -1213,6 +1279,7 @@ void Renderer::render(const Assignment& assignment,FrameData data,bool present){
  drawBodyStatistics(*cardAssignment,journey?tour.opacity:1.f);
  endGpuStage(postTiming);
  transition(target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT);submit(directComposition_||!composedDesktop_||!present,directComposition_&&present);if(present){if(nonblocking_||composedDesktop_||compositionSwapChain_)tryPresent();else check(swap_->Present(1,0),"Present wallpaper");}
+ return true;
 }
 void Renderer::captureFluidFields(const std::filesystem::path& directory){
  if(!fluidReady_)throw std::runtime_error("Fluid diagnostics require an initialized Smoke scene");

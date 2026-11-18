@@ -1,25 +1,31 @@
 #include "common.hlsli"
 Texture2D<float4> source:register(t0);SamplerState linearClamp:register(s0);
-float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
+float3 extractHighlight(float3 c){
+ float peak=max(c.r,max(c.g,c.b));
+ // A soft shoulder admits highlights continuously as they cross the knee.
+ // Keep extraction in RGB so saturated emitters do not acquire white halos.
+ float knee=clamp(peak-.25,0,.5);
+ float highlight=max(peak-.5,knee*knee);
+ return c*(highlight/max(peak,.0001))/16;
+}
+float4 renderBloom(float4 pixel,float2 uv,bool aligned) {
  float3 result=0;
  if(pass<.5){
-  [unroll]for(int y=0;y<4;y++)[unroll]for(int x=0;x<4;x++){
-   // Integral 4:1 reduction lands on exact source texel centers.
-   // Bypass sampler interpolation there; retain filtering for odd sizes.
-   float3 c=all(fmod(resolution,4)==0)?source.Load(int3(int2(pixel.xy)*4+int2(x,y),0)).rgb:source.SampleLevel(linearClamp,uv+(float2(x,y)-1.5)/resolution,0).rgb;
-   float peak=max(c.r,max(c.g,c.b));
-   // A soft shoulder admits highlights continuously as they cross the knee.
-   // Keep extraction in RGB so saturated emitters do not acquire white halos.
-   float knee=clamp(peak-.25,0,.5);
-   float highlight=max(peak-.5,knee*knee);
-   result+=c*(highlight/max(peak,.0001))/16;
+  // Integral sizes can read the 4x4 footprint directly.
+  if(aligned){
+   int3 base=int3(int2(pixel.xy)*4,0);
+   [unroll]for(int y=0;y<4;y++)[unroll]for(int x=0;x<4;x++)
+    result+=extractHighlight(source.Load(base,int2(x,y)).rgb);
+  }else{
+   [unroll]for(int y=0;y<4;y++)[unroll]for(int x=0;x<4;x++)
+    result+=extractHighlight(source.SampleLevel(linearClamp,uv+(float2(x,y)-1.5)/resolution,0).rgb);
   }
  }else{
   float2 stepUV=pass<1.5?float2(4/resolution.x,0):float2(0,4/resolution.y);
   // Pair adjacent positive Gaussian taps with hardware linear filtering.
   // Aligned quarter-size targets preserve the same 17-tap kernel with nine
   // samples. Retain the original path for non-integral quarter dimensions.
-  if(all(fmod(resolution,4)==0)){
+  if(aligned){
    const float weights[4]={.2333084327,.1359278107,.0513831778,.0125949686};
    const float offsets[4]={1.4584295168,3.4039848067,5.3518057801,7.3029407160};
    result=source.SampleLevel(linearClamp,uv,0).rgb*.1335712203;
@@ -34,4 +40,12 @@ float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
   result/=weight;
  }
  return float4(result,1);
+}
+
+float4 PS(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
+ return renderBloom(pixel,uv,false);
+}
+
+float4 PSAligned(float4 pixel:SV_POSITION,float2 uv:TEXCOORD):SV_TARGET {
+ return renderBloom(pixel,uv,true);
 }

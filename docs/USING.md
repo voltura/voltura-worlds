@@ -8,7 +8,7 @@ In Swedish Christmas, passing gusts carry flurries outside the cottage. Chimney 
 
 The window title and tray icon tooltip show the running version. When upgrading from 0.1.10 or earlier, run the installer once; those versions cannot automatically upgrade to the current release.
 
-[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.11/VolturaWorlds-Setup-0.6.11-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
+[Download the published installer](https://github.com/voltura/voltura-worlds/releases/download/v0.6.12/VolturaWorlds-Setup-0.6.12-win-x64.exe), or follow the build instructions below. Settings, imports and startup preferences are retained when upgrading.
 
 ## Solar System Journey
 
@@ -20,7 +20,7 @@ At **Movement = 1**, each visit lasts 25 seconds and each trip lasts 12 seconds,
 
 ## Install and try it
 
-Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.6.11-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
+Run the downloaded installer, or `dist/VolturaWorlds-Setup-0.6.12-win-x64.exe` after packaging a local build. The main installer runs for your account; the optional compact-menu certificate-trust step can require administrator approval. **Start with Windows** is enabled by default for new installations. Toggle it from the tray icon's right-click menu; setup and updates preserve your choice. The installer opens the library when you choose **Start Voltura Worlds** on the final page.
 
 Choose a display, then a World. In the tray menu, the eleven bodies are grouped under **Solar System**. Changes apply immediately behind the desktop icons. Choose **Off** in the visualization dropdown or tray menu to reveal your normal Windows desktop while Worlds stays running. The choice is saved per display. In the desktop right-click menu, **Off** is under **Voltura Worlds** controls. **Apply to all displays** copies the current selection and settings. If the desktop connection or a renderer fails, Worlds retries automatically and shows **Retry now** for an immediate attempt. Preview mode shows **Use on desktop** instead; the button is hidden during healthy desktop use. A failed video or renderer is retried per display; switching to another World recovers immediately while other displays keep animating.
 
@@ -33,6 +33,8 @@ Closing the library leaves the background running. Reopen it through the notific
 The library follows your Windows light/dark theme. Opening **Adjustments** minimizes other app windows to reveal the desktop, keeps the Worlds interface in front, and reveals detailed artwork and playback controls. The library becomes translucent so you can see the World while adjusting it. Collapsing the settings leaves other apps minimized; you can restore them from the taskbar. **Restore defaults**, inside Adjustments, restores the selected World’s adjustments and global playback preferences without deleting imports or changing assigned scenes. It uses built-in default values; it does not load or change a saved preset.
 
 Audio reaction defaults to Off. Choose Gentle or Expressive and adjust Audio strength to use local playback-device analysis. No audio is recorded or uploaded. Rendering pauses on battery by default; clear **Pause on battery** to animate while unplugged. Full display coverage, lock, sleep, suspend, and remote sessions also pause rendering.
+
+After five seconds of paused rendering, Worlds frees temporary rendering buffers. The last frame stays visible and playback resumes from the same point.
 
 Personal SDR videos can be imported, copied to the managed library, and looped silently. MP4/M4V, MOV, MKV, WebM, WMV and AVI are offered; actual support depends on the native Windows container/decoder path. H.264 MP4 is the baseline. Every import must produce a transferable GPU frame before confirmation is enabled. HEVC and AV1 require compatible installed decoders; Worlds does not install codecs or transcode files. Data-only `.world` packages open an import preview before applying.
 
@@ -76,7 +78,7 @@ HDR implementation and diagnostic verification limits are described in [HDR outp
 
 In Adjustments, **Video position** offers Fill or Fit. Fill's **Horizontal position** and **Vertical position** sliders choose which part of a cropped video stays visible: 0% is left/top, 50% is centered, and 100% is right/bottom. An uncropped axis does not move. **Center** resets positioning without changing speed. Fit centers the whole image with black bars and retains the saved crop positions for a later return to Fill.
 
-**Video speed** offers 0.25x, 0.5x, 0.75x, 1x, 1.25x, 1.5x and 2x. Position and accepted speed are saved per display. Changes apply live without reopening the video. Speed changes media time; Frame limit still controls presentation cadence. Pause and looping retain the speed. If Windows rejects a rate, the previous accepted rate is retained and the status explains it. A rate request made while playback is paused takes effect on resume and is saved after acceptance.
+**Video speed** offers 0.25x, 0.5x, 0.75x, 1x, 1.25x, 1.5x and 2x. Position and accepted speed are saved per display. Changes apply live without reopening the video. The frame limit caps presentation, and Worlds holds the displayed frame until the video or its framing changes. Pause and looping retain the speed. If Windows rejects a rate, the previous accepted rate is retained and the status explains it. A rate request made while playback is paused takes effect on resume and is saved after acceptance.
 
 Apply to all copies video framing and speed with the selected World, subject to the existing display frame-limit rules. Restore defaults restores Fill, centered positions and 1x. Rotated and nonsquare-pixel videos use their display geometry rather than being cropped as raw encoded frames.
 
